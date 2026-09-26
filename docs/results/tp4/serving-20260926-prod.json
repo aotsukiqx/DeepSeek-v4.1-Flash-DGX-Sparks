@@ -1,0 +1,865 @@
+{
+  "base_url": "http://127.0.0.1:8000",
+  "captured_utc": "20260926T032221Z",
+  "loads_idle": {
+    "timestamp": 1790392940.6234708,
+    "dp_rank": 0,
+    "num_running_reqs": 0,
+    "num_waiting_reqs": 0,
+    "num_waiting_uncached_tokens": 0,
+    "num_used_tokens": 0,
+    "num_total_tokens": 0,
+    "num_active_tokens": 0,
+    "num_prealloc_ready_tokens": 0,
+    "max_total_num_tokens": 6754816,
+    "max_running_requests": 16,
+    "token_usage": 0.0,
+    "gen_throughput": 2.54,
+    "cache_hit_rate": 0.0,
+    "utilization": 0.0,
+    "total_prefill_uncached_tokens": 0,
+    "total_prefill_busy_us": 0,
+    "decode_moments": [
+      58.0,
+      330.0,
+      4116212.0,
+      4226.0,
+      39152166.0,
+      880.0
+    ],
+    "memory": {
+      "weight_gb": 74.708,
+      "kv_cache_gb": 0.0,
+      "graph_gb": 1.568,
+      "token_capacity": 6754816
+    },
+    "speculative": {
+      "accept_length": 2.6348773841961854,
+      "accept_rate": 0.3137614678899083
+    },
+    "disaggregation": {
+      "mode": "null",
+      "prefill_bootstrap_queue_reqs": 0,
+      "prefill_inflight_queue_reqs": 0,
+      "decode_prealloc_queue_reqs": 0,
+      "decode_transfer_queue_reqs": 0,
+      "decode_retracted_queue_reqs": 0,
+      "kv_transfer_speed_gb_s": 0.0,
+      "kv_transfer_latency_ms": 0.0
+    },
+    "queues": {
+      "waiting": 0,
+      "grammar": 0,
+      "paused": 0,
+      "retracted": 0,
+      "prealloc_ready": 0
+    }
+  },
+  "correctness": {
+    "models": {
+      "object": "list",
+      "data": [
+        {
+          "id": "deepseek-v4.1-flash",
+          "object": "model",
+          "created": 1790392941,
+          "owned_by": "sglang",
+          "root": "deepseek-v4.1-flash",
+          "parent": null,
+          "max_model_len": 1048576
+        }
+      ]
+    },
+    "health_http": 200,
+    "arithmetic": {
+      "http": 200,
+      "seconds": 0.23,
+      "finish_reason": "stop",
+      "content": "42",
+      "reasoning": "",
+      "tool_calls": [],
+      "prompt_tokens": 18,
+      "completion_tokens": 2,
+      "reasoning_tokens": 0,
+      "total_tokens": 20
+    },
+    "thinking": {
+      "http": 200,
+      "seconds": 0.412,
+      "finish_reason": "stop",
+      "content": "OK99",
+      "reasoning": "We need answer exactly OK99 and nothing else. Need comply.",
+      "tool_calls": [],
+      "prompt_tokens": 39,
+      "completion_tokens": 17,
+      "reasoning_tokens": 14,
+      "total_tokens": 56
+    },
+    "tools": {
+      "http": 200,
+      "seconds": 0.752,
+      "finish_reason": "tool_calls",
+      "content": "I'll check the weather in Vigo for you.",
+      "reasoning": "",
+      "tool_calls": [
+        {
+          "id": "call_4b43ea9b1ad94c2ba91eae1c",
+          "index": 0,
+          "type": "function",
+          "function": {
+            "name": "get_weather",
+            "arguments": "{\"city\": \"Vigo\"}"
+          }
+        }
+      ],
+      "prompt_tokens": 270,
+      "completion_tokens": 50,
+      "reasoning_tokens": 0,
+      "total_tokens": 320
+    }
+  },
+  "decode": [
+    {
+      "concurrency": 1,
+      "max_tokens": 256,
+      "thinking": false,
+      "wall_seconds": 5.159,
+      "successes": 1,
+      "completion_tokens": 256,
+      "aggregate_tok_s": 49.62,
+      "mean_per_request_tok_s": 49.64,
+      "min_per_request_tok_s": 49.64,
+      "finish_reasons": [
+        "length"
+      ],
+      "seconds": [
+        5.157
+      ],
+      "loads_before": {
+        "timestamp": 1790392943.4857242,
+        "dp_rank": 0,
+        "num_running_reqs": 1,
+        "num_waiting_reqs": 0,
+        "num_waiting_uncached_tokens": 0,
+        "num_used_tokens": 512,
+        "num_total_tokens": 512,
+        "num_active_tokens": 512,
+        "num_prealloc_ready_tokens": 0,
+        "max_total_num_tokens": 6754816,
+        "max_running_requests": 16,
+        "token_usage": 0.0099,
+        "gen_throughput": 2.54,
+        "cache_hit_rate": 0.0,
+        "utilization": 0.0,
+        "total_prefill_uncached_tokens": 0,
+        "total_prefill_busy_us": 0,
+        "decode_moments": [
+          63.0,
+          335.0,
+          4264220.0,
+          4231.0,
+          39300174.0,
+          895.0
+        ],
+        "memory": {
+          "weight_gb": 74.708,
+          "kv_cache_gb": 0.0,
+          "graph_gb": 1.568,
+          "token_capacity": 6754816
+        },
+        "speculative": {
+          "accept_length": 2.6348773841961854,
+          "accept_rate": 0.3137614678899083
+        },
+        "disaggregation": {
+          "mode": "null",
+          "prefill_bootstrap_queue_reqs": 0,
+          "prefill_inflight_queue_reqs": 0,
+          "decode_prealloc_queue_reqs": 0,
+          "decode_transfer_queue_reqs": 0,
+          "decode_retracted_queue_reqs": 0,
+          "kv_transfer_speed_gb_s": 0.0,
+          "kv_transfer_latency_ms": 0.0
+        },
+        "queues": {
+          "waiting": 0,
+          "grammar": 0,
+          "paused": 0,
+          "retracted": 0,
+          "prealloc_ready": 0
+        }
+      },
+      "loads_after": {
+        "timestamp": 1790392948.7890866,
+        "dp_rank": 0,
+        "num_running_reqs": 1,
+        "num_waiting_reqs": 0,
+        "num_waiting_uncached_tokens": 0,
+        "num_used_tokens": 512,
+        "num_total_tokens": 512,
+        "num_active_tokens": 512,
+        "num_prealloc_ready_tokens": 0,
+        "max_total_num_tokens": 6754816,
+        "max_running_requests": 16,
+        "token_usage": 0.0099,
+        "gen_throughput": 53.49,
+        "cache_hit_rate": 0.0,
+        "utilization": 0.0,
+        "total_prefill_uncached_tokens": 0,
+        "total_prefill_busy_us": 0,
+        "decode_moments": [
+          206.0,
+          478.0,
+          9221856.0,
+          4374.0,
+          44257810.0,
+          1181.0
+        ],
+        "memory": {
+          "weight_gb": 74.708,
+          "kv_cache_gb": 0.0,
+          "graph_gb": 1.568,
+          "token_capacity": 6754816
+        },
+        "speculative": {
+          "accept_length": 2.509240246406571,
+          "accept_rate": 0.175
+        },
+        "disaggregation": {
+          "mode": "null",
+          "prefill_bootstrap_queue_reqs": 0,
+          "prefill_inflight_queue_reqs": 0,
+          "decode_prealloc_queue_reqs": 0,
+          "decode_transfer_queue_reqs": 0,
+          "decode_retracted_queue_reqs": 0,
+          "kv_transfer_speed_gb_s": 0.0,
+          "kv_transfer_latency_ms": 0.0
+        },
+        "queues": {
+          "waiting": 0,
+          "grammar": 0,
+          "paused": 0,
+          "retracted": 0,
+          "prealloc_ready": 0
+        }
+      },
+      "rows": [
+        {
+          "http": 200,
+          "seconds": 5.157,
+          "finish_reason": "length",
+          "content": "The wind off the Atlantic was a blade that winter, honing itself on the granite cliffs. Elias had known it for forty years, but this year it cut deeper, finding the gaps in his bones. The lighthouse was a cold finger pointing at a bruised sky, and he was its last keeper. The mainland had gone silent weeks ago, the supply boat a memory swallowed by the grey. His only companions were the groan of the tower and the ghost of his wife, whose laughter still lingered in the kitchen\u2019s salt-stained corners. Each evening, he\u2019d climb the spiraling stairs, his breath a plume of smoke, and light the great lamp. It was a ritual, a prayer to the void. The beam would slice through the sleet, a lonely, spinning promise. He\u2019d watch for answering lights that never came. One night, a storm surge shook the tower\u2019s bones. Waves, like black glass mountains, hurled themselves at the base. He stayed in the lamp room, his hand pressed to the cold glass, feeling the vibration of the fury below. He wasn't scared. He was a part of it now. When dawn finally bled through the churning clouds, a weak, watery light, he saw the world had been",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 29,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 285
+        }
+      ]
+    },
+    {
+      "concurrency": 2,
+      "max_tokens": 256,
+      "thinking": false,
+      "wall_seconds": 6.601,
+      "successes": 2,
+      "completion_tokens": 512,
+      "aggregate_tok_s": 77.56,
+      "mean_per_request_tok_s": 39.22,
+      "min_per_request_tok_s": 38.78,
+      "finish_reasons": [
+        "length",
+        "length"
+      ],
+      "seconds": [
+        6.601,
+        6.456
+      ],
+      "loads_before": {
+        "timestamp": 1790392948.7890866,
+        "dp_rank": 0,
+        "num_running_reqs": 1,
+        "num_waiting_reqs": 0,
+        "num_waiting_uncached_tokens": 0,
+        "num_used_tokens": 512,
+        "num_total_tokens": 512,
+        "num_active_tokens": 512,
+        "num_prealloc_ready_tokens": 0,
+        "max_total_num_tokens": 6754816,
+        "max_running_requests": 16,
+        "token_usage": 0.0099,
+        "gen_throughput": 53.49,
+        "cache_hit_rate": 0.0,
+        "utilization": 0.0,
+        "total_prefill_uncached_tokens": 0,
+        "total_prefill_busy_us": 0,
+        "decode_moments": [
+          206.0,
+          478.0,
+          9221856.0,
+          4374.0,
+          44257810.0,
+          1181.0
+        ],
+        "memory": {
+          "weight_gb": 74.708,
+          "kv_cache_gb": 0.0,
+          "graph_gb": 1.568,
+          "token_capacity": 6754816
+        },
+        "speculative": {
+          "accept_length": 2.509240246406571,
+          "accept_rate": 0.175
+        },
+        "disaggregation": {
+          "mode": "null",
+          "prefill_bootstrap_queue_reqs": 0,
+          "prefill_inflight_queue_reqs": 0,
+          "decode_prealloc_queue_reqs": 0,
+          "decode_transfer_queue_reqs": 0,
+          "decode_retracted_queue_reqs": 0,
+          "kv_transfer_speed_gb_s": 0.0,
+          "kv_transfer_latency_ms": 0.0
+        },
+        "queues": {
+          "waiting": 0,
+          "grammar": 0,
+          "paused": 0,
+          "retracted": 0,
+          "prealloc_ready": 0
+        }
+      },
+      "loads_after": {
+        "timestamp": 1790392955.376418,
+        "dp_rank": 0,
+        "num_running_reqs": 2,
+        "num_waiting_reqs": 0,
+        "num_waiting_uncached_tokens": 0,
+        "num_used_tokens": 1024,
+        "num_total_tokens": 1024,
+        "num_active_tokens": 1024,
+        "num_prealloc_ready_tokens": 0,
+        "max_total_num_tokens": 6754816,
+        "max_running_requests": 16,
+        "token_usage": 0.0198,
+        "gen_throughput": 77.97,
+        "cache_hit_rate": 0.0,
+        "utilization": 0.0,
+        "total_prefill_uncached_tokens": 0,
+        "total_prefill_busy_us": 0,
+        "decode_moments": [
+          349.0,
+          754.0,
+          15454181.0,
+          4916.0,
+          56376492.0,
+          1689.0
+        ],
+        "memory": {
+          "weight_gb": 74.708,
+          "kv_cache_gb": 0.0,
+          "graph_gb": 1.568,
+          "token_capacity": 6754816
+        },
+        "speculative": {
+          "accept_length": 2.256880733944954,
+          "accept_rate": 0.145
+        },
+        "disaggregation": {
+          "mode": "null",
+          "prefill_bootstrap_queue_reqs": 0,
+          "prefill_inflight_queue_reqs": 0,
+          "decode_prealloc_queue_reqs": 0,
+          "decode_transfer_queue_reqs": 0,
+          "decode_retracted_queue_reqs": 0,
+          "kv_transfer_speed_gb_s": 0.0,
+          "kv_transfer_latency_ms": 0.0
+        },
+        "queues": {
+          "waiting": 0,
+          "grammar": 0,
+          "paused": 0,
+          "retracted": 0,
+          "prealloc_ready": 0
+        }
+      },
+      "rows": [
+        {
+          "http": 200,
+          "seconds": 6.601,
+          "finish_reason": "length",
+          "content": "The winter the sea turned to iron, Elias knew it was his last. Each morning, he climbed the spiral stairs, his breath a ghost in the cold, to feed the great lamp its oil. The light was a pulse against the bruise-colored sky, a stubborn heartbeat in a world of grey. The wind no longer howled; it screamed, hurling sleet against the glass like handfuls of gravel. He\u2019d stopped talking to the gulls weeks ago. Now, he spoke only to the light, his only companion. He remembered the ships it had guided, the lives it had saved, the faces he\u2019d never seen. They were all phantoms now, ghosts in the beam. His wife\u2019s face was the clearest, her smile a warm memory against the relentless chill. On the final night, the storm was a living thing, a beast of black water and shrieking air. The lighthouse groaned, a deep, mournful sound. Elias, his joints aching with a lifetime of damp and duty, climbed one last time. He placed his hand on the warm brass of the lamp. It was time. He didn't extinguish the flame. He simply let it burn, a final, defiant star, until the oil ran",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 29,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 285
+        },
+        {
+          "http": 200,
+          "seconds": 6.456,
+          "finish_reason": "length",
+          "content": "By day, there is only a placid lake, a perfect mirror for the sun and the indifferent clouds. But as the last light bleeds from the sky, the city of Nocturne shimmers into being. Its spires are not of stone, but of solidified moonlight, and its cobblestone streets are paved with the dust of fallen stars. The air tastes of cold mint and forgotten dreams.\n\nIts citizens are the echoes of the day\u2019s regrets, the ghosts of chances not taken. They drift through the luminous avenues, their conversations whispered in the rustle of leaves. Here, a woman finally tells a lost love the words that stuck in her throat years ago. There, a man walks the path he was too afraid to take, his footsteps silent on the spectral ground. They are a beautiful, melancholy lot, forever enacting the what-ifs that haunt the waking world.\n\nThey find a fragile peace in this shared twilight, a comfort in their collective sorrow. But their time is borrowed. As the first hint of grey touches the eastern horizon, a profound sadness descends. The city\u2019s light begins to fade, its towers growing translucent. The citizens return to their silent posts, their stories unfinished. With the first ray of sun, Noct",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 30,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 286
+        }
+      ]
+    },
+    {
+      "concurrency": 4,
+      "max_tokens": 256,
+      "thinking": false,
+      "wall_seconds": 8.803,
+      "successes": 4,
+      "completion_tokens": 1024,
+      "aggregate_tok_s": 116.32,
+      "mean_per_request_tok_s": 30.34,
+      "min_per_request_tok_s": 29.08,
+      "finish_reasons": [
+        "length",
+        "length",
+        "length",
+        "length"
+      ],
+      "seconds": [
+        8.802,
+        8.619,
+        7.864,
+        8.522
+      ],
+      "loads_before": {
+        "timestamp": 1790392955.376418,
+        "dp_rank": 0,
+        "num_running_reqs": 2,
+        "num_waiting_reqs": 0,
+        "num_waiting_uncached_tokens": 0,
+        "num_used_tokens": 1024,
+        "num_total_tokens": 1024,
+        "num_active_tokens": 1024,
+        "num_prealloc_ready_tokens": 0,
+        "max_total_num_tokens": 6754816,
+        "max_running_requests": 16,
+        "token_usage": 0.0198,
+        "gen_throughput": 77.97,
+        "cache_hit_rate": 0.0,
+        "utilization": 0.0,
+        "total_prefill_uncached_tokens": 0,
+        "total_prefill_busy_us": 0,
+        "decode_moments": [
+          349.0,
+          754.0,
+          15454181.0,
+          4916.0,
+          56376492.0,
+          1689.0
+        ],
+        "memory": {
+          "weight_gb": 74.708,
+          "kv_cache_gb": 0.0,
+          "graph_gb": 1.568,
+          "token_capacity": 6754816
+        },
+        "speculative": {
+          "accept_length": 2.256880733944954,
+          "accept_rate": 0.145
+        },
+        "disaggregation": {
+          "mode": "null",
+          "prefill_bootstrap_queue_reqs": 0,
+          "prefill_inflight_queue_reqs": 0,
+          "decode_prealloc_queue_reqs": 0,
+          "decode_transfer_queue_reqs": 0,
+          "decode_retracted_queue_reqs": 0,
+          "kv_transfer_speed_gb_s": 0.0,
+          "kv_transfer_latency_ms": 0.0
+        },
+        "queues": {
+          "waiting": 0,
+          "grammar": 0,
+          "paused": 0,
+          "retracted": 0,
+          "prealloc_ready": 0
+        }
+      },
+      "loads_after": {
+        "timestamp": 1790392964.1821327,
+        "dp_rank": 0,
+        "num_running_reqs": 3,
+        "num_waiting_reqs": 0,
+        "num_waiting_uncached_tokens": 0,
+        "num_used_tokens": 1536,
+        "num_total_tokens": 1536,
+        "num_active_tokens": 1536,
+        "num_prealloc_ready_tokens": 0,
+        "max_total_num_tokens": 6754816,
+        "max_running_requests": 16,
+        "token_usage": 0.0297,
+        "gen_throughput": 121.44,
+        "cache_hit_rate": 0.0,
+        "utilization": 0.0,
+        "total_prefill_uncached_tokens": 0,
+        "total_prefill_busy_us": 0,
+        "decode_moments": [
+          491.0,
+          1290.0,
+          23924372.0,
+          6998.0,
+          88753014.0,
+          2711.0
+        ],
+        "memory": {
+          "weight_gb": 74.708,
+          "kv_cache_gb": 0.0,
+          "graph_gb": 1.568,
+          "token_capacity": 6754816
+        },
+        "speculative": {
+          "accept_length": 2.104790419161677,
+          "accept_rate": 0.1880794701986755
+        },
+        "disaggregation": {
+          "mode": "null",
+          "prefill_bootstrap_queue_reqs": 0,
+          "prefill_inflight_queue_reqs": 0,
+          "decode_prealloc_queue_reqs": 0,
+          "decode_transfer_queue_reqs": 0,
+          "decode_retracted_queue_reqs": 0,
+          "kv_transfer_speed_gb_s": 0.0,
+          "kv_transfer_latency_ms": 0.0
+        },
+        "queues": {
+          "waiting": 0,
+          "grammar": 0,
+          "paused": 0,
+          "retracted": 0,
+          "prealloc_ready": 0
+        }
+      },
+      "rows": [
+        {
+          "http": 200,
+          "seconds": 8.802,
+          "finish_reason": "length",
+          "content": "The wind off the Atlantic was a blade that winter, honing itself on the cottage walls. Inside, Silas kept the lamp burning. It was a covenant he\u2019d kept for fifty years, a promise of light against the swallowing dark. His hands, gnarled as driftwood, knew the ritual by heart: the polish, the wick, the slow, deliberate turn of the great cog. The light was a living thing, a pulse he sent out into the void. He no longer watched for ships. He watched for the memories the beam illuminated in the spray. The ghost of his wife, Elara, laughing as she hauled a lobster pot. The phantom silhouette of a schooner that never made port. The sea was a library of his losses. Each night, he climbed the spiral stairs, his joints groaning a counterpoint to the wind\u2019s howl. He\u2019d stand in the lantern room, a sentinel in a glass cage, and feel the tower shudder. It was a tired beast, and so was he. The mainland had sent a man in autumn, talking of automation, of a silent, efficient future. Silas had just nodded, his eyes on the horizon. On the last night of February, the storm was",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 29,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 285
+        },
+        {
+          "http": 200,
+          "seconds": 8.619,
+          "finish_reason": "length",
+          "content": "By day, there is only a placid lake, a perfect mirror for the indifferent sun. But as the last light bleeds from the sky, the city of Nocturne shimmers into being. It rises from the water not with a roar, but with a sigh, a city of obsidian and pearl. Its towers are spun from solidified moonlight, and its streets are paved with the soft dust of fallen stars.\n\nIts citizens are the dreamers, the insomniacs, the artists who chase the phantom of a perfect idea. They barter in secrets and stitch their conversations from half-remembered melodies. A woman sells bottled echoes of laughter; a man paints portraits of feelings that have no name. Here, a forgotten lullaby is a priceless treasure, and a shared moment of silence is the highest currency.\n\nThe city thrives on the poetry of the impossible. Its architecture is built from regret and longing, its fountains flow with liquid memory. But it is a fragile kingdom. As the first hint of grey touches the eastern horizon, a deep melancholy settles over the spires. The music fades, the colors bleed away, and the citizens return to the shores of the mundane. They watch their magnificent, sorrowful home dissolve back into the water",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 30,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 286
+        },
+        {
+          "http": 200,
+          "seconds": 7.864,
+          "finish_reason": "length",
+          "content": "The train lurched, and the only other occupant of the first-class compartment, a man named Silas, caught the scent of his rival\u2019s cologne\u2014sandalwood and spite. Elias. He didn\u2019t look up from his newspaper, but he felt the man\u2019s presence settle into the seat opposite him like a physical weight. The air grew thick, charged with a decade of silent, bitter competition. Rain streaked the window, blurring the English countryside into a watercolor smear. The only sounds were the rhythmic clatter of the wheels and the crackle of Silas\u2019s paper. He could feel Elias\u2019s gaze, a cold, analytical probe, likely cataloging the cut of his suit, the polish of his shoes. Silas turned a page with deliberate calm, the paper snapping like a small, sharp whip. He imagined the headline he\u2019d write tomorrow, the one that would finally, irrevocably, ruin the man across from him. A small, cruel smile touched his lips. Then, a jolt. The train shuddered violently, and Silas\u2019s briefcase, resting on the seat beside him, tumbled to the floor. The latch sprang open. A cascade of papers spilled out, fanning across the",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 29,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 285
+        },
+        {
+          "http": 200,
+          "seconds": 8.522,
+          "finish_reason": "length",
+          "content": "The water had long since gone still, a black mirror in the cellar\u2019s heart. Elias waded in, the cold biting his shins. He was looking for his grandmother\u2019s silver, but his flashlight beam caught on something else, a pale, curved shape half-buried in silt. It was a violin.\n\nHe lifted it, and the water cascaded off its swollen body. The varnish was a map of cracks, the strings long since snapped, but the wood was strangely intact. He carried it up into the grey light of the kitchen. The smell of damp earth and decay clung to it.\n\nHe carefully wiped the grime from the f-holes, from the delicate scroll. It was then he saw the maker\u2019s mark, a name he didn\u2019t recognize, and a date: 1842. He imagined the hands that had carved it, the music it had sung. He pictured it not in this ruin, but in a warm parlour, its voice soaring above the clatter of teacups.\n\nHe found a cloth and began to dry it, polishing the wood with a gentle reverence. He didn't know if it could ever be played again. But as he held it, he felt a faint vibration, a ghost of a",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 30,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 286
+        }
+      ]
+    },
+    {
+      "concurrency": 8,
+      "max_tokens": 256,
+      "thinking": false,
+      "wall_seconds": 12.715,
+      "successes": 8,
+      "completion_tokens": 2048,
+      "aggregate_tok_s": 161.08,
+      "mean_per_request_tok_s": 21.33,
+      "min_per_request_tok_s": 20.14,
+      "finish_reasons": [
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length"
+      ],
+      "seconds": [
+        12.329,
+        11.278,
+        11.69,
+        11.689,
+        12.221,
+        12.106,
+        12.106,
+        12.711
+      ],
+      "loads_before": {
+        "timestamp": 1790392964.1821327,
+        "dp_rank": 0,
+        "num_running_reqs": 3,
+        "num_waiting_reqs": 0,
+        "num_waiting_uncached_tokens": 0,
+        "num_used_tokens": 1536,
+        "num_total_tokens": 1536,
+        "num_active_tokens": 1536,
+        "num_prealloc_ready_tokens": 0,
+        "max_total_num_tokens": 6754816,
+        "max_running_requests": 16,
+        "token_usage": 0.0297,
+        "gen_throughput": 121.44,
+        "cache_hit_rate": 0.0,
+        "utilization": 0.0,
+        "total_prefill_uncached_tokens": 0,
+        "total_prefill_busy_us": 0,
+        "decode_moments": [
+          491.0,
+          1290.0,
+          23924372.0,
+          6998.0,
+          88753014.0,
+          2711.0
+        ],
+        "memory": {
+          "weight_gb": 74.708,
+          "kv_cache_gb": 0.0,
+          "graph_gb": 1.568,
+          "token_capacity": 6754816
+        },
+        "speculative": {
+          "accept_length": 2.104790419161677,
+          "accept_rate": 0.1880794701986755
+        },
+        "disaggregation": {
+          "mode": "null",
+          "prefill_bootstrap_queue_reqs": 0,
+          "prefill_inflight_queue_reqs": 0,
+          "decode_prealloc_queue_reqs": 0,
+          "decode_transfer_queue_reqs": 0,
+          "decode_retracted_queue_reqs": 0,
+          "kv_transfer_speed_gb_s": 0.0,
+          "kv_transfer_latency_ms": 0.0
+        },
+        "queues": {
+          "waiting": 0,
+          "grammar": 0,
+          "paused": 0,
+          "retracted": 0,
+          "prealloc_ready": 0
+        }
+      },
+      "loads_after": {
+        "timestamp": 1790392977.1398737,
+        "dp_rank": 0,
+        "num_running_reqs": 1,
+        "num_waiting_reqs": 0,
+        "num_waiting_uncached_tokens": 0,
+        "num_used_tokens": 512,
+        "num_total_tokens": 512,
+        "num_active_tokens": 512,
+        "num_prealloc_ready_tokens": 0,
+        "max_total_num_tokens": 6754816,
+        "max_running_requests": 16,
+        "token_usage": 0.0099,
+        "gen_throughput": 175.48,
+        "cache_hit_rate": 0.0,
+        "utilization": 0.0,
+        "total_prefill_uncached_tokens": 0,
+        "total_prefill_busy_us": 0,
+        "decode_moments": [
+          648.0,
+          2395.0,
+          36420234.0,
+          15521.0,
+          181245209.0,
+          4789.0
+        ],
+        "memory": {
+          "weight_gb": 74.708,
+          "kv_cache_gb": 0.0,
+          "graph_gb": 1.568,
+          "token_capacity": 6754816
+        },
+        "speculative": {
+          "accept_length": 2.009847806624888,
+          "accept_rate": 0.17625
+        },
+        "disaggregation": {
+          "mode": "null",
+          "prefill_bootstrap_queue_reqs": 0,
+          "prefill_inflight_queue_reqs": 0,
+          "decode_prealloc_queue_reqs": 0,
+          "decode_transfer_queue_reqs": 0,
+          "decode_retracted_queue_reqs": 0,
+          "kv_transfer_speed_gb_s": 0.0,
+          "kv_transfer_latency_ms": 0.0
+        },
+        "queues": {
+          "waiting": 0,
+          "grammar": 0,
+          "paused": 0,
+          "retracted": 0,
+          "prealloc_ready": 0
+        }
+      },
+      "rows": [
+        {
+          "http": 200,
+          "seconds": 12.329,
+          "finish_reason": "length",
+          "content": "The wind off the Atlantic was a blade that winter, honing itself on the cottage walls. Inside, Silas moved with the slow, deliberate economy of a man whose world had shrunk to the radius of a single, faithful beam. His joints ached with the cold, a deep, resonant pain that was older than the lighthouse itself. Each night, he climbed the spiraling stairs, his hand tracing the worn iron rail, a path his feet knew better than his own heartbeat. The lamp was his only companion now, a captive sun he fed with oil and care. Below, the sea was a black, churning thing, a beast that gnawed at the rocks. He no longer saw it as a threat, but as a neighbor, a restless, ancient entity he\u2019d learned to live beside. He would stand in the lantern room, the glass fogged with his breath, and watch the light sweep across the water. It was a silent, rhythmic promise. You are not alone. The final night, the supply boat was a speck on the horizon, bringing his replacement. Silas gave the great lens a final, polishing touch. He descended the stairs for the last time, leaving the light to its own devices. It didn't need him anymore",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 29,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 285
+        },
+        {
+          "http": 200,
+          "seconds": 11.278,
+          "finish_reason": "length",
+          "content": "By day, there is only a placid lake, a perfect mirror for the indifferent sun. But as the last light bleeds from the sky, the city of Nocturne shimmers into being. It rises from the water not with a roar, but with a sigh, a silent unfurling of impossible architecture. Towers of polished onyx spiral towards a star-dusted sky, their windows glowing with the captured light of fireflies. Bridges of spun silver connect floating islands of moss and crystal, and the air smells of night-blooming jasmine and cool stone.\n\nIts people are the dreamers, the insomniacs, the poets who find their voices only in the dark. They barter in secrets and starlight, their laughter a soft melody against the gentle lapping of the water below. Here, a forgotten memory can be traded for a new song, and a heart\u2019s deepest desire is a common currency. But as the first hint of grey touches the eastern horizon, a quiet melancholy descends. The spires soften, the bridges fade to mist, and the city\u2019s inhabitants return to the water\u2019s edge. They watch their world dissolve, a beautiful, shared hallucination, until only the lake remains, waiting for the",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 30,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 286
+        },
+        {
+          "http": 200,
+          "seconds": 11.69,
+          "finish_reason": "length",
+          "content": "The train lurched, and the only other occupant of the compartment\u2014a man I knew too well\u2014caught the flask that slid from his lap. Alistair. His smile was a thin, sharp line. We had spent a decade clawing for the same promotions, the same bylines, the same hollow victories. Now, we were trapped in a velvet-lined box, hurtling through the countryside.\n\nThe silence was a third passenger, heavy and suffocating. He broke it first, his voice smooth as polished stone. \"Heading to the Ashford estate, I presume? A lovely piece for the obituaries.\" He knew my assignment. I knew his. We were vultures circling the same dying legacy.\n\nI offered a tight nod, my gaze fixed on the rain-streaked window. Each droplet was a tiny, distorted world. I could feel his satisfaction, a smug warmth radiating across the aisle. He had won the last round, securing the interview that should have been mine.\n\nThe train whistle shrieked, a mournful sound that seemed to echo my own frustration. He leaned forward, his eyes glinting with a familiar, predatory light. \"May the best man win,\" he murmured, the words a velvet dagger. I finally met his gaze",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 29,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 285
+        },
+        {
+          "http": 200,
+          "seconds": 11.689,
+          "finish_reason": "length",
+          "content": "The water had long since gone still, a black mirror in the cellar\u2019s heart. Elias waded in, the cold biting through his boots. He was looking for nothing, just the ghost of his grandfather\u2019s workshop. Then his foot struck something that wasn\u2019t brick or stone. It gave a hollow, musical thud. He plunged his hands into the frigid dark, his fingers closing around a curved neck. He pulled it free. A violin, impossibly whole. Its varnish was bloated and peeling, the colour of a drowned leaf. The strings were green with rot, but as he held it, a single drop of water fell from the f-hole and struck the surface below. It wasn't a splash. It was a note. A perfect, clear A. The sound hung in the damp air, a ghost of a melody that had once filled this room with life. He saw his grandfather then, not as he was at the end, but as a young man, his bow dancing across these very strings. The flood had taken the house, the photographs, the letters. But it had not taken this. It had preserved the music in a tomb of water, waiting for a hand to disturb its sleep. Elias clutched the silent instrument",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 30,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 286
+        },
+        {
+          "http": 200,
+          "seconds": 12.221,
+          "finish_reason": "length",
+          "content": "The silence broke not with a cannon\u2019s roar, but with the sharp, bright cry of a rooster. It was a sound so alien it made Elara flinch, her hands tightening on the rough burlap of her sacks. For years, the dawn had been a time for huddling in cellars, for counting the hollow booms of distant artillery. Now, the sun rose on a square that was not a ruin, but a riot of hesitant life.\n\nThe air, once tasting of ash and fear, was thick with the scent of damp earth, of onions, and the sweet, yeasty perfume of bread. A woman with a face like a crumpled map was selling them, her loaves still warm, their crusts a golden brown that seemed impossible. Elara traded a few precious coins for one, the weight of it in her hand a solid, comforting reality.\n\nAround her, the market stitched itself together. A farmer with a cart of speckled eggs, a tinker mending a pot with careful, clinking taps. Voices, once lowered to whispers, were now raised in the simple, glorious act of haggling. A child darted between legs, clutching a single, perfect apple. The war had carved deep lines",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 31,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 287
+        },
+        {
+          "http": 200,
+          "seconds": 12.106,
+          "finish_reason": "length",
+          "content": "The ink was not ink, but a distillate of memory, and the parchment was the mind of a sleeping child. Elara, her fingers stained with the colour of forgotten lullabies, bent over her desk. Her tools were delicate: a compass of pure intention, a ruler of logic to measure the illogical. Tonight\u2019s subject was a boy named Leo, and his dreamscape was a chaotic archipelago. She dipped her pen into a vial of captured moonlight and began to chart the coast of a floating island made of his favourite storybook. A sea of whispering grass lapped at its shores. With a steady hand, she traced the spine of a mountain range that was, in reality, the curve of his mother\u2019s smile. She marked a forest of singing trees, their branches laden with the bright, hard fruit of his hopes. But then, the map resisted. A dark, oily stain bloomed in the corner of the parchment\u2014a shadow-creature from a forgotten nightmare. It bled, threatening to swallow the coastline of joy. Elara didn't flinch. She selected a new tool, a small, silver blade of courage, and carefully scraped the darkness away, replacing it with a path of shimmering pebbles that led",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 29,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 285
+        },
+        {
+          "http": 200,
+          "seconds": 12.106,
+          "finish_reason": "length",
+          "content": "The scent of salt spray and yeast fought a constant, friendly war in the air of the Anchor and Oven. The bakery\u2019s floor was scrubbed pine, but it still tilted, a permanent reminder of the schooner it had once been. Captain Elias, his beard a white-capped wave, punched down a mound of dough with the same authority he\u2019d once used to command a helm. His first mate, old Barnaby, slid a tray of loaves into the great brick oven, his single good eye squinting against the heat. They didn't speak much; a grunt and a nod were enough after forty years of shared storms. Their hands, gnarled and rope-burned, were surprisingly gentle as they shaped crusty baguettes they called \u2018yardarms\u2019 and round, sweet rolls they named \u2018port and starboard.\u2019 The shop was a haven for the land-bound, a place where the coffee was strong enough to raise the dead and the stories were as tall as the masts they\u2019d once climbed. A bell above the door, salvaged from a sunken frigate, would jingle. A customer would enter, and for a moment, the two old sailors would look up, their eyes holding the distant horizon before",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 29,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 285
+        },
+        {
+          "http": 200,
+          "seconds": 12.711,
+          "finish_reason": "length",
+          "content": "The orchard began as a rebellion against the grey. High above the grumbling traffic, where the air tasted of tar and regret, a retired botanist named Elara coaxed life from a concrete slab. She planted dwarf apple trees in recycled bathtubs, their roots tracing the cracks in the pavement. There were fig saplings in paint buckets and a stubborn pear tree that refused to bear fruit for three years. The bees found it first, a drunken, buzzing congregation navigating the smog to reach this improbable oasis. Then came the birds, and with them, seeds from distant parks. Now, in late September, the rooftop is a riot of scent and color. The air is thick with the sweet, fermenting perfume of fallen fruit. Wasps drone lazily around split plums, their bodies heavy with sugar. From the street, you would never know. You would only see the same drab skyline, the same water-stained concrete. But if you were lucky enough to be invited up, you would step into a world where the wind carries the crisp bite of a ripe apple and the earthy musk of damp soil. Children from the building next door, who once thought food came only from bodegas, now climb the fire escape to steal warm figs,",
+          "reasoning": "",
+          "tool_calls": [],
+          "prompt_tokens": 29,
+          "completion_tokens": 256,
+          "reasoning_tokens": 0,
+          "total_tokens": 285
+        }
+      ]
+    }
+  ],
+  "needles": [
+    {
+      "target_tokens": 32768,
+      "concurrency": 1,
+      "calibrated_prompt_tokens": [
+        26152
+      ],
+      "wall_seconds": 5.99,
+      "correct": 1
+    },
+    {
+      "target_tokens": 32768,
+      "concurrency": 4,
+      "calibrated_prompt_tokens": [
+        26152,
+        26150,
+        26150,
+        27442
+      ],
+      "wall_seconds": 19.098,
+      "correct": 4
+    },
+    {
+      "target_tokens": 131072,
+      "concurrency": 1,
+      "calibrated_prompt_tokens": [
+        107191
+      ],
+      "wall_seconds": 19.216,
+      "correct": 1
+    }
+  ]
+}
