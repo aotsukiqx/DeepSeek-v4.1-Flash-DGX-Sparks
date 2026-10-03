@@ -160,10 +160,18 @@ class EngramLoader(importlib.abc.Loader):
             if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
                 from verify_cap import install_draft as install_verify_cap_draft
                 install_verify_cap_draft(module)
+            # Gated on DSV41_COPY_DRAFTS: prompt-lookup exact n-gram copies in front of the DFlash2 draft.
+            if os.environ.get('DSV41_COPY_DRAFTS', '0').strip() not in ('0', 'off', 'false', ''):
+                from copy_drafts import install_draft as install_copy_drafts
+                install_copy_drafts(module)
         elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_planner':
             if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
                 from verify_cap import install_planner as install_verify_cap_planner
                 install_verify_cap_planner(module)
+            # Gated on DSV41_COPY_DRAFTS: eager-step confidence of the copy rows clamped to 1.0.
+            if os.environ.get('DSV41_COPY_DRAFTS', '0').strip() not in ('0', 'off', 'false', ''):
+                from copy_drafts import install_planner as install_copy_drafts_planner
+                install_copy_drafts_planner(module)
         elif module.__name__ == 'sglang.srt.model_executor.runner.flashinfer_autotune':
             # Gated on DSV41_AUTOTUNE_KEEP: keep the FlashInfer autotune cache across boots under EP
             # (sglang#40320: the stock gate deletes it on every boot).
