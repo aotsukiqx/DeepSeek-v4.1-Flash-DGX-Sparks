@@ -34,4 +34,18 @@ nodes; repo tag `pre-b12x150`.
 `baseline-trace.json.gz` (rank 0, 45 steps + a 384-token prose request,
 torch profiler window): b12x W4A8 MoE phase1+phase2 dominate GPU busy
 (~35 % combined), dense MXFP8 GEMMs second, attention/NCCL/RoCE behind. The
-next lever (winner-artifact tuning) targets exactly those two groups.
+next graph-shape lever targets exactly those two groups. Superseded below: plan selection is pinned, see the pins-off arm.
+
+## Pins-off arm (same day): the two plan pins stay mandatory
+
+`DSV41_MOE_B12X_NEXT_PLAN_TABLE=1-8=heur` + `M64_MIN_CAP=0` (pure 1.5.0
+heuristic, everything else production): prose 30.5 (-47 %), code 79.2 (-34 %).
+The 1.5.0 reuse/occupancy heuristic rework (0d6600e6) still selects the `micro`
+plan at <= 8 rows on the compact-N64 geometry - the measured micro/dynamic gap
+the pins were installed for (523 -> 349 us per call at M=6) did not close.
+Restored and verified (code 120.0 back). Consequence for the tuning step: the
+known heuristic misses are already pinned, the verify-row family
+({6,12,...,96}) already races at load, and the remaining unraced surface
+(draft-row caps 5xbs >= 10, prefill ladder) sits on small slices of the step -
+per-shape tuning is closed as below the effort line. The next decode lever is
+the graph-shape one (gamma widening), not plan selection.
