@@ -112,6 +112,10 @@ GRAPH_BS = _ints(_env("DSV41_MOE_B12X_NEXT_GRAPH_BS", "1,2,3,4,5,6,7,8,10,12,14,
 _MAX_BS = int(_env("CUDA_GRAPH_MAX_BS_DECODE", "16") or 16)
 GRAPH_BS = [b for b in GRAPH_BS if b <= _MAX_BS] or [1]
 BLOCK = int(_env("DSPARK_BLOCK_SIZE", "5") or 5)
+# Verify/draft row counts with exact plans: the block pair by default; a widened boot
+# with the dual-graph narrow family (adapter/dual_graph.py) wants e.g. "6,8,9".
+ROWS = sorted({int(r) for r in _env(
+    "DSV41_MOE_B12X_NEXT_ROWS", f"{BLOCK},{BLOCK + 1}").replace(" ", "").split(",") if r})
 LADDER = _ints(_env("DSV41_MOE_B12X_NEXT_LADDER", "128,256,512,1024,2048,4096"))
 # Prefill capacities of the compact N64 geometry (EP1, N=576) on the M64 tile instead of b12x's M16 pin.
 M64_MIN_CAP = int(_env("DSV41_MOE_B12X_NEXT_M64_MIN_CAP", "2048") or 0)
@@ -363,7 +367,7 @@ class _Geometry:
         self.report = {}
 
     def capacities(self):
-        rows = sorted({r * b for r in (BLOCK, BLOCK + 1) for b in GRAPH_BS})
+        rows = sorted({r * b for r in ROWS for b in GRAPH_BS})
         exact = [m for m in rows if m <= EXACT_MAX]
         return sorted(set(exact) | {c for c in LADDER if c > max(exact)})
 

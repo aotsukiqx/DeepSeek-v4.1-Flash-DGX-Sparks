@@ -139,6 +139,12 @@ class EngramLoader(importlib.abc.Loader):
                 else:
                     from draft_head_fp8 import install as install_draft_head_fp8
                 install_draft_head_fp8(module)
+        elif module.__name__ == 'sglang.srt.model_executor.runner.decode_cuda_graph_runner':
+            # DSV41_DUAL_GRAPH: capture the narrow verify-graph family at widened blocks
+            # (W1, capture-only; adapter/dual_graph.py).
+            if os.environ.get('DSV41_DUAL_GRAPH', '0').strip() not in ('0', 'off', 'false', ''):
+                from dual_graph import install as install_dual_graph
+                install_dual_graph(module)
         elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_draft_sampler':
             # Gated on DSV41_DRAFT_TAU (unset or 1 = off): draft proposal temperature.
             if os.environ.get('DSV41_DRAFT_TAU', '1').strip() not in ('', '1', '1.0'):
@@ -254,6 +260,7 @@ class EngramFinder(importlib.abc.MetaPathFinder):
                             'sglang.srt.layers.quantization.fp8_utils',
                             'sglang.srt.layers.quantization.fp8',
                             'sglang.srt.model_executor.model_runner',
+                            'sglang.srt.model_executor.runner.decode_cuda_graph_runner',
                             'sglang.srt.entrypoints.openai.encoding_dsv41',
                             'sglang.srt.entrypoints.openai.serving_chat',
                             'sglang.srt.models.deepseek_v4',
