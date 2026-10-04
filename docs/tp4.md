@@ -139,7 +139,7 @@ DSV41 indexer chunked (sglang#39187 backport) ARMED: ...
 Initialized DSpark draft runner. ... gamma=5, verify_num_draft_tokens=6
 max_total_num_tokens=..., chunked_prefill_size=4096, ... max_running_requests=16
 RoCEnante ready: world=4 hcas=...
-[moe_b12x_next] armed: routed MoE on b12x_next a7d7d29b ...
+[moe_b12x_next] armed: routed MoE on b12x_next e4084d2e ...
 [moe_b12x_next] INFO: routed MoE at EP_SIZE=1 ...
 DSV41 hc_fused: first call (4096 rows) bit-identical to stock
 ```
@@ -195,7 +195,7 @@ overlay, `IMAGE=dsv41-4x-spark:local` the branch. The earlier TP4 example: `MAX_
   number here.
 - **local-inference-lab / Luke Alonso and Jason (original-el8)**, [b12x](https://github.com/local-inference-lab/b12x):
   RoCEnante, the one-shot RDMA all-reduce (the SG17 revision), and the fused MoE kernels that run the
-  routed experts (b12x main at `a7d7d29b`, installed as `b12x_next` beside the SG17 copy, with a
+  routed experts (b12x main at `e4084d2e` = 1.5.0, 2026-09-30, installed as `b12x_next` beside the SG17 copy, with a
   two-line patch that admits 64-row tiles for 576-wide experts at prefill sizes).
 - **rhys101**, [DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8](https://github.com/rhys101/DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8):
   the SG17 SGLang overlay that routes small tensor-parallel all-reduces to RoCEnante (with a TP4
