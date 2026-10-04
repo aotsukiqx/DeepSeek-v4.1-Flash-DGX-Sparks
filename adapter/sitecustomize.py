@@ -259,6 +259,7 @@ class EngramFinder(importlib.abc.MetaPathFinder):
                             'sglang.srt.entrypoints.openai.serving_chat',
                             'sglang.srt.models.deepseek_v4',
                             'sglang.srt.models.deepseek_v4_dspark',
+                            'sglang.srt.models.dspark',
                             'sglang.srt.speculative.dspark_components.dspark_verify',
                             'sglang.srt.speculative.dspark_components.dspark_draft_sampler',
                             'sglang.kernels.ops.speculative.dspark.dspark_accept',
