@@ -29,18 +29,37 @@ The untrained positions 6-8 of the parallel block extrapolate strongly on code
 (+2 accepted tokens/step); prose never passes position ~2 and pays 7 dead live
 rows. KV pool 6.66M at the reduced graph set.
 
-## Verdict: build the widening as an adapter shim, not an engine fork
+## Plan that followed (kept for the record)
 
-1. Hook the model's `compute_confidence` to truncate `markov_embed_stack` to
-   5 positions at gamma=8 (the head keeps its trained view).
-2. verify_cap rule: positions 1-5 exactly as today; positions 6-8 live only
-   when the position-5 cumulative confidence clears a higher threshold - code
-   extends to 8, prose stops at <=5 and keeps the dead-row masking.
-3. Memory: bs-16 graphs at 9 rows need a trimmed graph ladder or a lower KV pin
-   (one fitting boot; the bs<=8 set fits with room).
-4. Gates: greedy texts differ across gamma arms (9-row verify changes batched
-   rounding), so qeval paired is the correctness gate; within-boot greedy
-   repeatability still applies.
+Adapter shim, not an engine fork: hook the model's compute_confidence, extend the
+verify_cap rule with a position-5 threshold, trim the graph ladder for memory, gate on
+qeval (greedy texts differ across gamma arms - 9-row verify changes batched rounding).
+
+## Shim implemented and measured (same day, commits e1fb298..90d7ad4)
+
+Three lessons to a working widened line: (1) sitecustomize's EngramFinder whitelist
+must name the hooked module; (2) the wide argument is x_post_hc (the gamma*1024 markov
+context, measured (64, 5120) = [bs*gamma, D] at runtime), not the 256-wide token
+embedding; (3) the engine's own compute_confidence views everything through the draft
+checkpoint's native gamma=5, so the adapter replaces the method: first five block
+positions + anchor-and-four prev sequence through the trained head, zero-padded to
+[bs, 8] (columns past five ignored by the live rule; rows past five ride
+DSV41_VERIFY_CAP_EXT, default 0.5 - on the gamma=5 trace cum5 separates code p50 0.90
+from prose p90 0.015).
+
+| arm | prose | code | notes |
+|---|---:|---:|---|
+| gamma=8, no cap (probe) | 39.2 | 134.8 | 9 live rows/step, no dead-row masking |
+| gamma=8 + EXT shim | **49.9** | **134.8** | cap costs nothing on code; prose keeps the fixed 9-row graph cost |
+| gamma=5 production | 57.3 | 120.0 | |
+
+qeval paired: BROKE 1 (math_m9: 121 vs 38 - a numeric task flipping under the changed
+verify-row rounding), median -27.8 % on the prose-heavy suite. Verdict: **not adopted**;
+the line stays env-gated (DSPARK_BLOCK_SIZE=8 + the shim, default off). Making it
+universal needs the runner to hold two verify graph families per bs and pick per batch
+by the live length (prose then replays 6-row graphs and pays nothing) - engine runner
+work, the natural follow-up. Code-only deployments can take +12 % today by setting the
+env.
 
 Artifacts: `bench-gamma8-probe.json`; accept-len distribution from the boot-3
 engine log (mean 2.96 mixed, bimodal p50 1.93 / p90 7.30).
