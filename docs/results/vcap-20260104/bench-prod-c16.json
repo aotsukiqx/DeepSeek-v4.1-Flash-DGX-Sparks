@@ -1,0 +1,18 @@
+{
+ "results": [
+  {
+   "label": "prose_c16",
+   "n": 16,
+   "aggregate_tok_s": 122.6,
+   "per_stream_median": 9.0,
+   "wall_s": 50.1
+  },
+  {
+   "label": "code_c16",
+   "n": 16,
+   "aggregate_tok_s": 650.4,
+   "per_stream_median": 40.9,
+   "wall_s": 9.4
+  }
+ ]
+}

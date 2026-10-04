@@ -1,0 +1,32 @@
+{
+ "results": [
+  {
+   "label": "prose_c16",
+   "n": 16,
+   "aggregate_tok_s": 210.8,
+   "per_stream_median": 13.7,
+   "wall_s": 28.9
+  },
+  {
+   "label": "code_c16",
+   "n": 16,
+   "aggregate_tok_s": 714.2,
+   "per_stream_median": 45.2,
+   "wall_s": 8.6
+  },
+  {
+   "label": "prose_c32",
+   "n": 32,
+   "aggregate_tok_s": 323.0,
+   "per_stream_median": 10.4,
+   "wall_s": 38.0
+  },
+  {
+   "label": "code_c32",
+   "n": 32,
+   "aggregate_tok_s": 667.9,
+   "per_stream_median": 30.0,
+   "wall_s": 18.4
+  }
+ ]
+}
