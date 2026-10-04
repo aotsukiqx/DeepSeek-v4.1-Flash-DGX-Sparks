@@ -68,7 +68,7 @@ import torch
 logger = logging.getLogger(__name__)
 
 ENABLED = os.environ.get("DSV41_MOE_B12X_NEXT", "0").strip() not in ("0", "", "off", "false")
-PINNED_COMMIT = "a7d7d29b2ef8869086e0ceaa787321f17544e3c9"
+PINNED_COMMIT = "e4084d2eef4932e0fa06db3f7a94deb83ad132d7"   # b12x 1.5.0 (2026-09-30)
 _FUSED_KEY = ("none", "flashinfer_mxfp4")
 _TAG = "[moe_b12x_next]"
 

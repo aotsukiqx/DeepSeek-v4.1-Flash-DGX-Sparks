@@ -34,7 +34,7 @@ roce-ring/roce_oneshot.py  f16b5f43208c188c018c43820ccf52955006d1a5  2e431e7c5ef
 # b12x main, installed as the top-level package b12x_next beside the SG17 copy (renamed
 # identifiers, B12X_* knobs -> B12X_NEXT_*), then scripts/b12x_next-compact-n64-m64.patch.
 # adapter/moe_b12x_next.py refuses any other commit. Apache-2.0.
-b12x-main  a7d7d29b2ef8869086e0ceaa787321f17544e3c9  e2d070850d50fb365a01f82f16e3f582a53e7ad1c6e3d657b50babb68814635d  https://github.com/local-inference-lab/b12x/archive/a7d7d29b2ef8869086e0ceaa787321f17544e3c9.tar.gz
+b12x-main  e4084d2eef4932e0fa06db3f7a94deb83ad132d7  3b97cb4b0c6d9c9fe24df936e69a3de3481dd1bbea9deda914f1695b77e1cd62  https://github.com/local-inference-lab/b12x/archive/e4084d2eef4932e0fa06db3f7a94deb83ad132d7.tar.gz
 
 # Files that stay in this repository; the script checks their sha256 before using them.
 #   runtime/sglang-rocenante.patch     = rhys101 @ 66aa6bd  sglang/experiments/sg17-rocenante/sglang-rocenante.patch
