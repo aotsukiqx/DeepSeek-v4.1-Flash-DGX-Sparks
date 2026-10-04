@@ -36,11 +36,10 @@ CODE = [
 PHASES = [("greedy", 0.0), ("t07", 0.7), ("t10", 1.0)]
 
 
-def log_bytes(head):
+def log_bytes(head, path):
     """Size of the trace inside dsv41-head; 0 before the first logged step."""
     out = subprocess.run(
-        ["ssh", "-o", "BatchMode=yes", head,
-         "docker exec dsv41-head stat -c %s /state/vcap-log.bin"],
+        ["ssh", "-o", "BatchMode=yes", head, f"docker exec dsv41-head stat -c %s {path}"],
         capture_output=True, text=True)
     return int(out.stdout.strip() or 0) if out.returncode == 0 else 0
 
@@ -70,13 +69,18 @@ def main():
     ap.add_argument("--out", required=True, help="manifest.json path")
     ap.add_argument("--reps", type=int, default=3)
     ap.add_argument("--max-tokens", type=int, default=384)
+    ap.add_argument("--row-floats", type=int, default=7,
+                    help="per logged row: gamma confidences + live + accepted")
+    ap.add_argument("--log-path", default="/state/vcap-log.bin")
     args = ap.parse_args()
+    row_bytes = 4 * args.row_floats
 
     manifest = {"url": args.url, "model": args.model, "reps": args.reps,
-                "max_tokens": args.max_tokens, "row_bytes": 28, "phases": []}
+                "max_tokens": args.max_tokens, "row_bytes": row_bytes,
+                "log_path": args.log_path, "phases": []}
     for label, temp in PHASES:
         for cls, prompts in (("prose", PROSE), ("code", CODE)):
-            start = log_bytes(args.head)
+            start = log_bytes(args.head, args.log_path)
             phase = {"label": f"{label}_{cls}", "temperature": temp, "top_p": 0.95,
                      "start_byte": start, "requests": []}
             for i in range(args.reps):
@@ -85,8 +89,8 @@ def main():
                     complete(args.url, args.model, prompt, temp, args.max_tokens))
                 print(f"[{phase['label']}] rep {i + 1}/{args.reps} "
                       f"{phase['requests'][-1]}", flush=True)
-            phase["end_byte"] = log_bytes(args.head)
-            phase["rows"] = (phase["end_byte"] - phase["start_byte"]) // 28
+            phase["end_byte"] = log_bytes(args.head, args.log_path)
+            phase["rows"] = (phase["end_byte"] - phase["start_byte"]) // row_bytes
             manifest["phases"].append(phase)
     with open(args.out, "w") as f:
         json.dump(manifest, f, indent=1)
