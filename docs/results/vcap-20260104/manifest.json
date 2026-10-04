@@ -1,0 +1,159 @@
+{
+ "url": "http://192.168.2.23:8000",
+ "model": "deepseek-v4.1-flash",
+ "reps": 3,
+ "max_tokens": 384,
+ "row_bytes": 28,
+ "phases": [
+  {
+   "label": "greedy_prose",
+   "temperature": 0.0,
+   "top_p": 0.95,
+   "start_byte": 9576,
+   "requests": [
+    {
+     "wall_s": 8.5,
+     "completion_tokens": 384,
+     "text_sha": "-3473371941555379328"
+    },
+    {
+     "wall_s": 8.7,
+     "completion_tokens": 384,
+     "text_sha": "-2402381945432400395"
+    },
+    {
+     "wall_s": 8.2,
+     "completion_tokens": 384,
+     "text_sha": "-3473371941555379328"
+    }
+   ],
+   "end_byte": 25508,
+   "rows": 569
+  },
+  {
+   "label": "greedy_code",
+   "temperature": 0.0,
+   "top_p": 0.95,
+   "start_byte": 25508,
+   "requests": [
+    {
+     "wall_s": 3.6,
+     "completion_tokens": 384,
+     "text_sha": "6039860218468515964"
+    },
+    {
+     "wall_s": 3.4,
+     "completion_tokens": 384,
+     "text_sha": "-7682725516929137823"
+    },
+    {
+     "wall_s": 3.4,
+     "completion_tokens": 384,
+     "text_sha": "6039860218468515964"
+    }
+   ],
+   "end_byte": 31528,
+   "rows": 215
+  },
+  {
+   "label": "t07_prose",
+   "temperature": 0.7,
+   "top_p": 0.95,
+   "start_byte": 31528,
+   "requests": [
+    {
+     "wall_s": 9.0,
+     "completion_tokens": 384,
+     "text_sha": "7882397765611342528"
+    },
+    {
+     "wall_s": 8.5,
+     "completion_tokens": 384,
+     "text_sha": "8692663575996219907"
+    },
+    {
+     "wall_s": 8.7,
+     "completion_tokens": 384,
+     "text_sha": "1698852050448656087"
+    }
+   ],
+   "end_byte": 47432,
+   "rows": 568
+  },
+  {
+   "label": "t07_code",
+   "temperature": 0.7,
+   "top_p": 0.95,
+   "start_byte": 47432,
+   "requests": [
+    {
+     "wall_s": 3.7,
+     "completion_tokens": 384,
+     "text_sha": "1363379074509820926"
+    },
+    {
+     "wall_s": 3.5,
+     "completion_tokens": 384,
+     "text_sha": "-3475768570195328199"
+    },
+    {
+     "wall_s": 3.6,
+     "completion_tokens": 384,
+     "text_sha": "6996655345249819061"
+    }
+   ],
+   "end_byte": 53424,
+   "rows": 214
+  },
+  {
+   "label": "t10_prose",
+   "temperature": 1.0,
+   "top_p": 0.95,
+   "start_byte": 53424,
+   "requests": [
+    {
+     "wall_s": 8.7,
+     "completion_tokens": 384,
+     "text_sha": "-3716334002527817843"
+    },
+    {
+     "wall_s": 9.0,
+     "completion_tokens": 384,
+     "text_sha": "3463817675278669684"
+    },
+    {
+     "wall_s": 9.2,
+     "completion_tokens": 384,
+     "text_sha": "-5363006309904733143"
+    }
+   ],
+   "end_byte": 69804,
+   "rows": 585
+  },
+  {
+   "label": "t10_code",
+   "temperature": 1.0,
+   "top_p": 0.95,
+   "start_byte": 69804,
+   "requests": [
+    {
+     "wall_s": 3.5,
+     "completion_tokens": 384,
+     "text_sha": "5949373486211956688"
+    },
+    {
+     "wall_s": 3.5,
+     "completion_tokens": 384,
+     "text_sha": "-3002828719759295862"
+    },
+    {
+     "wall_s": 3.5,
+     "completion_tokens": 384,
+     "text_sha": "-6400860761301820090"
+    }
+   ],
+   "end_byte": 75656,
+   "rows": 209
+  }
+ ]
+}
