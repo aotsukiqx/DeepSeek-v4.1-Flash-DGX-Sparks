@@ -40,6 +40,15 @@ if ENABLED:
     else:
         _state["fixed"] = int(SPEC)
 
+# A widened block (DSPARK_BLOCK_SIZE > 5) feeds the confidence head more markov positions
+# than its projection was trained for (its input is 256 + gamma*1024 wide, trained at 5).
+# verify_cap keeps the head on its trained 5-position view (install_confidence_module) and
+# the cut ignores the untrained columns: rows past position 5 go live only when the
+# position-5 cumulative confidence holds DSV41_VERIFY_CAP_EXT. On the 2026-10-04 gamma=5
+# trace that threshold separates cleanly: cum5 p90 is 0.015 for prose and p50 0.90 for
+# code, so EXT=0.5 extends 85 % of code steps and no prose step.
+WIDENED = STRIDE > 6
+_state["ext"] = float(os.environ.get("DSV41_VERIFY_CAP_EXT", "0.5") or 0.5)
 
 def _capturing():
     return torch.cuda.is_available() and torch.cuda.is_current_stream_capturing()
@@ -62,19 +71,30 @@ def cutoff(bs):
 
 
 def set_live_from_confidence(confidence, bs):
-    """confidence [bs, 5] per-position survival (position i given drafts < i)."""
+    """confidence [bs, gamma] per-position survival (position i given drafts < i).
+
+    At a widened block the columns past position 5 come from the head's untrained view
+    and are ignored: the cut follows the first five positions as usual, and the rows
+    past five go live only when the position-5 cumulative confidence holds EXT."""
     if _state["thr"] is None or confidence is None:
         return
     buf = live_buf(confidence.device)
     _state["last_conf"] = confidence
-    cum = torch.cumprod(confidence.float().clamp(0, 1), dim=1)
+    wide = WIDENED and confidence.shape[1] > 5
+    conf = confidence[:, :5].float().clamp(0, 1) if wide else confidence.float().clamp(0, 1)
+    cum = torch.cumprod(conf, dim=1)
     thr = _state["thr"]
     if isinstance(thr, list):
         if _state.get("thr_t") is None or _state["thr_t"].device != cum.device:
             t = (thr + [thr[-1]] * cum.shape[1])[:cum.shape[1]]
             _state["thr_t"] = torch.tensor(t, dtype=torch.float32, device=cum.device)
         thr = _state["thr_t"]
-    k = (cum >= thr).to(torch.int64).cumprod(dim=1).sum(dim=1).clamp(min=_state["kmin"], max=STRIDE - 1)
+    k = (cum >= thr).to(torch.int64).cumprod(dim=1).sum(dim=1)
+    if wide:
+        extend = (k >= 5) & (cum[:, 4] >= _state["ext"])
+        k = torch.where(extend, torch.full_like(k, STRIDE - 1), k.clamp(min=_state["kmin"], max=5))
+    else:
+        k = k.clamp(min=_state["kmin"], max=STRIDE - 1)
     buf[:bs].copy_(k + 1)
     # Rank-invariant by construction: the head's input comes out of an all-reduce that may differ
     # in the last bits between ranks, and a live length that differs across ranks would give one
@@ -322,3 +342,28 @@ def install_dspark(dspark_module):
         return head
 
     dspark_module.build_dspark_v4_confidence_head = build
+
+def install_confidence_module(module):
+    """sglang.srt.models.dspark: keep DSparkConfidenceHead on its trained 5-position view
+    when the block is widened. The head's projection input is 256 + gamma*1024 wide and the
+    checkpoint trained gamma=5 (5376); at gamma>5 the markov stack is sliced to its first
+    five embeddings so the head runs exactly as trained (the columns past five that this
+    produces are untrained and set_live_from_confidence ignores them)."""
+    if not ENABLED or not WIDENED:
+        return
+    cls = getattr(module, "DSparkConfidenceHead", None)
+    if cls is None or getattr(cls, "_dsv41_widened_view", False):
+        return
+    cls._dsv41_widened_view = True
+    orig = cls.forward
+    keep = 5 * 1024
+
+    def forward(self, hidden_states, markov_embed_stack=None):
+        if markov_embed_stack is not None and int(markov_embed_stack.shape[-1]) > keep:
+            markov_embed_stack = markov_embed_stack[..., :keep]
+        return orig(self, hidden_states, markov_embed_stack)
+
+    cls.forward = forward
+    print(f"[verify_cap] widened block (gamma={STRIDE - 1}): confidence head kept on its "
+          f"trained 5-position view, rows past five ride DSV41_VERIFY_CAP_EXT={_state['ext']}",
+          flush=True)

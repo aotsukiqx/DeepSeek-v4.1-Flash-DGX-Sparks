@@ -132,6 +132,14 @@ class EngramLoader(importlib.abc.Loader):
                 else:
                     from draft_head_fp8 import install as install_draft_head_fp8
                 install_draft_head_fp8(module)
+        elif module.__name__ == 'sglang.srt.models.dspark':
+            # A widened block (DSPARK_BLOCK_SIZE > 5) feeds DSparkConfidenceHead more markov
+            # positions than its projection was trained for; verify_cap keeps it on the
+            # trained 5-position view (adapter/verify_cap.py install_confidence_module).
+            if (os.environ.get('DSV41_VERIFY_CAP', '').strip().startswith('conf:')
+                    and int(os.environ.get('DSPARK_BLOCK_SIZE', '5') or 5) > 5):
+                from verify_cap import install_confidence_module
+                install_confidence_module(module)
         elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_draft_sampler':
             # Gated on DSV41_DRAFT_TAU (unset or 1 = off): draft proposal temperature.
             if os.environ.get('DSV41_DRAFT_TAU', '1').strip() not in ('', '1', '1.0'):
