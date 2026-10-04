@@ -359,8 +359,12 @@ def install_confidence_module(module):
     keep = 5 * 1024
 
     def forward(self, hidden_states, markov_embed_stack=None):
-        if markov_embed_stack is not None and int(markov_embed_stack.shape[-1]) > keep:
-            markov_embed_stack = markov_embed_stack[..., :keep]
+        # x_post_hc carries the markov context: gamma * 1024 wide (the per-position prev-token
+        # embeddings), with the 256-wide token embedding arriving as markov_embed_stack (shapes
+        # measured on the fleet: hidden (gamma, bs, 8192), stack (gamma, bs, 256) at gamma=8).
+        # The head was trained at gamma=5, so the context is sliced to its first five positions.
+        if hidden_states is not None and int(hidden_states.shape[-1]) > keep:
+            hidden_states = hidden_states[..., :keep]
         return orig(self, hidden_states, markov_embed_stack)
 
     cls.forward = forward
