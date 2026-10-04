@@ -344,30 +344,47 @@ def install_dspark(dspark_module):
     dspark_module.build_dspark_v4_confidence_head = build
 
 def install_confidence_module(module):
-    """sglang.srt.models.dspark: keep DSparkConfidenceHead on its trained 5-position view
-    when the block is widened. The head's projection input is 256 + gamma*1024 wide and the
-    checkpoint trained gamma=5 (5376); at gamma>5 the markov stack is sliced to its first
-    five embeddings so the head runs exactly as trained (the columns past five that this
-    produces are untrained and set_live_from_confidence ignores them)."""
+    """sglang.srt.models.deepseek_v4_dspark: synthesize the step confidence for a widened
+    block. The engine's own compute_confidence views every tensor through the draft
+    checkpoint's native block of five (self.gamma), so at runtime gamma=8 it reshapes the
+    [bs, 8, ...] tensors into a fictional [bs, 5, wider] layout and the head crashes. The
+    wrap never calls it: it builds the trained five-position view itself (first five block
+    positions, anchor + the first four drafts as the markov prev sequence), runs the head
+    exactly as trained, and pads the result to [bs, runtime gamma] with zeros - the columns
+    past five are what set_live_from_confidence ignores (rows past five ride EXT)."""
     if not ENABLED or not WIDENED:
         return
-    cls = getattr(module, "DSparkConfidenceHead", None)
-    if cls is None or getattr(cls, "_dsv41_widened_view", False):
+    cls = getattr(module, "DeepseekV4ForCausalLMDSpark", None)
+    if cls is None or getattr(cls, "_dsv41_widened_conf", False):
         return
-    cls._dsv41_widened_view = True
-    orig = cls.forward
-    keep = 5 * 1024
+    cls._dsv41_widened_conf = True
+    orig = cls.compute_confidence
+    seen = [False]
 
-    def forward(self, hidden_states, markov_embed_stack=None):
-        # x_post_hc carries the markov context: gamma * 1024 wide (the per-position prev-token
-        # embeddings), with the 256-wide token embedding arriving as markov_embed_stack (shapes
-        # measured on the fleet: hidden (gamma, bs, 8192), stack (gamma, bs, 256) at gamma=8).
-        # The head was trained at gamma=5, so the context is sliced to its first five positions.
-        if hidden_states is not None and int(hidden_states.shape[-1]) > keep:
-            hidden_states = hidden_states[..., :keep]
-        return orig(self, hidden_states, markov_embed_stack)
+    def compute_confidence(self, *, anchor_tokens, sampled_tokens, x_post_hc):
+        head = self.confidence_head
+        if head is None:
+            return orig(self, anchor_tokens=anchor_tokens, sampled_tokens=sampled_tokens,
+                        x_post_hc=x_post_hc)
+        bs = int(anchor_tokens.shape[0])
+        xt = x_post_hc.reshape(bs, -1, x_post_hc.shape[-1])   # [bs, runtime gamma, D]
+        gamma, width = int(xt.shape[1]), int(xt.shape[2])
+        if not seen[0]:
+            seen[0] = True
+            print(f"[verify_cap] widened confidence view: bs {bs} gamma {gamma} "
+                  f"x_post_hc {tuple(x_post_hc.shape)} D {width}", flush=True)
+        if gamma <= 5 or width != 5 * 1024:
+            return orig(self, anchor_tokens=anchor_tokens, sampled_tokens=sampled_tokens,
+                        x_post_hc=x_post_hc)
+        x5 = xt[:, :5]
+        prev_seq = torch.cat([anchor_tokens.view(-1, 1), sampled_tokens[:, :4]], dim=1)
+        stack = self.markov_head.get_prev_embeddings(prev_seq) if head.with_markov else None
+        conf5 = head.apply_sts(head(x5, stack))               # [bs, 5], the trained view
+        out = torch.zeros(bs, gamma, dtype=conf5.dtype, device=conf5.device)
+        out[:, :5] = conf5
+        return out
 
-    cls.forward = forward
-    print(f"[verify_cap] widened block (gamma={STRIDE - 1}): confidence head kept on its "
+    cls.compute_confidence = compute_confidence
+    print(f"[verify_cap] widened block (gamma={STRIDE - 1}): confidence built on the head's "
           f"trained 5-position view, rows past five ride DSV41_VERIFY_CAP_EXT={_state['ext']}",
           flush=True)

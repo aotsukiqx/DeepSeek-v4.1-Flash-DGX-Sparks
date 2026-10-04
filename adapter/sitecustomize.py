@@ -112,6 +112,13 @@ class EngramLoader(importlib.abc.Loader):
             if os.environ.get('DSV41_VERIFY_CAP', '').strip().startswith('conf:'):
                 from verify_cap import install_dspark as install_verify_cap_dspark
                 install_verify_cap_dspark(module)
+                # A widened block (DSPARK_BLOCK_SIZE > 5): the engine's compute_confidence
+                # views its tensors through the checkpoint's native block of five, past which
+                # the draft confidence head cannot run; verify_cap replaces the method with a
+                # trained-5-position view (adapter/verify_cap.py install_confidence_module).
+                if int(os.environ.get('DSPARK_BLOCK_SIZE', '5') or 5) > 5:
+                    from verify_cap import install_confidence_module
+                    install_confidence_module(module)
             if _tp4_launcher():
                 from fast_load import install_dspark
                 install_dspark(module)
@@ -132,14 +139,6 @@ class EngramLoader(importlib.abc.Loader):
                 else:
                     from draft_head_fp8 import install as install_draft_head_fp8
                 install_draft_head_fp8(module)
-        elif module.__name__ == 'sglang.srt.models.dspark':
-            # A widened block (DSPARK_BLOCK_SIZE > 5) feeds DSparkConfidenceHead more markov
-            # positions than its projection was trained for; verify_cap keeps it on the
-            # trained 5-position view (adapter/verify_cap.py install_confidence_module).
-            if (os.environ.get('DSV41_VERIFY_CAP', '').strip().startswith('conf:')
-                    and int(os.environ.get('DSPARK_BLOCK_SIZE', '5') or 5) > 5):
-                from verify_cap import install_confidence_module
-                install_confidence_module(module)
         elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_draft_sampler':
             # Gated on DSV41_DRAFT_TAU (unset or 1 = off): draft proposal temperature.
             if os.environ.get('DSV41_DRAFT_TAU', '1').strip() not in ('', '1', '1.0'):
@@ -259,7 +258,6 @@ class EngramFinder(importlib.abc.MetaPathFinder):
                             'sglang.srt.entrypoints.openai.serving_chat',
                             'sglang.srt.models.deepseek_v4',
                             'sglang.srt.models.deepseek_v4_dspark',
-                            'sglang.srt.models.dspark',
                             'sglang.srt.speculative.dspark_components.dspark_verify',
                             'sglang.srt.speculative.dspark_components.dspark_draft_sampler',
                             'sglang.kernels.ops.speculative.dspark.dspark_accept',
