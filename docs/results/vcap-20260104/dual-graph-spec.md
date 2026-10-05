@@ -158,3 +158,18 @@ far: (1) runner captured_req_width [solved], (2) backend speculative_num_draft_t
 [mapped, needs per-width variants], (4) folded sampler proposal/verify boundary
 [expected, W2 territory]. The 3-5 day engine-surgery estimate stands; three of the
 layers are now precisely located.
+
+## W1c/W1d (2026-10-05): layers 3 cleared, layer 4 reached
+
+W1c (commit adf06ef): narrow capture stores its verify metadata in a fresh dict -
+first cut crashed KeyError TARGET_VERIFY (the outer dict is directly indexed by
+bucket; keep the bucket keys). W1d (hotpatch, committed here): swap to
+{k: {} for k in store} - bucket keys preserved, per-bs slots fresh. Result: the
+metadata copy_ layer PASSES, the deep_gemm layer stays passed, and the next failure
+is `shape '[1, 9]' invalid for input of size 6` - the draft/folded side's per-request
+9-wide view on the 6-row batch: layer 4, the folded sampler proposal/verify boundary
+the spec flagged as the hard one (W2 territory, also needs the per-family replay
+routing for the metadata stores). Layer map final state: runner [solved], indexer
+spec-width [solved], metadata stores [solved], folded sampler [next]. Iteration
+recipe that worked: per-layer hotpatch cycle, ~15 min each (crash -> cp to ALL FOUR
+containers -> restart -> read traceback -> swap the named coupling).

@@ -61,7 +61,10 @@ def install(module):
                 store = getattr(b, "cuda_graph_metadata_of_bucket_and_bs", None)
                 if store is not None:
                     saved_meta.append((b, store))
-                    b.cuda_graph_metadata_of_bucket_and_bs = {}
+                    # fresh per-bs slots under the existing bucket keys: the narrow
+                    # family stores its own metadata; the wide entries stay untouched
+                    b.cuda_graph_metadata_of_bucket_and_bs = {
+                        k: ({} if isinstance(v, dict) else v) for k, v in store.items()}
             try:
                 set_variant(LABEL)
                 with patch_model(
