@@ -289,9 +289,17 @@ def install_executor_hook(module):
             # narrow family state puts into the shared verify_lens buffer.
             _STEP_WIDTH[0] = 0
             self.verify_num_draft_tokens = wide_stride   # wide reference must run wide
+            ep = getattr(self, "verify_epilogue", None)
+            if ep is not None:
+                # disarm the in-graph commit inject: the reference's folded accept
+                # must not write KV / advance the injector a second time (the
+                # narrow run owns this step's commit). Forward logits are unaffected.
+                ep.begin_static_step(bs, False)
             res_w = orig(self, batch=batch, draft_input=draft_input,
                          verify_ids_2d=verify_ids_2d, **kw)
             _STEP_WIDTH[0] = NARROW_ROWS
+            if ep is not None:
+                ep.begin_static_step(bs, True)
             res_n = narrow_call()
             lw = res_w.logits_output.next_token_logits
             ln = res_n.logits_output.next_token_logits
