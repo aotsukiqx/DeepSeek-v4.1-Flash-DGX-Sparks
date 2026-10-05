@@ -39,6 +39,14 @@ _NARROW_NOW = [False]          # inside a narrow capture pass
 _NARROW_BS = set()             # bs values with a captured narrow family (this process)
 _STEP_WIDTH = [0]              # width chosen for the step in flight (0 = wide)
 _ORACLE_LOG = []               # (bs, argmax_agreement, max|dlogit|)
+
+_DBG = {"n": 0}
+
+
+def _dbg(fmt, *a):
+    if _DBG["n"] < 80:
+        _DBG["n"] += 1
+        print(f"[dual_graph-dbg] {fmt % a}", flush=True)
 _EPILOGS = []                  # epilogue instances seen (family state machine)
 
 
@@ -80,13 +88,22 @@ def _decide_width(bs):
         import verify_cap
         live = verify_cap._state.get("live")
         if live is None:
+            _dbg("bs=%d live=None -> wide", bs)
             return 0
+        m = int(live[:bs].max().item())
+        if os.environ.get("DSV41_DUAL_GRAPH_DEBUG", "").strip() and _DBG["n"] < 80:
+            _DBG["n"] += 1
+            conf = verify_cap._state.get("conf")
+            print(f"[dual_graph-dbg] step {_DBG['n']} bs={bs} live={live[:bs].tolist()} "
+                  f"-> {'narrow' if m <= NARROW_ROWS else 'wide'} "
+                  f"conf={'set' if conf is not None else 'NONE'}", flush=True)
         # live = rows incl. anchor, in {2..6} or 9 (EXT). Fits the narrow family iff
         # no request extended past 5 drafts this step.
-        if int(live[:bs].max().item()) > NARROW_ROWS:
+        if m > NARROW_ROWS:
             return 0
         return NARROW_ROWS
-    except Exception:
+    except Exception as e:
+        _dbg("bs=%d decide error %r -> wide", bs, e)
         return 0
 
 
