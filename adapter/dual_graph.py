@@ -47,6 +47,8 @@ def _dbg(fmt, *a):
     if _DBG["n"] < 80:
         _DBG["n"] += 1
         print(f"[dual_graph-dbg] {fmt % a}", flush=True)
+
+
 _EPILOGS = []                  # epilogue instances seen (family state machine)
 
 
@@ -91,12 +93,16 @@ def _decide_width(bs):
             _dbg("bs=%d live=None -> wide", bs)
             return 0
         m = int(live[:bs].max().item())
-        if os.environ.get("DSV41_DUAL_GRAPH_DEBUG", "").strip() and _DBG["n"] < 80:
+        if os.environ.get("DSV41_DUAL_GRAPH_DEBUG", "").strip() and _DBG["n"] < 4000:
             _DBG["n"] += 1
             conf = verify_cap._state.get("conf")
+            cum5 = -1.0
+            if conf is not None and getattr(conf, "dim", lambda: 0)() == 2 and conf.shape[1] >= 5:
+                cum5 = float(torch.cumprod(
+                    conf[:, :5].float().clamp(0, 1), dim=1)[:, 4].max())
             print(f"[dual_graph-dbg] step {_DBG['n']} bs={bs} live={live[:bs].tolist()} "
                   f"-> {'narrow' if m <= NARROW_ROWS else 'wide'} "
-                  f"conf={'set' if conf is not None else 'NONE'}", flush=True)
+                  f"cum5max={cum5:.3f}", flush=True)
         # live = rows incl. anchor, in {2..6} or 9 (EXT). Fits the narrow family iff
         # no request extended past 5 drafts this step.
         if m > NARROW_ROWS:
