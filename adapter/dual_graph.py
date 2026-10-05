@@ -239,12 +239,16 @@ def install_executor_hook(module):
         _fresh_live(bs)
         w = _decide_width(bs)
         _STEP_WIDTH[0] = w
+        wide_stride = int(verify_ids_2d.shape[1])
+        # The worker's step TAIL also reads verify_num_draft_tokens (logprob
+        # chain_stride, GenerationBatchResult.speculative_num_draft_tokens, which
+        # the scheduler uses to unflatten out_tokens): set it for the WHOLE step
+        # and let the next step's entry set its own - never restore in between.
+        self.verify_num_draft_tokens = NARROW_ROWS if w == NARROW_ROWS else wide_stride
         if w != NARROW_ROWS:
             return orig(self, batch=batch, draft_input=draft_input,
                         verify_ids_2d=verify_ids_2d, **kw)
-        wide_stride = int(verify_ids_2d.shape[1])
-        wide_w = int(getattr(self, "verify_num_draft_tokens", wide_stride - 1)
-                     or wide_stride - 1)
+        wide_w = wide_stride
         vw = kw.get("verify_window")
 
         def narrow_call():
@@ -272,7 +276,8 @@ def install_executor_hook(module):
                 return orig(self, batch=batch, draft_input=draft_input,
                             verify_ids_2d=verify_ids_2d[:, :NARROW_ROWS].contiguous(), **kw2)
             finally:
-                self.verify_num_draft_tokens = wide_w
+                # verify_num_draft_tokens deliberately NOT restored: the worker's
+                # step tail still reads it; the next step's entry resets it
                 for b, v in saved_spec:
                     b.speculative_num_draft_tokens = v
                 for b, s in saved_stores:
@@ -283,6 +288,7 @@ def install_executor_hook(module):
             # uses forward logits only - unaffected by the accept-length caps the
             # narrow family state puts into the shared verify_lens buffer.
             _STEP_WIDTH[0] = 0
+            self.verify_num_draft_tokens = wide_stride   # wide reference must run wide
             res_w = orig(self, batch=batch, draft_input=draft_input,
                          verify_ids_2d=verify_ids_2d, **kw)
             _STEP_WIDTH[0] = NARROW_ROWS
