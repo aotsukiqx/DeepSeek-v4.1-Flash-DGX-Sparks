@@ -93,7 +93,10 @@ def _decide_width(bs):
 def _apply_epilogue_width(ep, width):
     """Family state machine (W1g design): families clone from constructor state only;
     every width-coupled value (stride, gamma, stride-wide buffers) is applied
-    idempotently. Kept referenced so captured graphs bind the right storage."""
+    idempotently. The WIDE stride always maps to the constructor family itself:
+    the wide captured graphs bind the constructor buffers, and minting a numeric
+    clone would leave wide replays writing the clone while reads hit the
+    constructor (stale accepts -> runaway streams)."""
     if int(getattr(ep, "_dsv41_w", -1) or -1) == width:
         return
     BUFS = ("out_tokens_buf", "cap_trim_lens_buf")
@@ -102,6 +105,10 @@ def _apply_epilogue_width(ep, width):
         fams["wide"] = {"stride": ep.stride, "gamma": getattr(ep, "gamma", None),
                         "bufs": {n: getattr(ep, n) for n in BUFS if hasattr(ep, n)}}
         ep._dsv41_wide_s = ep.stride
+    if width == fams["wide"]["stride"]:
+        _apply_wide(ep, fams["wide"])
+        ep._dsv41_w = width
+        return
     fam = fams.get(width)
     if fam is None:
         w = fams["wide"]
@@ -118,9 +125,12 @@ def _apply_epilogue_width(ep, width):
     ep._dsv41_w = width
 
 
-def _apply_step_width(ep, w):
-    """Apply the decided step width (0 -> the wide family)."""
-    _apply_epilogue_width(ep, w if w == NARROW_ROWS else int(getattr(ep, "_dsv41_wide_s", 9)))
+def _apply_wide(ep, wide):
+    ep.stride = wide["stride"]
+    if wide["gamma"] is not None:
+        ep.gamma = wide["gamma"]
+    for n, b in wide["bufs"].items():
+        setattr(ep, n, b)
 
 
 def _apply_step_width(ep, w):
@@ -132,11 +142,7 @@ def _apply_step_width(ep, w):
     fams = ep.__dict__.get("_dsv41_fams")
     wide = fams.get("wide") if fams else None
     if wide is not None:
-        ep.stride = wide["stride"]
-        if wide["gamma"] is not None:
-            ep.gamma = wide["gamma"]
-        for n, b in wide["bufs"].items():
-            setattr(ep, n, b)
+        _apply_wide(ep, wide)
         ep._dsv41_w = wide["stride"]
     # else never narrowed: constructor state is already wide
 
