@@ -20,16 +20,55 @@ _NARROW_NOW = [False]
 
 
 def install_verify_hook(module):
-    """sglang.srt.speculative.dspark_components.dspark_verify: during a narrow capture the
-    static epilogue views input_ids through self.stride (gamma+1 = 9); the narrow family
-    needs 6. Guarded by the capture flag; replay keeps the stock stride until W2 routes
-    it per family."""
+    """sglang.srt.speculative.dspark_components.dspark_verify: width-derived epilogue state.
+
+    Every width-coupled value (stride, gamma, stride-wide buffers) becomes a function of
+    the batch's actual row width (input rows // batch size), applied idempotently before
+    the stock method runs. Families are cloned from constructor state only, so behaviour
+    is independent of call order; the narrow family's buffers stay resident for the
+    captured graphs to bind."""
     if not ENABLED:
         return
     cls = getattr(module, "DsparkVerifyEpilogue", None)
     if cls is None or getattr(cls, "_dsv41_dual_graph", False):
         return
     cls._dsv41_dual_graph = True
+    orig = cls._static_epilogue
+    BUFS = ("out_tokens_buf", "cap_trim_lens_buf")
+
+    def _apply_width(self, width):
+        if int(getattr(self, "_dsv41_w", -1) or -1) == width:
+            return
+        fams = self.__dict__.setdefault("_dsv41_fams", {})
+        if "wide" not in fams:
+            fams["wide"] = {"stride": self.stride, "gamma": getattr(self, "gamma", None),
+                            "bufs": {n: getattr(self, n) for n in BUFS if hasattr(self, n)}}
+        fam = fams.get(width)
+        if fam is None:
+            w = fams["wide"]
+            fam = fams[width] = {
+                "stride": width, "gamma": None if w["gamma"] is None else width - 1,
+                "bufs": {n: (b.new_zeros((b.shape[0], width) + tuple(b.shape[2:]))
+                             if b.dim() > 1 else b)
+                         for n, b in w["bufs"].items()}}
+        self.stride = fam["stride"]
+        if fam["gamma"] is not None:
+            self.gamma = fam["gamma"]
+        for n, b in fam["bufs"].items():
+            setattr(self, n, b)
+        self._dsv41_w = width
+
+    def _static_epilogue(self, out, forward_batch):
+        bs = int(forward_batch.batch_size)
+        width = int(forward_batch.input_ids.shape[0]) // max(bs, 1)
+        if width > 0:
+            _apply_width(self, width)
+        return orig(self, out, forward_batch)
+
+    cls._static_epilogue = _static_epilogue
+    print("[dual_graph] verify epilogue state derives from the batch width "
+          "(families eager, order-independent)", flush=True)
+
 
     def _wrap(name):
         orig = getattr(cls, name)
