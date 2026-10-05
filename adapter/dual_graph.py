@@ -55,8 +55,13 @@ def install(module):
             saved = self.captured_req_width
             self.captured_req_width = NARROW_ROWS
             saved_spec = [(b, b.speculative_num_draft_tokens) for b in _backends()]
+            saved_meta = []
             for b, _ in saved_spec:
                 b.speculative_num_draft_tokens = NARROW_ROWS
+                store = getattr(b, "cuda_graph_metadata_of_bucket_and_bs", None)
+                if store is not None:
+                    saved_meta.append((b, store))
+                    b.cuda_graph_metadata_of_bucket_and_bs = {}
             try:
                 set_variant(LABEL)
                 with patch_model(
@@ -71,6 +76,8 @@ def install(module):
                 self.captured_req_width = saved
                 for b, v in saved_spec:
                     b.speculative_num_draft_tokens = v
+                for b, store in saved_meta:
+                    b.cuda_graph_metadata_of_bucket_and_bs = store
                 set_variant(None)
         if captured:
             print(f"[dual_graph] captured narrow verify family rows={NARROW_ROWS} "
