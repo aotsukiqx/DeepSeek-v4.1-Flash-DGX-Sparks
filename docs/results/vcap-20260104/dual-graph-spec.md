@@ -263,3 +263,49 @@ inside gamma=8's known 39-50 boot-tactic band; needs an interleaved dual-vs-EXT 
 next session before any conclusion (selection W2 is not wired, so prose still replays
 wide graphs - the 39/50 difference is boot variance, not the narrow family). Next:
 W2 selection wiring (variants.select) -> FORCE hook -> R1 oracle -> full gates.
+
+## W2 selection wiring (2026-10-05, commit 6ea35ba): implementation
+
+The width decision follows the live length verify_cap already computes: a step whose
+batch-max live is <= 6 (i.e. no EXT extension) is built at width 6 and replays the
+narrow family; any EXT step stays wide. Pieces (adapter/dual_graph.py):
+
+1. Decision: `_decide_width(bs)` reads verify_cap's live buffer (rank-0 broadcast,
+   rank-consistent). `begin_static_step` (worker, pre-forward) makes it early so the
+   epilogue family state and verify_lens fill at the right stride; `run_non_compact`
+   (installed BEFORE verify_cap's wrap -> inner) re-derives the same decision after
+   vcap set live. A per-step D2H `.max().item()` is the one sync the routing costs;
+   it waits on the draft confidence only, which the verify already waits on.
+2. Batch at width: the inner run_non_compact truncates `verify_ids_2d[:, :6]`, swaps
+   `verify_num_draft_tokens` 8->5, and slices the verify window
+   (positions_2d/verify_cache_loc[_2d], request-major prefix). Everything downstream
+   (seq_lens +5, draft_token_num, spec_info.num_tokens_per_req=6) derives from those.
+3. Graph routing: `_resolve_attention_variant` returns the narrow label for a
+   target-verify batch with rows == bs*6; `can_run_graph`/`load_batch`/`execute` run
+   under a context that sets `captured_req_width = 6` (the engine's uniform-width
+   replay invariant) and swaps the backends' `cuda_graph_metadata_of_bucket_and_bs`
+   to the narrow store the capture now SAVES (`_dsv41_narrow_meta_store`) instead of
+   discarding.
+4. Epilogue families: `_apply_epilogue_width` (W1g eager-family design) applied at
+   begin_static_step (step width) and read_accept (results live in the family the
+   replay bound); `_static_epilogue` still derives from the batch width at capture.
+   Wide restore applies the ORIGINAL wide family (captured graphs bind the
+   constructor buffers - a clone would read stale).
+5. verify_cap stride override: during narrow capture `stride_ovr=6` makes the
+   dead-row remap bake STRIDE_R=6 (bs*6 rows), and the capture-time gate check uses
+   the effective stride. Without it bs in {3,6} mis-activate (bs*6 % 9 == 0) with
+   wrong req/pos arithmetic and the other bs skip the remap entirely.
+6. R1 oracle (`DSV41_DUAL_GRAPH_ORACLE=N`): the first N narrow-eligible steps run
+   BOTH families end-to-end (wide reference first, then narrow - the comparison uses
+   forward logits only, which accept-length caps cannot contaminate) and print
+   per-step argmax agreement + max|dlogit|, then an aggregate PASS line (all
+   argmax-equal, max|dlogit| < 0.05). This is the silent-corruption trap check the
+   [4,8] capture signature demanded. FORCE=narrow|wide overrides selection for A/B.
+
+Fallback guard: if a narrow forward ever reports can_run_cuda_graph=False, the step
+re-runs wide (loud print), keeping downstream shapes on the stock path.
+
+Boot env for the dual arm (over production .env.tp4): DSPARK_BLOCK_SIZE=8,
+CUDA_GRAPH_MAX_BS_DECODE=8 (9-row graphs beyond bs8 OOM - gamma8-probe boot 1),
+EXTRA_CONTAINER_ENV += DSV41_DUAL_GRAPH=1 DSV41_DUAL_GRAPH_ORACLE=12
+DSV41_MOE_B12X_NEXT_ROWS=6,8,9. Backup .env.tp4.pre-w2dual.
