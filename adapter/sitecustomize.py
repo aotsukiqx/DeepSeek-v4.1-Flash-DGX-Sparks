@@ -139,6 +139,11 @@ class EngramLoader(importlib.abc.Loader):
                 else:
                     from draft_head_fp8 import install as install_draft_head_fp8
                 install_draft_head_fp8(module)
+        elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_draft_sampler':
+            # DSV41_DUAL_GRAPH: the folded sampler follows narrow captures
+            if os.environ.get('DSV41_DUAL_GRAPH', '0').strip() not in ('0', 'off', 'false', ''):
+                from dual_graph import install_sampler_hook
+                install_sampler_hook(module)
         elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_verify':
             # DSV41_DUAL_GRAPH: the static verify epilogue's stride follows narrow captures
             if os.environ.get('DSV41_DUAL_GRAPH', '0').strip() not in ('0', 'off', 'false', ''):

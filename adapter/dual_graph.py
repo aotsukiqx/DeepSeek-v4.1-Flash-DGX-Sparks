@@ -188,3 +188,33 @@ def install(module):
     cls._capture_one_stream = _capture_one_stream
     print(f"[dual_graph] armed: narrow family rows={NARROW_ROWS} bs<={MAX_BS} "
           f"(capture-only; selection is W2)", flush=True)
+
+def install_sampler_hook(module):
+    """sglang.srt.speculative.dspark_components.dspark_draft_sampler: during a narrow
+    capture's warmup the folded sampler derives bs from query_token_num (8) and views
+    hidden through gamma (8) while the batch carries 6 rows per request."""
+    if not ENABLED:
+        return
+    cls = getattr(module, "DsparkDraftSampler", None)
+    if cls is None or getattr(cls, "_dsv41_dual_graph", False):
+        return
+    cls._dsv41_dual_graph = True
+    orig = cls.__call__
+
+    def __call__(self, hidden_states, input_ids):
+        if not _NARROW_NOW[0] or int(getattr(self, "query_token_num", 0) or 0) <= NARROW_ROWS:
+            return orig(self, hidden_states, input_ids)
+        saved = (self.query_token_num, getattr(self, "gamma", None))
+        self.query_token_num = NARROW_ROWS
+        if saved[1] is not None:
+            self.gamma = NARROW_ROWS - 1
+        try:
+            return orig(self, hidden_states, input_ids)
+        finally:
+            self.query_token_num = saved[0]
+            if saved[1] is not None:
+                self.gamma = saved[1]
+
+    cls.__call__ = __call__
+    print("[dual_graph] folded sampler follows the narrow captures", flush=True)
+
