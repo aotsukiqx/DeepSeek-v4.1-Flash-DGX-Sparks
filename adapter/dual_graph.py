@@ -218,17 +218,18 @@ def install_executor_hook(module):
     orig = ex.run_non_compact
 
     def _narrow_window(vw, bs, wide_stride):
-        nvw = _copy.copy(vw)
+        # VerifyWindow is a frozen msgspec.Struct: build a fresh instance, never mutate
         p2d = getattr(vw, "positions_2d", None)
-        if p2d is not None and p2d.dim() == 2 and p2d.shape[1] >= NARROW_ROWS:
-            nvw.positions_2d = p2d[:, :NARROW_ROWS].contiguous()
         vcl = getattr(vw, "verify_cache_loc", None)
-        if vcl is not None and vcl.dim() == 1 and vcl.numel() == bs * wide_stride:
-            nvw.verify_cache_loc = vcl.view(bs, wide_stride)[:, :NARROW_ROWS].reshape(-1).contiguous()
         v2 = getattr(vw, "verify_cache_loc_2d", None)
-        if v2 is not None and v2.dim() == 2 and v2.shape[1] >= NARROW_ROWS:
-            nvw.verify_cache_loc_2d = v2[:, :NARROW_ROWS].contiguous()
-        return nvw
+        return type(vw)(
+            positions_2d=p2d[:, :NARROW_ROWS].contiguous()
+            if p2d is not None and p2d.dim() == 2 else p2d,
+            verify_cache_loc=vcl.view(bs, wide_stride)[:, :NARROW_ROWS].reshape(-1).contiguous()
+            if vcl is not None and vcl.dim() == 1 and vcl.numel() == bs * wide_stride else vcl,
+            verify_cache_loc_2d=v2[:, :NARROW_ROWS].contiguous()
+            if v2 is not None and v2.dim() == 2 else v2,
+        )
 
     def run_non_compact(self, *, batch, draft_input, verify_ids_2d, **kw):
         if _NARROW_NOW[0]:
