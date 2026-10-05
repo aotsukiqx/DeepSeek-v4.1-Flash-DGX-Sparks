@@ -34,3 +34,9 @@ expected upside; parked for the user.
 
 Artifacts: bench-c32-{c1,tiers}.json, bench-prod-c16{,-warm}.json, bench-prod3-c1.json,
 /tmp/tier-warm2.json, /tmp/clocks2.log (head).
+
+## OVERTURNED (2026-10-05, same day): see concurrency-adoption.md
+
+The c32 code-aggregate rejection above was an artifact of the 20-32-row graph tiers
+running unraced heuristic plans. With every tier raced, code aggregate RISES
+monotonically to c32 (+47 % vs c16) and MRR=32 was adopted.

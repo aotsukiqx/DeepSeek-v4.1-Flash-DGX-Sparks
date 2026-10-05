@@ -1,0 +1,46 @@
+{
+ "results": [
+  {
+   "label": "prose_c24",
+   "n": 24,
+   "aggregate_tok_s": 238.7,
+   "per_stream_median": 10.3,
+   "wall_s": 38.6
+  },
+  {
+   "label": "code_c24",
+   "n": 24,
+   "aggregate_tok_s": 868.9,
+   "per_stream_median": 37.3,
+   "wall_s": 10.6
+  },
+  {
+   "label": "prose_c28",
+   "n": 28,
+   "aggregate_tok_s": 256.0,
+   "per_stream_median": 9.5,
+   "wall_s": 42.0
+  },
+  {
+   "label": "code_c28",
+   "n": 28,
+   "aggregate_tok_s": 944.9,
+   "per_stream_median": 34.3,
+   "wall_s": 11.4
+  },
+  {
+   "label": "prose_c32",
+   "n": 32,
+   "aggregate_tok_s": 307.0,
+   "per_stream_median": 9.9,
+   "wall_s": 40.0
+  },
+  {
+   "label": "code_c32",
+   "n": 32,
+   "aggregate_tok_s": 1055.9,
+   "per_stream_median": 33.7,
+   "wall_s": 11.6
+  }
+ ]
+}

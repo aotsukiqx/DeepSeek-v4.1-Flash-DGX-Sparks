@@ -1,0 +1,46 @@
+{
+ "results": [
+  {
+   "label": "prose_c16",
+   "n": 16,
+   "aggregate_tok_s": 197.1,
+   "per_stream_median": 12.9,
+   "wall_s": 30.9
+  },
+  {
+   "label": "code_c16",
+   "n": 16,
+   "aggregate_tok_s": 715.5,
+   "per_stream_median": 45.7,
+   "wall_s": 8.6
+  },
+  {
+   "label": "prose_c20",
+   "n": 20,
+   "aggregate_tok_s": 219.1,
+   "per_stream_median": 11.4,
+   "wall_s": 35.0
+  },
+  {
+   "label": "code_c20",
+   "n": 20,
+   "aggregate_tok_s": 800.9,
+   "per_stream_median": 40.8,
+   "wall_s": 9.6
+  },
+  {
+   "label": "prose_c24",
+   "n": 24,
+   "aggregate_tok_s": 243.4,
+   "per_stream_median": 10.5,
+   "wall_s": 37.9
+  },
+  {
+   "label": "code_c24",
+   "n": 24,
+   "aggregate_tok_s": 887.8,
+   "per_stream_median": 38.0,
+   "wall_s": 10.4
+  }
+ ]
+}
