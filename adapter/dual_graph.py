@@ -249,6 +249,19 @@ def install_executor_hook(module):
 
         def narrow_call():
             self.verify_num_draft_tokens = NARROW_ROWS - 1
+            # the eager pre-graph metadata path (prepare_for_verify ->
+            # backend.init_forward_metadata) runs OUTSIDE the runner wraps and reads
+            # the backend's own spec width + metadata store: swap both here too
+            mr = getattr(getattr(self, "target_worker", None), "model_runner", None)
+            backends = _backends(mr) if mr is not None else []
+            saved_spec = [(b, b.speculative_num_draft_tokens) for b in backends]
+            saved_stores = []
+            for b in backends:
+                b.speculative_num_draft_tokens = NARROW_ROWS
+                ns = getattr(b, "_dsv41_narrow_meta_store", None)
+                if ns is not None:
+                    saved_stores.append((b, b.cuda_graph_metadata_of_bucket_and_bs))
+                    b.cuda_graph_metadata_of_bucket_and_bs = ns
             kw2 = dict(kw)
             if vw is not None:
                 kw2["verify_window"] = _narrow_window(vw, bs, wide_stride)
@@ -257,6 +270,10 @@ def install_executor_hook(module):
                             verify_ids_2d=verify_ids_2d[:, :NARROW_ROWS].contiguous(), **kw2)
             finally:
                 self.verify_num_draft_tokens = wide_w
+                for b, v in saved_spec:
+                    b.speculative_num_draft_tokens = v
+                for b, s in saved_stores:
+                    b.cuda_graph_metadata_of_bucket_and_bs = s
 
         if _oracle_due():
             # R1: wide reference first (full stock path), then narrow; the comparison
