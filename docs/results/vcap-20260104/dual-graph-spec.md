@@ -173,3 +173,20 @@ routing for the metadata stores). Layer map final state: runner [solved], indexe
 spec-width [solved], metadata stores [solved], folded sampler [next]. Iteration
 recipe that worked: per-layer hotpatch cycle, ~15 min each (crash -> cp to ALL FOUR
 containers -> restart -> read traceback -> swap the named coupling).
+
+## W1e (2026-10-05): stride view cleared; _accept is the next sub-layer
+
+The verify epilogue's `input_ids.view(bs, self.stride)` (dspark_verify:615) now follows
+the narrow captures (install_verify_hook, commits 8a56414+bbd538a; the first commit
+briefly shipped sitecustomize without the function - fixed immediately). With the
+stride swap in place the plain build reported `captured narrow verify family for bs
+[4, 8]` on a healthy boot - but [4, 8] is exactly the silent-corruption pair signature
+(6*4 and 6*8 divide by 8), so those are NOT trustworthy successes. The diagnostic
+merge then surfaced the real next sub-layer: `_accept` (dspark_verify:766) raises
+`tensor a (9) vs b (6) at dim 1` - its own width-coupled buffers (AcceptOuts /
+cutoff arrays sized 9) - and the raise escapes the capture try/except (it fires on a
+post-capture warmup/replay path), killing the boot. L4 sub-layers: epilogue stride
+[solved], _accept buffers [next: size by actual width and keep the exception inside
+the capture loop - likely also needs the accept path to slice verify_ids to width].
+Layer map: L1 runner [solved], L2 indexer [solved], L3 metadata stores [solved],
+L4 epilogue stride [solved], L5 _accept buffers [located].
