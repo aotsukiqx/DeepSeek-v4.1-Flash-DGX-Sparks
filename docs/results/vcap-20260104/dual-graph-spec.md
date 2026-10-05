@@ -143,3 +143,18 @@ reader; else swap the backend instance attr before capture_one_shape and confirm
 metadata was pre-derived). Diagnostic round also re-learned: hotpatch must reach ALL
 FOUR containers (a worker running the unpatched version kills the boot at a barrier
 before the head's narrow pass runs) and clear the adapter __pycache__ entry alongside.
+
+## W1b (2026-10-05): layer 1 cleared, layer 2 mapped
+
+Swapping the backend's `speculative_num_draft_tokens` during narrow capture (commit
+b357534) clears the deep_gemm indexer assertion. Next failure:
+`init_forward_metadata_out_graph` (2417) -> `replay_cuda_graph_metadata_from` (2784)
+-> `copy_` (1098): the persistent target-verify metadata buffers the backend
+allocates AT __INIT__ sized by num_draft_tokens=9 are written with 6-wide metadata.
+These buffers are shared cross-graph state - the fix is per-width buffer variants
+(real engine state surgery), not an attribute swap. Layered width-coupling map so
+far: (1) runner captured_req_width [solved], (2) backend speculative_num_draft_tokens
+-> indexer seq_lens/block layout [solved], (3) persistent verify metadata buffers
+[mapped, needs per-width variants], (4) folded sampler proposal/verify boundary
+[expected, W2 territory]. The 3-5 day engine-surgery estimate stands; three of the
+layers are now precisely located.
