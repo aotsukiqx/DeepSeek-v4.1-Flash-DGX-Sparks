@@ -357,3 +357,42 @@ is the next session's first move; everything W2 is ready and waiting for it.
 
 Fleet restored to production (gamma=5, MRR=32, raced tiers, dual off) and verified
 (health 200, BLOCK_SIZE=5 in the running container, smoke "42").
+
+## EXT-death bisect COMPLETE (2026-10-05 night): two independent factors + a structural finding
+
+Boot matrix (all gamma=8, graphs bs<=8, production c32 line otherwise, ab_bench medians):
+
+| boot | arm | code tok/s | extend rate |
+|---|---|---:|---|
+| b1 | dual OFF, ROWS derived (8,9) | 132.41 | 6/33 (18% of code window) |
+| b4 | dual ON, FORCE=wide | 132.41 | 6/34 - hooks are innocent |
+| b7 | dual ON, FORCE=narrow | 116.36 | 0 (accept pinned 5.1-5.8) |
+| b2/3/5/6 | dual ON, real selection | 91-96 | ~0-12% |
+
+Factor 1 (SOLVED): DSV41_MOE_B12X_NEXT_ROWS=6,8,9 (added for the narrow family's MoE
+plans) poisons the draft hidden distribution -> conf head cum5 drops below the EXT 0.5
+gate -> extension dies (0/36, code 102). With ROWS derived (8,9) extension revives
+(code 132). The narrow family does NOT need ROWS=6 (ladder pads 6-token Ms up to 8/9
+plans; correct, minor waste at small bs).
+
+Factor 2 + STRUCTURAL FINDING: even with extension healthy, real selection loses:
+the 5-draft cap breaks the draft feedback loop on code (long match blocks truncated ->
+weaker n-gram/engram matches next step -> lower conf -> narrow self-lock). Steady-state
+all-narrow code = 116 (-12% vs wide 132); narrow/wide ALTERNATION = 91-96 (-30%,
+switching cost not yet localized: metadata store swap per step, graph L2/TLB churn,
+or measurement-window effects). Prose gain is real (39.4 -> 52.6-53.7, +34%).
+
+ECONOMIC VERDICT: under mixed traffic the dual-graph narrow=6 design does NOT beat
+gamma=5 production (prose 57.3 / code 120): it trades prose +34% for code -12%..-30%.
+The per-position survival data said positions 1-5 are safe to cap for prose, but code
+straddles the 5/6 boundary - the cap must sit at 7+ rows to leave code's accept
+distribution (7.3) intact, which shrinks the prose saving. Options for a future round:
+(a) NARROW_ROWS=7 sweep (prose keeps ~+25%?, code unpinched at accept<=7 - needs
+  positions-6-7 survival recheck), (b) per-request family pinning (code-heavy reqs
+  stay wide for their lifetime - no alternation, no feedback break), (c) accept the
+  finding: gamma=5 stays the mixed default and dual-graph remains the gated
+  patterned-continuation line.
+
+All W2 machinery is correct and verified (oracle bitwise, greedy deterministic,
+healthy boots throughout) - the blocker is the workload economics, not the plumbing.
+Fleet restored to production (gamma=5) and verified.
