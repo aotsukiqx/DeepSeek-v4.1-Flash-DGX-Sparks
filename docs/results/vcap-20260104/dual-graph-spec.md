@@ -396,3 +396,21 @@ distribution (7.3) intact, which shrinks the prose saving. Options for a future 
 All W2 machinery is correct and verified (oracle bitwise, greedy deterministic,
 healthy boots throughout) - the blocker is the workload economics, not the plumbing.
 Fleet restored to production (gamma=5) and verified.
+
+## MECHANISM CLOSED (2026-10-05 late): alternation jitter poisons the pattern-matching drafter
+
+b8 (clean real selection, no debug/oracle overhead): code 94.8, and the code-window
+accept is 2.63 (vs 5.35 steady-narrow b7, vs ~7.3 wide b1/b4). NOT a switching cost:
+the alternating commit lengths (5/6 some steps, 9 on extension steps) jitter where
+each draft block starts in the token stream. The DFlash drafter is pattern-matching
+(engram/n-gram copies): in STEADY narrow every block starts at consistent offsets and
+matching adapts (accept sits AT the 5-cap); with alternation the offsets jitter and
+the copies misalign persistently - acceptance itself collapses.
+
+VERDICT (final, campaign closed): per-STEP dual-family selection is architecturally
+unsound for this drafter on patterned content. gamma=5 stays the mixed-traffic
+production line; the env-gated gamma=8 EXT line stays for code-heavy batches. The
+W1/W2 machinery (capture, families, selection, oracle) is complete, correct, and
+env-gated off - it would only be revisited for per-REQUEST family pinning (no
+within-request jitter; e.g. route by a cheap workload classifier at admission),
+which is a different scheduler feature, not a verify-width feature.
