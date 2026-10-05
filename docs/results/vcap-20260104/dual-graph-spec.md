@@ -309,3 +309,51 @@ Boot env for the dual arm (over production .env.tp4): DSPARK_BLOCK_SIZE=8,
 CUDA_GRAPH_MAX_BS_DECODE=8 (9-row graphs beyond bs8 OOM - gamma8-probe boot 1),
 EXTRA_CONTAINER_ENV += DSV41_DUAL_GRAPH=1 DSV41_DUAL_GRAPH_ORACLE=12
 DSV41_MOE_B12X_NEXT_ROWS=6,8,9. Backup .env.tp4.pre-w2dual.
+
+## W2 COMPLETE (2026-10-05 evening, commits 6ea35ba..5937239): selection works; EXT found dead under the c32 production env
+
+Mechanism (all verified on the fleet): healthy boot + narrow family bs[1..8] captured +
+REAL selection live (verify_cap's live buffer drives it: max live <= 6 -> narrow, EXT
+step -> wide) + R1 oracle PASS on real steps (6 steps argmax_agree=1.0000,
+max|dlogit|=0.0000 - the narrow family's forward is bitwise the wide reference) +
+within-boot greedy deterministic + smoke clean + prose 52.97 vs pure-EXT 53.33.
+
+Eight fix rounds to get here (each a hot-rebuild cycle, lesson-grade):
+1. late-binding closure: three runner wraps shared one `orig_m` -> execute<->load_batch
+   infinite recursion. Fix: `_bind(orig_m)` factory.
+2. `_oracle_due` lost in an edit round -> NameError at first verify step.
+3. VerifyWindow is a frozen msgspec.Struct: rebuild via `type(vw)(...)`, never mutate.
+4. The eager pre-graph metadata path (prepare_for_verify -> backend.
+   init_forward_metadata) reads the backend's spec width + metadata store OUTSIDE the
+   runner wraps: narrow_call swaps both (like capture does).
+5. `verify_num_draft_tokens` counts ROWS INCL. the anchor (stock gamma=5 -> 6; the
+   engram layer and DFlashVerifyInput derive width from it): narrow passes 6, not 5.
+6. It is STEP-SCOPED: set at entry, consumed by the worker tail (logprob chain_stride,
+   GenerationBatchResult.speculative_num_draft_tokens unflattens out_tokens). A
+   stride-9 read over 6-wide out_tokens duplicated committed tokens ("4242").
+7. The oracle's wide reference must disarm the in-graph commit inject
+   (begin_static_step(bs, False)) - double inject advances the injector twice.
+8. FAMILY NORMALIZATION (the deep one): the W1g width-inference minted a NUMERIC
+   9-clone at wide capture, so wide graphs bound the clone while W2's reads applied
+   the constructor family - stale accepts, runaway streams. W1 had "worked" by riding
+   the clone on BOTH sides. Fix: the wide stride maps to the constructor family itself;
+   wide graphs now bind constructor buffers, reads agree.
+
+## BLOCKER FOUND (not W2's): gamma=8 EXT extension is dead under the c32 production env
+
+Pure-EXT control (DSV41_DUAL_GRAPH=0, production .env + BLOCK=8/GRAPH_BS=8):
+code 102.4 tok/s, accept mean 2.65, extended 0/36 steps - cum5 never reaches 0.5.
+FORCE=wide dual arm: same (92.6, 0/37). Real-selection arm: ~9% extend on one probe.
+The 134.8 (gamma8-probe boot 3) and 134.77 (W1 milestone) were both measured BEFORE
+the c32/MRR=32 production adoption; that env's gamma=8 extension behavior was never
+validated. Excluded so far: TUNE_ROWS=6:5+6 raced plans (removed, still dead) and the
+dual machinery itself (pure-EXT also dead). Remaining suspects: the c32 GRAPH_BS
+tier list (10..32 present at gamma=8 boot? then capped to 8), MRR=32, mem/pool
+shifts. Consequence: under the current production env, gamma=8 offers NOTHING (code
+102 < gamma=5 production 120; prose 53.3 ~= 57.3 within boot band) - and with EXT
+dead, dual-graph's wide family never fires, so its value cannot materialize until
+the extension regression is located and fixed. That bisect (one env diff per boot)
+is the next session's first move; everything W2 is ready and waiting for it.
+
+Fleet restored to production (gamma=5, MRR=32, raced tiers, dual off) and verified
+(health 200, BLOCK_SIZE=5 in the running container, smoke "42").
