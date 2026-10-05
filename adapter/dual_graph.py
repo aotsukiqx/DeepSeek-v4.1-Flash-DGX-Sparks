@@ -37,12 +37,34 @@ def install_verify_hook(module):
         def method(self, *a, **kw):
             if not _NARROW_NOW[0] or int(getattr(self, "stride", 0) or 0) <= NARROW_ROWS:
                 return orig(self, *a, **kw)
-            saved = self.stride
+            saved = (self.stride, getattr(self, "gamma", None))
             self.stride = NARROW_ROWS
+            if saved[1] is not None:
+                self.gamma = NARROW_ROWS - 1   # _accept's BuildOutTokens mixes gamma with stride
+            # stride-wide instance buffers ([max_bs, stride] at construction, e.g.
+            # out_tokens_buf): swap in per-family residents so the captured graph binds
+            # 6-wide storage; the originals are restored afterwards
+            narrow_bufs = getattr(self, "_dsv41_narrow_bufs", None)
+            if narrow_bufs is None:
+                narrow_bufs = self._dsv41_narrow_bufs = {}
+            swapped = []
+            for name in ("out_tokens_buf", "cap_trim_lens_buf"):
+                buf = getattr(self, name, None)
+                if buf is None or buf.dim() < 2 or int(buf.shape[1]) != int(saved[0]):
+                    continue
+                if name not in narrow_bufs:
+                    narrow_bufs[name] = buf.new_zeros(
+                        (buf.shape[0], NARROW_ROWS) + tuple(buf.shape[2:]))
+                swapped.append((name, buf))
+                setattr(self, name, narrow_bufs[name])
             try:
                 return orig(self, *a, **kw)
             finally:
-                self.stride = saved
+                for name, buf in swapped:
+                    setattr(self, name, buf)
+                self.stride = saved[0]
+                if saved[1] is not None:
+                    self.gamma = saved[1]
 
         setattr(cls, name, method)
 

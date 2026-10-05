@@ -190,3 +190,18 @@ post-capture warmup/replay path), killing the boot. L4 sub-layers: epilogue stri
 the capture loop - likely also needs the accept path to slice verify_ids to width].
 Layer map: L1 runner [solved], L2 indexer [solved], L3 metadata stores [solved],
 L4 epilogue stride [solved], L5 _accept buffers [located].
+
+## W1 MILESTONE (2026-10-05, W1f/W1g): full narrow-family capture achieved
+
+W1f: _accept also mixes self.gamma into BuildOutTokens - the epilogue swap now covers
+{stride, gamma}. W1g: the stride-wide instance buffers (out_tokens_buf [max_bs, 9])
+get per-family residents (cloned at 6, kept referenced so captured graphs bind 6-wide
+storage). RESULT: `[dual_graph] captured narrow verify family rows=6 for bs
+[1, 2, 3, 4, 5, 6, 7, 8]` - the FULL list, the trusted-success signature (not the
+[4, 8] corruption pair). The boot still fails AFTER capture on the warmup/replay
+path: `shape '[0, 8, -1]' invalid for size 30720` - a draft-side 8-wide view outside
+the confidence shim's guard, on a path the capture try/except does not cover. That is
+W2 territory (the family must follow through replay, including this view). Layer
+count: L1-L5 solved (runner, indexer, metadata stores, epilogue stride+gamma,
+stride-wide buffers); next failure is replay-side. R1 oracle still gates any trust in
+the captured family - build it before wiring selection.
