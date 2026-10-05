@@ -145,10 +145,13 @@ class EngramLoader(importlib.abc.Loader):
                 from dual_graph import install_sampler_hook
                 install_sampler_hook(module)
         elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_verify':
-            # DSV41_DUAL_GRAPH: the static verify epilogue's stride follows narrow captures
+            # DSV41_DUAL_GRAPH: the verify batch builds at the selected width (narrow family),
+            # and the static epilogue's stride follows the step/batch width. Installed BEFORE
+            # verify_cap's run_non_compact wrap (below) so the width decision sees live set.
             if os.environ.get('DSV41_DUAL_GRAPH', '0').strip() not in ('0', 'off', 'false', ''):
-                from dual_graph import install_verify_hook
+                from dual_graph import install_verify_hook, install_executor_hook
                 install_verify_hook(module)
+                install_executor_hook(module)
         elif module.__name__ == 'sglang.srt.model_executor.runner.decode_cuda_graph_runner':
             # DSV41_DUAL_GRAPH: capture the narrow verify-graph family at widened blocks
             # (W1, capture-only; adapter/dual_graph.py).

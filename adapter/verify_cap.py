@@ -107,21 +107,23 @@ def set_live_from_confidence(confidence, bs):
         group.broadcast(buf[:bs], src=0)
 
 
-def _src_rows(m, device):
+def _src_rows(m, device, stride=None):
     """Row each verify row takes its router output from (itself if live, else its anchor).
     Computed once per forward and reused by all 43 layers (inside the graph: once per replay)."""
-    src = _state.get("src")
+    stride = stride or STRIDE
+    cache = _state.setdefault("src_map", {})
+    src = cache.get(stride)
     if src is not None and src.shape[0] == m:
         return src
     live = live_buf(device)
     rows = torch.arange(m, device=device)
-    req, pos = rows // STRIDE, rows % STRIDE
+    req, pos = rows // stride, rows % stride
     dead = pos >= live[req.clamp(max=MAX_BS - 1)]
-    src = torch.where(dead, req * STRIDE, rows)
-    _state["src"] = src
-    if _capturing() and m not in _state.setdefault("captured", set()):
-        _state["captured"].add(m)
-        print(f"[verify_cap] remap captured into the verify graph for M={m}", flush=True)
+    src = torch.where(dead, req * stride, rows)
+    cache[stride] = src
+    if _capturing() and (m, stride) not in _state.setdefault("captured", set()):
+        _state["captured"].add((m, stride))
+        print(f"[verify_cap] remap captured into the verify graph for M={m} stride={stride}", flush=True)
     return src
 
 
@@ -148,19 +150,21 @@ except Exception:                                   # no triton: fall back to in
     _remap_kernel = None
 
 
-def remap_dead_rows(weights, indices):
-    """weights/indices [M, 6] for M = bs * 6 verify rows (request-major). In place when possible:
-    one kernel per layer copies the anchor row's ids and weights over the dead rows."""
+def remap_dead_rows(weights, indices, stride=None):
+    """weights/indices [M, 6] for M = bs * stride verify rows (request-major). In place when
+    possible: one kernel per layer copies the anchor row's ids and weights over the dead rows.
+    stride defaults to STRIDE; the dual-graph narrow capture passes its family width."""
+    stride = stride or STRIDE
     m = indices.shape[0]
     if (_remap_kernel is not None and weights.is_contiguous() and indices.is_contiguous()
             and weights.shape[1] == K_TARGET and m <= 1024):
-        if _capturing() and m not in _state.setdefault("captured", set()):
-            _state["captured"].add(m)
-            print(f"[verify_cap] in-place remap captured into the verify graph for M={m}", flush=True)
+        if _capturing() and (m, stride) not in _state.setdefault("captured", set()):
+            _state["captured"].add((m, stride))
+            print(f"[verify_cap] in-place remap captured into the verify graph for M={m} stride={stride}", flush=True)
         _remap_kernel[(1,)](weights, indices, live_buf(indices.device), m, weights.stride(0),
-                            indices.stride(0), STRIDE, K_TARGET, triton.next_power_of_2(m))
+                            indices.stride(0), stride, K_TARGET, triton.next_power_of_2(m))
         return weights, indices
-    src = _src_rows(m, indices.device)
+    src = _src_rows(m, indices.device, stride)
     return weights.index_select(0, src), indices.index_select(0, src)
 
 
@@ -179,14 +183,17 @@ def install_gate(module):
         print("[verify_cap] dead-row remap folded into the router kernel", flush=True)
 
     def wrapped(scores, bias, topk, *a, **kw):
+        # dual_graph's narrow capture sets stride_ovr so the dead-row remap bakes the
+        # family width (bs*6 rows) instead of the boot's wide stride
+        stride = _state.get("stride_ovr") or STRIDE
         m = scores.shape[0] if scores.dim() == 2 else 0
         verify = (_state["in_verify"] and scores.shape[-1] == E_TARGET and topk == K_TARGET
-                  and m and m % STRIDE == 0 and m // STRIDE <= MAX_BS)
+                  and m and m % stride == 0 and m // stride <= MAX_BS)
         if verify and fused is not None:
-            return fused(scores, bias, topk, *a, live=live_buf(scores.device), live_stride=STRIDE, **kw)
+            return fused(scores, bias, topk, *a, live=live_buf(scores.device), live_stride=stride, **kw)
         weights, indices = original(scores, bias, topk, *a, **kw)
         if verify:
-            return remap_dead_rows(weights, indices)
+            return remap_dead_rows(weights, indices, stride)
         return weights, indices
 
     module.moe_fused_gate = wrapped
