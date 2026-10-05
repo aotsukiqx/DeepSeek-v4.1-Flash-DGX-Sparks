@@ -116,3 +116,15 @@ also proved per-bs try/except must never ship given the silent-corruption mode).
 The usable widened line remains the env-gated gamma=8 EXT shim (code +12.3 %).
 Revised estimate for a universal line: 3-5 days engine work parameterizing the
 folded sampler's proposal/verify boundary.
+
+## Per-position acceptance at gamma=8 (2026-10-05, vcap-g8b.bin, 2840 steps)
+
+Code survival through the untrained positions: 0.99/0.96/0.95/0.94/0.96/0.89/0.84/0.77
+- positions 6-8 extrapolate at 77-89 %. Prose conditional survival RISES far out
+(0.75-0.77 at positions 5-8 among the ~25 % of steps that reach them - repetitive
+stretches), but E[tok] only moves 2.33 -> 2.45 from gamma=5 to 8. With the measured
+per-row step cost (prose 4.8 %/row, code 6 %/row, from the three-arm anchors), the
+gamma sweep nets: g6 +1.5 %, g7 +1.5 %, g8 +0.3 % on a balanced mix - all below the
+2 % bar. Verdict: no single gamma wins mixed traffic. gamma=5 stays the mixed default;
+gamma=8 stays the env-gated code-heavy line (+12 %); the dual-graph surgery (folded-
+sampler width parameterization, above) remains the only universal path.
