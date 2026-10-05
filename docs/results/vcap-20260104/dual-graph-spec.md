@@ -98,3 +98,21 @@ print the dims capture_prepare produced and which bs fail (all vs subset); the f
 will be to parameterize the indexer's per-req row layout by the width override too
 (deepseek_v4_backend._low_ratio_index_topk_decode path). Production was restored and
 verified after the crash.
+
+## W1 diagnostic round (2026-10-05, per-bs try/except hotpatch): architecture verdict
+
+Prints: every narrow capture fails with a wide-width view of narrow data -
+`shape '[bs-2, 8]' is invalid for input of size bs*6` (bs 1,2,3,5,6,7) - and the two
+"successes" (bs 4, 8) are SILENT CORRUPTION: 4*6=24 and 8*6=48 divide by 8, so the
+wrong view is numerically satisfiable. Root cause: the folded draft sampler is
+captured INSIDE the verify graph and is 8-wide by construction at this boot; its
+internal views (markov stack, sampler buffers, KV inject) all assume the batch rows
+match the draft block width. Conclusion: the width swap must reach the folded
+sampler inside the captured region (propose 8, verify first 5 - the sampler's
+proposal/verify boundary needs a width parameter), which is deeper engine surgery
+than the runner-level capture the spec assumed. W1 PARKED at commit 274e3fe
+(adapter committed, DSV41_DUAL_GRAPH unset in production - inert; the diagnostic
+also proved per-bs try/except must never ship given the silent-corruption mode).
+The usable widened line remains the env-gated gamma=8 EXT shim (code +12.3 %).
+Revised estimate for a universal line: 3-5 days engine work parameterizing the
+folded sampler's proposal/verify boundary.
