@@ -38,10 +38,25 @@ def install(module):
         wide = int(getattr(self, "captured_req_width", 0) or 0)
         if wide <= NARROW_ROWS:
             return
+        def _backends():
+            mr = self.model_runner
+            seen = []
+            for attr in ("decode_attn_backend", "attn_backend"):
+                b = getattr(mr, attr, None)
+                if b is not None and hasattr(b, "speculative_num_draft_tokens"):
+                    seen.append(b)
+            for b in getattr(mr, "decode_attn_backend_group", []) or []:
+                if b is not None and hasattr(b, "speculative_num_draft_tokens"):
+                    seen.append(b)
+            return seen
+
         captured = []
         for bs in [b for b in self.capture_bs if b <= MAX_BS]:
             saved = self.captured_req_width
             self.captured_req_width = NARROW_ROWS
+            saved_spec = [(b, b.speculative_num_draft_tokens) for b in _backends()]
+            for b, _ in saved_spec:
+                b.speculative_num_draft_tokens = NARROW_ROWS
             try:
                 set_variant(LABEL)
                 with patch_model(
@@ -54,6 +69,8 @@ def install(module):
                 captured.append(bs)
             finally:
                 self.captured_req_width = saved
+                for b, v in saved_spec:
+                    b.speculative_num_draft_tokens = v
                 set_variant(None)
         if captured:
             print(f"[dual_graph] captured narrow verify family rows={NARROW_ROWS} "
