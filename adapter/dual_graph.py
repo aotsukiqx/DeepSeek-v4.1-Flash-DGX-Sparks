@@ -140,6 +140,9 @@ def _apply_step_width(ep, w):
         ep._dsv41_w = wide["stride"]
     # else never narrowed: constructor state is already wide
 
+def _oracle_due():
+    return ORACLE_N > 0 and len(_ORACLE_LOG) < ORACLE_N
+
 def _oracle_report():
     worst_a = min(a for _, a, _ in _ORACLE_LOG)
     worst_d = max(d for _, _, d in _ORACLE_LOG)
