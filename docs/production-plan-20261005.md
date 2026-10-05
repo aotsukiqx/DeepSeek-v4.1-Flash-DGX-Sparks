@@ -19,13 +19,13 @@ This is the umbrella plan; engineering detail for the mainline lives in
 
 ## Priorities (reviewed; one branch point)
 
-P0 - TRAFFIC PROFILE CHECK (5 min, gates the biggest immediate lever):
-  `docker logs dsv41-head | grep "Decode batch" | accept-len distribution` over
-  real traffic. Dominant accept>=4 (patterned/continuation-heavy) -> flip
-  gamma=8 TODAY (one env + reboot) for +20-30% on that class, accepting -13% on
-  novel prose. Mixed/novel-dominant -> do nothing now, P2 is the path.
-  CAVEAT: logs reset on container restart; needs live traffic. If traffic is
-  off, skip to P2 and run P0 when it returns.
+P0 - RESOLVED (2026-10-05, user confirmation): traffic is MIXED and
+  PROSE-DOMINANT -> gamma=8 stays env-gated (the -12.9% novel-prose penalty
+  outweighs the patterned-class gain in this profile); MRR=32 confirmed correct
+  for the mixed short-burst tier. P2 (dual-graph W2) is THE active path: it is
+  what makes gamma=8 free for prose, after which it becomes default-on for the
+  whole mixed fleet. Post-W2 acceptance bar: patterned +20-30%, novel prose
+  >= -2%, qeval BROKE=0.
 
 P1 - CLIENT DISCIPLINE (zero cost, parallel): multi-turn long-context clients
   must reuse prefixes (radix cache hit skips the whole ~105 s prefill at 512k).
