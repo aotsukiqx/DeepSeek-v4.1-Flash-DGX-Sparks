@@ -231,3 +231,17 @@ width coupling (8 vs 6, dim 1, dspark_draft_sampler.py:181) - the current fronti
 Remaining: that markov-head sub-layer, then the W2 selection wiring
 (variants.select + replay routing), then the R1 oracle before any trust. All
 adapters env-gated; production restored and verified after every round.
+
+## Draft-side layout conclusion (2026-10-05, session final round)
+
+The markov-head frontier dissolved into a DESIGN finding: the narrow capture's warmup
+feeds the 8-wide DRAFTER a 6-row batch. compute_base_logits has an internal
+[.., gamma=8, ..] buffer (the current 8-vs-6), and deeper in, sample_hidden =
+hidden.view(bs, 5, -1) over 6 anchor-inclusive rows is semantically wrong regardless
+of attribute swaps (it would reinterpret 6x5120 as 5x6144). Correct architecture:
+slice at the capture_hook level (draft_worker_common:151) - the draft sampler
+receives the FULL 8-row draft output while the verify side consumes the 6-row slice;
+no attribute swapping inside the sampler at all. That moves the remaining work to one
+well-defined seam (the hook that already calls both) and retires the sampler/markov
+swap layers from the critical path. W2 selection routing and the R1 oracle remain
+as specced. Production restored and verified; every adapter stays env-gated off.
