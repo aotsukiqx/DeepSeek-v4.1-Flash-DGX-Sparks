@@ -205,3 +205,17 @@ W2 territory (the family must follow through replay, including this view). Layer
 count: L1-L5 solved (runner, indexer, metadata stores, epilogue stride+gamma,
 stride-wide buffers); next failure is replay-side. R1 oracle still gates any trust in
 the captured family - build it before wiring selection.
+
+## W1g reproducibility failure (2026-10-05, final round of the session)
+
+The W1g hotpatch round captured the full narrow family (bs 1-8) and then died at a
+warmup-side draft view ([0, 8, -1]). A FRESH serve of the identical committed code
+instead fails DURING capture at _accept (9 vs 6, dim 1) again. Same code, different
+outcomes -> the swap-in-flight buffer strategy is stateful and order-sensitive (the
+first narrow call's clone cache, which buffers exist at which point, restore paths).
+Verdict recorded for the next session: abandon swap-in-flight; allocate per-family
+buffers eagerly at install (clone BOTH families' buffers up front, select by width
+from the batch: width = input_ids.shape[0] // bs), and make every epilogue derived
+value (stride, gamma, buffers) a function of that inferred width instead of mutating
+instance state. That redesign also IS the W2 replay routing. Production restored and
+verified after every round of this session; all code env-gated off in production.
