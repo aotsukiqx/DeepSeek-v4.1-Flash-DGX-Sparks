@@ -248,7 +248,10 @@ def install_executor_hook(module):
         vw = kw.get("verify_window")
 
         def narrow_call():
-            self.verify_num_draft_tokens = NARROW_ROWS - 1
+            # verify_num_draft_tokens counts ROWS INCL. the anchor (= stride; stock
+            # gamma=5 -> 6): the engram layer and DFlashVerifyInput both derive
+            # per-request width from it, so the narrow family passes 6, not 5
+            self.verify_num_draft_tokens = NARROW_ROWS
             # the eager pre-graph metadata path (prepare_for_verify ->
             # backend.init_forward_metadata) runs OUTSIDE the runner wraps and reads
             # the backend's own spec width + metadata store: swap both here too
