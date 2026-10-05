@@ -16,6 +16,40 @@ ENABLED = os.environ.get("DSV41_DUAL_GRAPH", "0").strip() not in ("0", "", "off"
 NARROW_ROWS = int(os.environ.get("DSV41_DUAL_GRAPH_ROWS", "6") or 6)
 MAX_BS = int(os.environ.get("DSV41_DUAL_GRAPH_MAX_BS", "8") or 8)
 LABEL = "dsv41_narrow6"
+_NARROW_NOW = [False]
+
+
+def install_verify_hook(module):
+    """sglang.srt.speculative.dspark_components.dspark_verify: during a narrow capture the
+    static epilogue views input_ids through self.stride (gamma+1 = 9); the narrow family
+    needs 6. Guarded by the capture flag; replay keeps the stock stride until W2 routes
+    it per family."""
+    if not ENABLED:
+        return
+    cls = getattr(module, "DsparkVerifyEpilogue", None)
+    if cls is None or getattr(cls, "_dsv41_dual_graph", False):
+        return
+    cls._dsv41_dual_graph = True
+
+    def _wrap(name):
+        orig = getattr(cls, name)
+
+        def method(self, *a, **kw):
+            if not _NARROW_NOW[0] or int(getattr(self, "stride", 0) or 0) <= NARROW_ROWS:
+                return orig(self, *a, **kw)
+            saved = self.stride
+            self.stride = NARROW_ROWS
+            try:
+                return orig(self, *a, **kw)
+            finally:
+                self.stride = saved
+
+        setattr(cls, name, method)
+
+    for name in ("_static_epilogue", "begin_static_step"):
+        if hasattr(cls, name):
+            _wrap(name)
+    print("[dual_graph] verify epilogue stride follows the narrow captures", flush=True)
 
 
 def install(module):
@@ -73,7 +107,11 @@ def install(module):
                     num_tokens=bs * NARROW_ROWS,
                     tp_group=self.model_runner.tp_group,
                 ) as forward:
-                    self.capture_one_shape(bs, forward, stream_idx, None, LABEL)
+                    _NARROW_NOW[0] = True
+                    try:
+                        self.capture_one_shape(bs, forward, stream_idx, None, LABEL)
+                    finally:
+                        _NARROW_NOW[0] = False
                 captured.append(bs)
             finally:
                 self.captured_req_width = saved
