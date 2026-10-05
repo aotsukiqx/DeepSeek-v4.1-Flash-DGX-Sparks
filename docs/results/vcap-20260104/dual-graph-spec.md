@@ -83,3 +83,18 @@ greedy repeat. Acceptance bar: code >= +10 %, prose >= -2 % vs production.
 
 W3 + W1 capture-only first (second family captured, never selected - validates memory
 and capture), then W2 selection on, then gates. Est. 1-2 focused days.
+
+## W1 first attempt (2026-10-05 night): capture crashes in the DSA indexer
+
+adapter/dual_graph.py (commit 274e3fe) swaps captured_req_width during a second
+capture pass inside _capture_one_stream. The narrow (6-row) capture dies in the
+TARGET verify forward at deep_gemm's fp8_fp4_paged_mqa_logits with
+`_batch_size == batch_size` (attention.hpp:530) - the DSA indexer's paged-MQA row
+count disagrees with its request/schedule metadata. The width couples beyond the
+runner attribute: the indexer's spec-row layout (context_lens/block_table/
+schedule_meta per verify row) is built for the wide family. Next diagnostic (cheap,
+hotpatch-able on a crashed-env container): per-bs try/except in the capture loop +
+print the dims capture_prepare produced and which bs fail (all vs subset); the fix
+will be to parameterize the indexer's per-req row layout by the width override too
+(deepseek_v4_backend._low_ratio_index_topk_decode path). Production was restored and
+verified after the crash.
