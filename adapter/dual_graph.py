@@ -419,11 +419,9 @@ def install(module):
             for b, s in saved_stores:
                 b.cuda_graph_metadata_of_bucket_and_bs = s
 
-    for name in ("can_run_graph", "load_batch", "execute"):
-        if not hasattr(cls, name):
-            continue
-        orig_m = getattr(cls, name)
-
+    def _bind(orig_m):
+        # bind now: a closure over the loop variable would late-bind every wrapper
+        # to the last method (execute), recursing execute->load_batch->execute
         def _m(self, *a, **kw):
             fb = None
             for x in a:
@@ -436,7 +434,11 @@ def install(module):
                 return orig_m(self, *a, **kw)
             return _with_narrow(self, fb, orig_m, self, *a, **kw)
 
-        setattr(cls, name, _m)
+        return _m
+
+    for name in ("can_run_graph", "load_batch", "execute"):
+        if hasattr(cls, name):
+            setattr(cls, name, _bind(getattr(cls, name)))
     print(f"[dual_graph] armed: narrow rows={NARROW_ROWS} bs<={MAX_BS} force={FORCE or '-'} "
           f"oracle={ORACLE_N}", flush=True)
 
