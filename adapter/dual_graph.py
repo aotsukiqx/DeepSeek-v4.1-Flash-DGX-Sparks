@@ -133,6 +133,11 @@ def install(module):
         wide = int(getattr(self, "captured_req_width", 0) or 0)
         if wide <= NARROW_ROWS:
             return
+        # The same runner class serves the DRAFT worker too (its width is the draft
+        # query layout): only the TARGET verify runner gets the narrow family - the
+        # drafter stays at its native width inside every graph
+        if getattr(self.model_runner, "is_draft_worker", False):
+            return
         def _backends():
             mr = self.model_runner
             seen = []
