@@ -245,3 +245,21 @@ no attribute swapping inside the sampler at all. That moves the remaining work t
 well-defined seam (the hook that already calls both) and retires the sampler/markov
 swap layers from the critical path. W2 selection routing and the R1 oracle remain
 as specced. Production restored and verified; every adapter stays env-gated off.
+
+## MILESTONE: healthy dual-graph boot (2026-10-05, commit f6973a81)
+
+ROOT CAUSE of the sampler/markov "layers": the hooked runner class serves BOTH the
+draft worker (width = draft query layout, 8) and the target verify runner (width 9);
+the narrow loop had been shrinking the DRAFT graphs too. Guarding with
+`model_runner.is_draft_worker` - only the target verify runner gets the narrow
+family - made everything pass at once:
+
+  HEALTHY + `captured narrow verify family rows=6 for bs [1..8]` + warmup clean.
+
+Bench on the dual boot: code 134.77 tok/s (identical to the EXT arm, +12.3 % kept),
+greedy deterministic (rep1=3=5, rep2=4 per prompt). OPEN ITEM: prose read 39.18 with
+accept-len 2.91 (EXT arm was 49.9 / 2.76, uncapped 39.2 / 2.96) - single-boot data
+inside gamma=8's known 39-50 boot-tactic band; needs an interleaved dual-vs-EXT A/B
+next session before any conclusion (selection W2 is not wired, so prose still replays
+wide graphs - the 39/50 difference is boot variance, not the narrow family). Next:
+W2 selection wiring (variants.select) -> FORCE hook -> R1 oracle -> full gates.
