@@ -179,8 +179,11 @@ def table_plan(cap, topk):
 _CHUNK_ENV = int(_env("CHUNKED_PREFILL_SIZE", "0") or 0)
 if _CHUNK_ENV > max(LADDER):
     LADDER.append(_CHUNK_ENV)
-TUNE_ROWS = {int(k): int(v) for k, v in (p.split(":") for p in
-             _env("DSV41_MOE_B12X_NEXT_TUNE_ROWS", "6:6,3:5").split(",") if p)}
+# topk -> row counts to race ("6:6" races the verify family; "6:5+6" adds the draft
+# rows family so those capacities get raced plans instead of the heuristic's pick)
+TUNE_ROWS = {int(k): sorted({int(r) for r in v.split("+") if r}) for k, v in
+             (p.split(":", 1) for p in
+              _env("DSV41_MOE_B12X_NEXT_TUNE_ROWS", "6:6,3:5").split(",") if ":" in p)}
 EXACT_MAX = 96 if not GRAPH_BS else max(96, (BLOCK + 1) * max(GRAPH_BS))
 
 _state = {"method_installed": False, "runner_installed": False, "orig_fused": None, "b12x_ready": False,
@@ -377,10 +380,12 @@ class _Geometry:
         # heuristic plans compile it in _warm instead.
         if not TUNE or DETERMINISTIC:
             return set()
-        r = TUNE_ROWS.get(self.topk)
-        if r is None:
+        rows = TUNE_ROWS.get(self.topk)
+        if not rows:
             return set()
-        return {r * b for b in GRAPH_BS}
+        if isinstance(rows, int):
+            rows = [rows]
+        return {r * b for r in rows for b in GRAPH_BS}
 
     def build(self, experts):
         """Prepare every capacity on the first layer's experts; allocate the shared arena."""
