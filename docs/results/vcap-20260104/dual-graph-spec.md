@@ -219,3 +219,15 @@ from the batch: width = input_ids.shape[0] // bs), and make every epilogue deriv
 value (stride, gamma, buffers) a function of that inferred width instead of mutating
 instance state. That redesign also IS the W2 replay routing. Production restored and
 verified after every round of this session; all code env-gated off in production.
+
+## W2 chain progress (2026-10-05, session close)
+
+Width-inference redesign (b958442) REPRODUCES the full narrow capture on fresh serves
+(order-sensitivity solved; the families derive from constructor state only). The
+warmup chain then peeled two more sub-layers, each solved by a flag-guarded swap:
+folded sampler bs-derivation + gamma view (cad4b6de; the [0,8,-1] view error), and
+next surfaced `corrected_out[: bs*gamma]` / markov_head.sample_block's internal
+width coupling (8 vs 6, dim 1, dspark_draft_sampler.py:181) - the current frontier.
+Remaining: that markov-head sub-layer, then the W2 selection wiring
+(variants.select + replay routing), then the R1 oracle before any trust. All
+adapters env-gated; production restored and verified after every round.
