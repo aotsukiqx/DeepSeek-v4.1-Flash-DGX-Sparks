@@ -128,3 +128,18 @@ gamma sweep nets: g6 +1.5 %, g7 +1.5 %, g8 +0.3 % on a balanced mix - all below 
 2 % bar. Verdict: no single gamma wins mixed traffic. gamma=5 stays the mixed default;
 gamma=8 stays the env-gated code-heavy line (+12 %); the dual-graph surgery (folded-
 sampler width parameterization, above) remains the only universal path.
+
+## W1 leak point pinned (2026-10-05, traceback round)
+
+All narrow captures fail at ONE site: deepseek_v4_backend.py:_low_ratio_index_topk_decode
+-> indexer.fp4_paged_mqa_logits -> deep_gemm `_batch_size == batch_size`. The width
+leak: the backend caches `self.speculative_num_draft_tokens = get_spec()
+.speculative_num_draft_tokens` (line ~1252, = 9 at this boot) and extends
+`seq_lens_cpu` by it and sizes block tables/metadata with it (lines ~1323, ~1340-41),
+while the narrow capture's query rows are 6/req. Fix shape: during the narrow capture,
+swap BOTH the runner's `captured_req_width` AND the spec width the backend sees (the
+getter `get_spec()` - if it is a settable global/contextvar, one swap covers every
+reader; else swap the backend instance attr before capture_one_shape and confirm no
+metadata was pre-derived). Diagnostic round also re-learned: hotpatch must reach ALL
+FOUR containers (a worker running the unpatched version kills the boot at a barrier
+before the head's narrow pass runs) and clear the adapter __pycache__ entry alongside.
