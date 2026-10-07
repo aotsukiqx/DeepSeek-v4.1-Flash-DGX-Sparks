@@ -1,0 +1,494 @@
+{
+  "base": "http://192.168.2.23:8000",
+  "model": "deepseek-v4.1-flash",
+  "maxTokens": 256,
+  "started": "2026-10-07T10:25:02.388Z",
+  "results": [
+    {
+      "type": "prose",
+      "concurrency": 1,
+      "aggregateTps": 80.42,
+      "perStreamTps": [
+        80.42
+      ],
+      "perStreamMedian": 80.42,
+      "completionTokens": [
+        256
+      ],
+      "finishes": [
+        "length"
+      ],
+      "ttftMsMin": 272,
+      "ttftMsMax": 272,
+      "windowMs": 3171
+    },
+    {
+      "type": "prose",
+      "concurrency": 1,
+      "aggregateTps": 83.77,
+      "perStreamTps": [
+        83.77
+      ],
+      "perStreamMedian": 83.77,
+      "completionTokens": [
+        256
+      ],
+      "finishes": [
+        "length"
+      ],
+      "ttftMsMin": 207,
+      "ttftMsMax": 207,
+      "windowMs": 3044
+    },
+    {
+      "type": "prose",
+      "concurrency": 1,
+      "aggregateTps": 83.72,
+      "perStreamTps": [
+        83.72
+      ],
+      "perStreamMedian": 83.72,
+      "completionTokens": [
+        256
+      ],
+      "finishes": [
+        "length"
+      ],
+      "ttftMsMin": 195,
+      "ttftMsMax": 195,
+      "windowMs": 3046
+    },
+    {
+      "type": "prose",
+      "concurrency": 16,
+      "aggregateTps": 307.58,
+      "perStreamTps": [
+        22.01,
+        21.95,
+        22.73,
+        19.89,
+        19.82,
+        20.72,
+        22.01,
+        20.72,
+        20.15,
+        20.15,
+        20.96,
+        21.37,
+        20.73,
+        20.06,
+        22.01,
+        22.73
+      ],
+      "perStreamMedian": 20.96,
+      "completionTokens": [
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256
+      ],
+      "finishes": [
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length"
+      ],
+      "ttftMsMin": 596,
+      "ttftMsMax": 997,
+      "windowMs": 13265
+    },
+    {
+      "type": "prose",
+      "concurrency": 16,
+      "aggregateTps": 307.95,
+      "perStreamTps": [
+        19.37,
+        22.71,
+        19.4,
+        22.03,
+        19.27,
+        20.91,
+        20.91,
+        19.93,
+        22.39,
+        19.4,
+        20.43,
+        22.39,
+        20.91,
+        21.43,
+        21.17,
+        22.05
+      ],
+      "perStreamMedian": 20.91,
+      "completionTokens": [
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256
+      ],
+      "finishes": [
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length"
+      ],
+      "ttftMsMin": 531,
+      "ttftMsMax": 545,
+      "windowMs": 13249
+    },
+    {
+      "type": "prose",
+      "concurrency": 16,
+      "aggregateTps": 316.72,
+      "perStreamTps": [
+        20.44,
+        21.97,
+        20.76,
+        20.44,
+        22.7,
+        21.14,
+        22.01,
+        21.4,
+        22.33,
+        19.83,
+        20.17,
+        20.05,
+        23.05,
+        21.66,
+        21.14,
+        22.01
+      ],
+      "perStreamMedian": 21.4,
+      "completionTokens": [
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256
+      ],
+      "finishes": [
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length"
+      ],
+      "ttftMsMin": 494,
+      "ttftMsMax": 517,
+      "windowMs": 12882
+    },
+    {
+      "type": "code",
+      "concurrency": 1,
+      "aggregateTps": 119.44,
+      "perStreamTps": [
+        119.44
+      ],
+      "perStreamMedian": 119.44,
+      "completionTokens": [
+        256
+      ],
+      "finishes": [
+        "length"
+      ],
+      "ttftMsMin": 235,
+      "ttftMsMax": 235,
+      "windowMs": 2135
+    },
+    {
+      "type": "code",
+      "concurrency": 1,
+      "aggregateTps": 125.49,
+      "perStreamTps": [
+        125.49
+      ],
+      "perStreamMedian": 125.49,
+      "completionTokens": [
+        256
+      ],
+      "finishes": [
+        "length"
+      ],
+      "ttftMsMin": 201,
+      "ttftMsMax": 201,
+      "windowMs": 2032
+    },
+    {
+      "type": "code",
+      "concurrency": 1,
+      "aggregateTps": 125.18,
+      "perStreamTps": [
+        125.18
+      ],
+      "perStreamMedian": 125.18,
+      "completionTokens": [
+        256
+      ],
+      "finishes": [
+        "length"
+      ],
+      "ttftMsMin": 201,
+      "ttftMsMax": 201,
+      "windowMs": 2037
+    },
+    {
+      "type": "code",
+      "concurrency": 16,
+      "aggregateTps": 425.35,
+      "perStreamTps": [
+        29.1,
+        29.61,
+        30.37,
+        27.48,
+        31.07,
+        27,
+        29.72,
+        28.15,
+        28.56,
+        28.15,
+        29.1,
+        27.2,
+        29.1,
+        29.1,
+        26.68,
+        29.1
+      ],
+      "perStreamMedian": 29.1,
+      "completionTokens": [
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256
+      ],
+      "finishes": [
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length"
+      ],
+      "ttftMsMin": 678,
+      "ttftMsMax": 712,
+      "windowMs": 9592
+    },
+    {
+      "type": "code",
+      "concurrency": 16,
+      "aggregateTps": 431.06,
+      "perStreamTps": [
+        29.5,
+        30.31,
+        30.31,
+        28.53,
+        29.64,
+        27.59,
+        29.01,
+        28.11,
+        28.11,
+        29.64,
+        29.64,
+        28.11,
+        29.64,
+        28.52,
+        27.06,
+        29.01
+      ],
+      "perStreamMedian": 29.01,
+      "completionTokens": [
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256
+      ],
+      "finishes": [
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length"
+      ],
+      "ttftMsMin": 650,
+      "ttftMsMax": 689,
+      "windowMs": 9465
+    },
+    {
+      "type": "code",
+      "concurrency": 16,
+      "aggregateTps": 440.46,
+      "perStreamTps": [
+        29.58,
+        30.39,
+        31.07,
+        28.4,
+        29.71,
+        27.65,
+        29.71,
+        28.75,
+        29.71,
+        30.4,
+        30.39,
+        29.71,
+        28.4,
+        29.12,
+        28.14,
+        29.13
+      ],
+      "perStreamMedian": 29.71,
+      "completionTokens": [
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256,
+        256
+      ],
+      "finishes": [
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length",
+        "length"
+      ],
+      "ttftMsMin": 682,
+      "ttftMsMax": 721,
+      "windowMs": 9263
+    }
+  ]
+}

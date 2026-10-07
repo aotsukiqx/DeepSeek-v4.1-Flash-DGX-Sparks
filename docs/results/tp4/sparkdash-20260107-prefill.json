@@ -1,0 +1,76 @@
+{
+  "base": "http://192.168.2.23:8000",
+  "model": "deepseek-v4.1-flash",
+  "results": [
+    {
+      "target": 4096,
+      "promptTokens": 4112,
+      "completionTokens": 2,
+      "ttftMs": 919,
+      "prefillTps": 4475.5
+    },
+    {
+      "target": 4096,
+      "promptTokens": 4117,
+      "completionTokens": 2,
+      "ttftMs": 883,
+      "prefillTps": 4661.9
+    },
+    {
+      "target": 16384,
+      "promptTokens": 16405,
+      "completionTokens": 2,
+      "ttftMs": 2935,
+      "prefillTps": 5588.9
+    },
+    {
+      "target": 16384,
+      "promptTokens": 16404,
+      "completionTokens": 2,
+      "ttftMs": 2927,
+      "prefillTps": 5603.7
+    },
+    {
+      "target": 32768,
+      "promptTokens": 32786,
+      "completionTokens": 2,
+      "ttftMs": 5804,
+      "prefillTps": 5649.3
+    },
+    {
+      "target": 32768,
+      "promptTokens": 32788,
+      "completionTokens": 2,
+      "ttftMs": 5742,
+      "prefillTps": 5709.8
+    },
+    {
+      "target": 65536,
+      "promptTokens": 65560,
+      "completionTokens": 2,
+      "ttftMs": 11560,
+      "prefillTps": 5671
+    },
+    {
+      "target": 65536,
+      "promptTokens": 65561,
+      "completionTokens": 2,
+      "ttftMs": 11569,
+      "prefillTps": 5667.1
+    },
+    {
+      "target": 131072,
+      "promptTokens": 131093,
+      "completionTokens": 2,
+      "ttftMs": 23788,
+      "prefillTps": 5510.8
+    },
+    {
+      "target": 131072,
+      "promptTokens": 131091,
+      "completionTokens": 2,
+      "ttftMs": 23697,
+      "prefillTps": 5531.9
+    }
+  ]
+}
