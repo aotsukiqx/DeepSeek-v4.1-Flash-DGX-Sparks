@@ -103,7 +103,10 @@ def install(accept_module):
                                                 rows_per_request=verify_num_draft_tokens
                                                 ).view(bs, verify_num_draft_tokens, -1)
         else:
-            target_probs = du.build_dflash_verify_target_probs(
+            _build = getattr(du, "build_speculative_verify_target_probs", None)
+            if _build is None:
+                _build = du.build_dflash_verify_target_probs
+            target_probs = _build(
                 next_token_logits=target_logits, sampling_info=sampling_info,
                 draft_token_num=verify_num_draft_tokens, bs=bs, max_top_k=draft_input.max_top_k,
                 uniform_top_k_value=draft_input.uniform_top_k_value)
