@@ -352,7 +352,7 @@ def _install_einsum_bridge(dsv4_module):
     dsv4_module._dsv41_wo_a_bridge = True
     orig = dsv4_module._apply_wo_a_bf16_matmul
 
-    def _apply(o, wo_a, is_decode=False):
+    def _apply(o, wo_a, is_decode=False, **kw):
         ptr = wo_a.data_ptr()
         twin = _TWINS.get(ptr)
         m = o.shape[0] if o.ndim == 3 else 0
@@ -361,8 +361,8 @@ def _install_einsum_bridge(dsv4_module):
         if twin is not None and MID and _CTX["spec"] and _std_activation(o, twin) and 9 <= m <= 192:
             return wo_a_mid(o, twin)
         if ptr in _DROPPED and twin is not None:
-            return orig(o, dequant_into_scratch(twin, o.device), is_decode)
-        return orig(o, wo_a, is_decode)
+            return orig(o, dequant_into_scratch(twin, o.device), is_decode, **kw)
+        return orig(o, wo_a, is_decode, **kw)
 
     dsv4_module._apply_wo_a_bf16_matmul = _apply
     cls = dsv4_module.DeepseekV4ForCausalLM

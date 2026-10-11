@@ -1,28 +1,61 @@
 # TP4 production image (.env.tp4.example, docs/tp4.md). Same pinned base image as Dockerfile, but
-# the SGLang python tree replaced by the upstream dsv4.1 branch at f80c91a4b (2026-09-16 19:45 UTC;
-# carries #39370 mHC/metadata fusion, #39653 communication kernels, #39648 top-k, #39646 kernels)
-# with the kernel packages the branch pins (sglang-kernel 0.4.7, sgl-deep-gemm 0.2.0; aarch64
+# the SGLang python tree replaced by upstream main at 620c76f2 (2026-10-06; carries the DSv4.1
+# prefill-optimization umbrella #41589 with the v41_indexer library — which retires our
+# indexer_chunked/SPARK_PREFILL_TP_SPLIT backports — plus #42273 bounded replay sparse MLA)
+# with the kernel packages the tree pins (sglang-kernel 0.4.9, sgl-deep-gemm 0.2.1.post1; aarch64
 # wheels from PyPI), rhys101's SG17 RoCEnante overlay adapted to TP4, the SG17 b12x (RoCEnante)
 # plus sparkring's roce_ring, b12x main as b12x_next (routed MoE at EP_SIZE=1), and all adapters.
 # The SM120 page-split override (runtime/flash_mla_sm120.py) is re-applied on top of the branch's
 # kernel file. Third-party trees are fetched at build, at the commits and sha256 in
 # runtime/sources.manifest (scripts/fetch_runtime.sh), and patched with the files in this repo.
 # Tag: dsv41-4x-spark:canary-roce
-FROM lmsysorg/sglang:dev-dsv41@sha256:3dbc313030a6ef2c5d7de8ecf48e9aece722694a82182cb618cc82b588816349 AS fetch
+FROM lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0@sha256:4793eb4075b33cec16c8de140c0e6eeaa439a1986eaac1085f270e52bd50e52d AS fetch
 COPY runtime/sources.manifest runtime/sglang-rocenante.patch runtime/flash_mla_sm120.canary.py /src/runtime/
 COPY scripts/fetch_runtime.sh scripts/b12x_next-compact-n64-m64.patch scripts/roce_ring-sparkring-f16b5f4.patch /src/scripts/
 RUN bash /src/scripts/fetch_runtime.sh /fetched sglang-canary b12x b12x-next
 
-FROM lmsysorg/sglang:dev-dsv41@sha256:3dbc313030a6ef2c5d7de8ecf48e9aece722694a82182cb618cc82b588816349
-# Same mirror knob as Dockerfile.canary (Saolence, #6): --build-arg PIP_INDEX=<mirror>/simple
-ARG PIP_INDEX=https://pypi.org/simple
-RUN pip install --no-deps --no-cache-dir -i "$PIP_INDEX" "sglang-kernel==0.4.7" "sgl-deep-gemm==0.2.0"
+# Prebuilt multimodal PyO3 extension: sglang-mm (crate at rust/sglang-mm, features
+# python,parallel, artifact libsglang_mm_core.so -> importable _multimodal). With
+# SGLANG_RUST_BUILD_MODE=never the loader imports a bundled module BEFORE any cargo
+# probe (loader.py: trust_bundled short-circuit), so serve never runs rustup/cargo.
+# Built from the same sha-pinned sglang tarball the python tree comes from.
+# Optional CN mirrors for the one-time toolchain/crates download:
+#   --build-arg RUSTUP_DIST_SERVER=https://rsproxy.cn
+#   --build-arg CRATES_MIRROR='sparse+https://rsproxy.cn/index/'
+FROM lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0@sha256:4793eb4075b33cec16c8de140c0e6eeaa439a1986eaac1085f270e52bd50e52d AS rustbuild
+ARG RUSTUP_DIST_SERVER=
+ARG CRATES_MIRROR=
+COPY --from=fetch /fetched/sglang-canary/rust /build/rust
+COPY --from=fetch /fetched/sglang-canary/proto /build/proto
+RUN cd /build/rust \
+ && if [ -n "$RUSTUP_DIST_SERVER" ]; then export RUSTUP_DIST_SERVER="$RUSTUP_DIST_SERVER" \
+      RUSTUP_UPDATE_ROOT="$RUSTUP_DIST_SERVER/rustup"; fi \
+ && rustup toolchain install --profile minimal 1.92 \
+ && if [ -n "$CRATES_MIRROR" ]; then \
+      printf '[source.crates-io]\nreplace-with = "mirror"\n\n[source.mirror]\nregistry = "%s"\n' \
+        "$CRATES_MIRROR" >> /root/.cargo/config.toml; fi \
+ && CARGO_TARGET_DIR=/rusttarget PYO3_PYTHON=/opt/sglang/bin/python3 \
+    cargo +1.92 build --release --locked --package sglang-mm --features python,parallel \
+ && cp /rusttarget/release/libsglang_mm_core.so /build/_multimodal.so
+
+FROM lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0@sha256:4793eb4075b33cec16c8de140c0e6eeaa439a1986eaac1085f270e52bd50e52d
+# The nightly-dev base carries the full main-era stack (torch 2.14.1+cu130,
+# flashinfer 0.7.0.post1 WITH its cubin/jit-cache pair, sglang-kernel 0.4.9,
+# sgl-deep-gemm 0.2.2, transformers 5.19) — no pip layer needed; the python tree
+# below is replaced by our sha-pinned sglang source.
 RUN rm -rf /sgl-workspace/sglang/python
 COPY --from=fetch /fetched/sglang-canary/python /sgl-workspace/sglang/python
 RUN python3 -c "import sglang, sglang.srt.models.deepseek_v4, sglang.srt.layers.attention.deepseek_v4_backend, sglang.srt.models.deepseek_v4_dspark; print('import ok')"
 # RoCEnante overlay (SG17, rhys101) applied to the branch tree with offsets, then adapted to TP4
 COPY runtime/sglang-rocenante.patch runtime/roce_tp4_adapt.py /tmp/
 RUN cd /sgl-workspace/sglang && patch -p1 -F3 < /tmp/sglang-rocenante.patch && python3 /tmp/roce_tp4_adapt.py && rm /tmp/sglang-rocenante.patch /tmp/roce_tp4_adapt.py
+# Bundled rust multimodal extension + rustup removal. The loader's `never` mode
+# imports this before any fingerprint/cargo probe; deleting the rustup shims keeps
+# any unforeseen probe a fast OSError->fallback instead of a network hang (the
+# 2026-10-09 boot stall: rustup tried a ~80 KB/s toolchain download on 141e).
+COPY --from=rustbuild /build/_multimodal.so /sgl-workspace/sglang/python/sglang/srt/rust_extensions/_multimodal.so
+RUN python3 -c "import sglang.srt.rust_extensions._multimodal as m; assert hasattr(m, 'dsv41'); print('bundled rust mm ok, inkling:', hasattr(m, 'inkling'))" \
+ && rm -rf /root/.cargo/bin /root/.rustup
 COPY --from=fetch /fetched/b12x/b12x /opt/b12x/b12x
 COPY --from=fetch /fetched/b12x/LICENSE /opt/b12x/LICENSE
 RUN PYTHONPATH=/opt/b12x python3 -c "from b12x.comm import roce; print('roce', roce.API_VERSION)"
@@ -57,8 +90,7 @@ RUN PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_thinking_alias.p
  && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_autotune_keep.py \
  && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_replicated_split.py \
  && CUDA_VISIBLE_DEVICES= VC_TEST_N=60000 PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_verify_cap.py \
- && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_roce_ring.py \
- && cd /opt/dsv41/tests && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 test_indexer_chunked_v3.py /sgl-workspace/sglang/python/sglang/srt/layers/attention/deepseek_v4_backend.py
+ && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_roce_ring.py
 ENV PYTHONPATH=/opt/dsv41/adapter:/opt/b12x:/opt/b12x_next \
     MODEL_PATH=/models/DeepSeek-V4.1-Flash \
     STATE_PATH=/state OFFLOAD_MODE=nvme DSV41_CACHE_GIB=16

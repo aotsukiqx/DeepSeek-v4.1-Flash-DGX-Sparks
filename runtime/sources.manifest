@@ -10,8 +10,11 @@
 # (the url always names the same commit; the script checks that). `local` rows at the end
 # list files kept in this repository: local  path  sha256  -
 
-# SGLang dsv4.1 branch, python/ tree only (2026-09-16 19:45 UTC). Apache-2.0.
-sglang-canary  f80c91a4b97e52e17fbcff088aa6b47b6270f6b9  9968fcff7fa8218b8246a4553d72933b08f4846550e7c5b6a891bdc3bdc881a8  https://github.com/sgl-project/sglang/archive/f80c91a4b97e52e17fbcff088aa6b47b6270f6b9.tar.gz
+# SGLang main @ 620c76f2 (2026-10-06, #41603 merge): carries the DSv4.1 prefill-optimization
+# umbrella #41589 (incl. the v41_indexer library with native score budgeting that retires our
+# indexer_chunked backport), #42273 bounded replay sparse MLA, and the dsv4 backend rework.
+# python/+rust trees; Apache-2.0.
+sglang-canary  620c76f25db14f1599aa7c7ccb141a91e4944b63  eb86c5481c476ce0cc3f08f7de922069168e626bb4f244481a73eff5c20d26ca  https://github.com/sgl-project/sglang/archive/620c76f25db14f1599aa7c7ccb141a91e4944b63.tar.gz
 
 # b12x as frozen for rhys101's SG17 RoCEnante overlay (b12x.comm.roce); published as a source
 # archive in rhys101/DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8, provenance in
@@ -41,6 +44,6 @@ b12x-main  e4084d2eef4932e0fa06db3f7a94deb83ad132d7  3b97cb4b0c6d9c9fe24df936e69
 #   runtime/flash_mla_sm120.canary.py  = rhys101 @ 22d65f5  sglang/patches/source/python/sglang/kernels/ops/attention/flash_mla_sm120.py
 #                                        (runtime/flash_mla_sm120.py re-applied to the dsv4.1 branch kernel file)
 local  runtime/sglang-rocenante.patch  e813f97a87539681a5951f055b4d0b78f14630437f7c0adaa7e012f7adc5c704  -
-local  runtime/flash_mla_sm120.canary.py  2fe25ba5e2ff91f6028b6a32c315ba8875d8780b9341bae9411af1cc927885bf  -
+local  runtime/flash_mla_sm120.canary.py  931ce8651b9d247e4979a3b9d7af4f75644d493a52458e8031d015835df26855  -
 local  scripts/b12x_next-compact-n64-m64.patch  1fb1f1eca87206618115f57f9303860bf7a3be8700356bca91ca87a2ba57b701  -
 local  scripts/roce_ring-sparkring-f16b5f4.patch  4479d3d0fc847c787234ebd043890d1f4fd53fcee689f1cbfd14217215a7b6bf  -

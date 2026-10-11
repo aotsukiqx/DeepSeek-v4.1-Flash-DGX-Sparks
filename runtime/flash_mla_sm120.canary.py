@@ -286,9 +286,16 @@ def _flashinfer_dsv4_decode_capabilities() -> Tuple[int, FrozenSet[int]]:
     except (AttributeError, ImportError):
         return 0, frozenset()
 
-    return int(_DECODE_MAX_TOKENS), frozenset(
-        heads for heads, _ in _DECODE_DSV4_DISPATCH
-    )
+    try:
+        return int(_DECODE_MAX_TOKENS), frozenset(
+            heads for heads, _ in _DECODE_DSV4_DISPATCH
+        )
+    except TypeError:
+        # flashinfer >= 0.7: _DECODE_DSV4_DISPATCH is a _DecodeDispatchEnvelope
+        # predicate (h, k) -> 1 <= h <= _DECODE_MAX_HEADS (and k >= min_topk
+        # per family); every head count is dispatchable, topk gates at launch.
+        from flashinfer.mla._sparse_mla_sm120_plan import _DECODE_MAX_HEADS
+        return int(_DECODE_MAX_TOKENS), frozenset(range(1, _DECODE_MAX_HEADS + 1))
 
 
 def flashinfer_dsv4_decode_supports_num_heads(num_heads: int, num_tokens: int) -> bool:

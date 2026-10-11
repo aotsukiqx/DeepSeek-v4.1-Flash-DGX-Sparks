@@ -58,19 +58,35 @@ class EngramLoader(importlib.abc.Loader):
             from prefill_empty_cache import install
             install(module)
         elif module.__name__ == 'sglang.srt.layers.attention.deepseek_v4_backend' and _tp4_launcher():
-            # sglang#39187 backport: dense prefill indexer scored in bounded row chunks.
-            # Gate checked BEFORE the import so a disabled flag imports nothing. v1 targets
-            # the dev-dsv41 image backend (self.candidate_masks); v3 is the PR for
-            # candidate_metadata backends (dsv4.1 branch >= f80c91a4b) plus the SG18 prefill
-            # TP split. Each refuses the other.
+            # Retired with the 620c76f2 pin: the dense prefill indexer moved into
+            # dsv4/v41_indexer with native score budgeting (scoring.py tiles under
+            # _DEEP_GEMM_SCORE_BUDGET_BYTES = 2 GiB and frees each tile's logits),
+            # which is the sglang#39187 backport (adapter/indexer_chunked*.py,
+            # deleted) and the SG18 row split (spark_prefill_dense.py, deleted)
+            # folded upstream. The env vars are kept as logged no-ops so stale
+            # .env files cannot break a boot.
             if os.environ.get('DSV41_INDEXER_CHUNKED', '0').strip() not in ('0', 'off', 'false', ''):
-                import inspect as _inspect
-                _src = _inspect.getsource(module.DeepseekV4AttnBackend._low_ratio_index_topk_dense)
-                if 'self.candidate_masks' in _src:
-                    from indexer_chunked import install as install_indexer_chunked
-                else:
-                    from indexer_chunked_v3 import install as install_indexer_chunked
-                install_indexer_chunked(module)
+                print('[sitecustomize] indexer chunking is native upstream '
+                      '(v41_indexer); DSV41_INDEXER_CHUNKED/SPARK_PREFILL_TP_SPLIT are no-ops')
+        elif module.__name__ == 'sglang.srt.multimodal.processors.base_processor' and _tp4_launcher():
+            # transformers >= 5.17 renamed the tokenizer handle that
+            # MultimodalSpecialTokens.convert_to_str reads; upstream main is
+            # broken for the DSV4.1 mm path on its own nightly stack.
+            from mm_tokenizer_compat import install as install_mm_tokenizer_compat
+            install_mm_tokenizer_compat(module)
+        elif module.__name__ == 'sglang.srt.configs.deepseek_v41' and _tp4_launcher():
+            # DSV41_SM120_NO_CANDIDATES (default on): the checkpoint enables the candidate
+            # indexer (candidate_topk_blocks=2048) but deep_gemm's paged sparse MQA logits
+            # assert block_kv==64 on SM120 — zero the keys, take the dense full-top-k path.
+            if os.environ.get('DSV41_SM120_NO_CANDIDATES', '1').strip() in ('1', 'on', 'true'):
+                from sm120_candidates import install as install_sm120_candidates
+                install_sm120_candidates(module)
+        elif module.__name__ == 'sglang.srt.layers.deep_gemm_wrapper.configurer' and _tp4_launcher():
+            # DSV41_SM120_PAGED_SPARSE (experimental): lift the is_sm100 gate — measured
+            # block_kv-incompatible on sm121 (attention.hpp:438), keep off.
+            if os.environ.get('DSV41_SM120_PAGED_SPARSE', '0').strip() in ('1', 'on', 'true'):
+                from deep_gemm_sm120 import install as install_deep_gemm_sm120
+                install_deep_gemm_sm120(module)
         elif module.__name__ == 'sglang.srt.entrypoints.openai.encoding_dsv41':
             from encoding_compat import install_encoder
             install_encoder(module)
@@ -297,7 +313,10 @@ class EngramFinder(importlib.abc.MetaPathFinder):
                             'sglang.kernels.ops.layernorm.mhc',
                             'sglang.srt.models.deepseek_v2',
                             'b12x.comm.roce.roce_oneshot',
-                            'b12x.comm.roce_ring.roce_oneshot'):
+                            'b12x.comm.roce_ring.roce_oneshot',
+                            'sglang.srt.multimodal.processors.base_processor',
+                            'sglang.srt.layers.deep_gemm_wrapper.configurer',
+                            'sglang.srt.configs.deepseek_v41'):
                 return None
         spec = importlib.machinery.PathFinder.find_spec(fullname, path)
         if spec is not None:

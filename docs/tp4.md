@@ -83,13 +83,14 @@ model-generated Python).
 | Kernels | `DSV41_SHARED_PAD_K=1`, `DSV41_WO_A_W8=1`, `DSV41_WO_A_W8_MID=1`, `DSV41_WO_A_W8_DROP=1`, `DSV41_DRAFT_HEAD_FP8=1`, `DSV41_DRAFT_HEAD_FP8_IMPL=tp4` | shared expert kept on the b12x kernel; `wo_a` and the draft LM head read exact fp8 twins of their weights |
 | Replicated linears | `DSV41_REPLICATED_SPLIT=wqkv_a,engram.wkv`, `DSV41_DRAFT_MAIN_PROJ_SPLIT=1` | layers every rank computed in full are split by columns across ranks and all-gathered; enabled only where bit-identical on all ranks |
 | Transport | `SGLANG_ROCE_ALLREDUCE=1`, `SGLANG_ROCE_MAX_SIZE=2097152`, `DSV41_ROCE_GATHER=2097152`, `B12X_ROCE_HCA=rocep1s0f0,roceP2p1s0f0` | TP all-reduces and all-gathers up to 2 MiB over RoCEnante's one-shot RDMA kernel on both rails |
-| Prefill | `CHUNKED_PREFILL_SIZE=4096`, `DSV41_INDEXER_CHUNKED=1`, `SPARK_PREFILL_TP_SPLIT=1` | bounded indexer transient (sglang#39187) plus the SG18 row split across ranks from 32k context |
+| Prefill | `CHUNKED_PREFILL_SIZE=4096` | indexer transient bounding is native upstream since the 620c76f2 pin (v41_indexer tiles scores under its own 2 GiB budget); the retired `DSV41_INDEXER_CHUNKED`/`SPARK_PREFILL_TP_SPLIT` backports are logged no-ops |
 | Loading | `DSV41_FAST_LOAD=1`, `DSV41_FAST_LOAD_TP_SLICE=auto`, `DSV41_AUTOTUNE_KEEP=1` | engine start 343 s → ~120 s; at EP1 each rank reads only its slice of every expert, into 256 MiB pinned slabs; MoE autotune cache kept across boots ([fast-load.md](fast-load.md)) |
 | Prefill hc | `DSV41_HC_FUSED=1` | the hyper-connection mix statistics of prefill chunks in one pass over K instead of 80 partial slices: ~1.46 → ~0.83 ms per call at 4096 rows, bit-identical (checked on the first live call) |
 | Prefill sequence parallel | `DSV41_PREFILL_SP=1`, `DSV41_PREFILL_SP_FP8=1` | at prefill chunks of >= 2048 rows the per-layer all-reduces become reduce-scatter + all-gather and the per-row work between them runs on each rank's quarter of the rows: prefill ~+20 % from 16k to 262k, decode untouched. `DSV41_PREFILL_SP_EXACT=1` keeps the all-reduce (bit-identical to the unsharded path) for ~+10 %; `_FP8` gathers the attention input as the MXFP8 bytes `wqkv_a` would compute itself (bit-identical per chunk size), +1.5-3 % |
 | L2 prefetch | `DSV41_L2_PREFETCH=1` | during each RoCE collective of a decode step a side-stream kernel prefetches the first 6 MB of the weights that follow into L2; data untouched; decode step -1 ms at c1 |
 | Correctness | `DSV41_FOLDED_FENCE=1` | closes the sglang#40919 D2H race on the folded verify path |
-| Serving | `--enable-cache-report`, `--sleep-on-idle`, `SGLANG_RUST_BUILD_MODE=never` | cached-token usage for clients, idle CPU 47 % → 14 %, avoids a `cargo` hang at start on the branch images |
+| Serving | `--enable-cache-report`, `--sleep-on-idle`, `SGLANG_RUST_BUILD_MODE=never` | cached-token usage for clients, idle CPU 47 % → 14 %; with the bundled extension below `never` imports it before any cargo probe, so rustup/cargo never run at serve time |
+| Image | rustbuild stage in `Dockerfile.canary-roce` | precompiles the sglang-mm PyO3 extension (`_multimodal.so`, features `python,parallel`) from the same sha-pinned sglang tree and bundles it into the image; the rustup shims are deleted so any unforeseen probe fails fast to PIL instead of a ~80 KB/s toolchain download (the 2026-10-09 boot stall). One-time download levers: `--build-arg RUSTUP_DIST_SERVER=… CRATES_MIRROR=sparse+…` |
 | Optional | `DSV41_ENGRAM_DRM_NODE=/dev/dri/card0` | one Engram layer's cache in the GB10 display reservation, ~1.8 GiB more headroom; needs a host change ([display-reserve.md](display-reserve.md)) |
 
 Each adapter is described in [tp4-adapters.md](tp4-adapters.md); the image layers on their own and the
@@ -107,8 +108,8 @@ Against the earlier TP4 example, all of it in `.env.tp4.example` plus gated adap
 | `MAX_RUNNING_REQUESTS` | 8 | **16** | CUDA graphs to bs 16 cost ~5.6 GB and add a c16 tier (+64 % aggregate over c8) |
 | `CHUNKED_PREFILL_SIZE` | 1024 | **4096** | safe only together with the indexer backport below |
 | `DSV41_SHARED_PAD_K` | – | **1** | pads the shared expert's K 576 → 640 so it stays on the b12x MXFP8 kernel: −0.9 ms/step, bit-identical |
-| `DSV41_INDEXER_CHUNKED` | – | **1** | sglang#39187: indexer logits scored in ≤ 2 GiB row chunks, tail-only candidate masks; a 262k cold prefill keeps ≥ 7 GiB free on the head |
-| `SPARK_PREFILL_TP_SPLIT` (canary images) | – | **1** | SG18: the dense prefill indexer's query rows are partitioned across the four ranks from 32k context |
+| `DSV41_INDEXER_CHUNKED` | – | **retired** | native upstream since the 620c76f2 pin (v41_indexer score budgeting); the backport adapters are deleted, the env var is a logged no-op |
+| `SPARK_PREFILL_TP_SPLIT` | – | **retired** | SG18 row split superseded by the same upstream rework; optional future re-port against `score_tiles` |
 | `DSV41_SERIAL_WEIGHT_LOAD` | 1 | commented, in the ring block | the switched line was measured with the default loader and the fast loader's own pacing |
 | `--enable-deepseek-v4-fp4-indexer` | off | on | no effect on V4.1 (no ratio-4 layers; its only indexer is fp4 by design); kept so the argument line matches the measured runs |
 
@@ -135,7 +136,7 @@ The boot log must show these lines, otherwise the line is not active:
 
 ```
 DSV41 shared-expert padding K: ... (5120, 576) -> (5120, 640)
-DSV41 indexer chunked (sglang#39187 backport) ARMED: ...
+DSV41 indexer chunking: native upstream (v41_indexer)   <- informational no-op if the env var is still set
 Initialized DSpark draft runner. ... gamma=5, verify_num_draft_tokens=6
 max_total_num_tokens=..., chunked_prefill_size=4096, ... max_running_requests=16
 RoCEnante ready: world=4 hcas=...

@@ -38,7 +38,9 @@ fetch() {
   read -r commit sum url <<<"$(row "$id")"
   [[ "$commit" =~ ^[0-9a-f]{40}$ && "$sum" =~ ^[0-9a-f]{64}$ ]] || die "$id: malformed manifest row"
   [[ "$url" == https://*"$commit"* ]] || die "$id: url does not name commit $commit"
-  curl -fsSL --retry 3 --retry-delay 5 -m 900 -o "$dest" "$url" || die "$id: download failed ($url)"
+  # -C -: resume partial transfers (curl 18 "Transferred a partial file" when the
+  # shared egress truncates); retries resume instead of restarting the download.
+  curl -fsSL --retry 8 --retry-delay 5 --retry-all-errors -C - -m 1800 -o "$dest" "$url" || die "$id: download failed ($url)"
   got=$(sha256 "$dest")
   [[ "$got" == "$sum" ]] || die "$id: sha256 $got, manifest says $sum"
   echo "  $id @ ${commit:0:12}  sha256 ok"
@@ -66,6 +68,10 @@ fetch_sglang_canary() {
   tar -xzf "$tmp/sglang.tgz" -C "$tmp/sglang" --strip-components=1
   [[ -d "$tmp/sglang/python/sglang" ]] || die "sglang-canary: unexpected archive layout"
   mv "$tmp/sglang/python" "$OUT/sglang-canary/python"
+  # proto/ and rust/ feed the Dockerfile rustbuild stage: the rust workspace
+  # references ../proto, and the built extension must match the pinned python tree.
+  [[ -d "$tmp/sglang/proto" ]] && mv "$tmp/sglang/proto" "$OUT/sglang-canary/proto"
+  [[ -d "$tmp/sglang/rust" ]] && mv "$tmp/sglang/rust" "$OUT/sglang-canary/rust"
   read -r commit _ <<<"$(row sglang-canary)"
   echo "$commit" > "$OUT/sglang-canary/REF"
 }

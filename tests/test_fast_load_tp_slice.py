@@ -12,6 +12,7 @@ counts the resident slice, and bounce buffers are bounded and released.
 """
 import concurrent.futures
 import json
+import inspect
 import os
 import shutil
 import sys
@@ -101,7 +102,12 @@ def engine_copy(lw, proj, moe_tp_rank, moe_tp_size, shape):
             quant_method=types.SimpleNamespace(load_up_proj_weight_first=True), use_padded_loading=False,
             use_presharded_weights=False, use_triton_kernels=False, quant_config=None)
         loader = FusedMoE._load_w2 if proj == "w2" else FusedMoE._load_w13
-        loader(fake, expert_data=ed, shard_dim=shard_dim, shard_id=proj, loaded_weight=lw, tp_rank=moe_tp_rank)
+        # Old pin takes tp_rank as a kwarg; >= 620c76f2 reads self.moe_tp_rank instead.
+        if "tp_rank" in inspect.signature(loader).parameters:
+            loader(fake, expert_data=ed, shard_dim=shard_dim, shard_id=proj, loaded_weight=lw, tp_rank=moe_tp_rank)
+        else:
+            fake.moe_tp_rank = moe_tp_rank
+            loader(fake, expert_data=ed, shard_dim=shard_dim, shard_id=proj, loaded_weight=lw)
     else:
         ls = lw.shape[shard_dim] // moe_tp_size
         src = lw.narrow(shard_dim, ls * moe_tp_rank, ls)
