@@ -1,0 +1,113 @@
+===== v4Model._forward_layers_hc_pre_from_prev  diff-lines=104
+<         prefetched_engram_kv = None
+<         if (
+<             self.engram_prefetch_stream is not None
+<             and forward_batch.forward_mode.is_decode()
+<             and hash_ids.shape[0] == 1
+<         ):
+===== v4DL.forward_hc_pre_from_prev  diff-lines=133
+>         combined_attn: Optional[torch.Tensor] = None,
+>         normalized_attn: Optional[torch.Tensor] = None,
+>         next_combined: Optional[list] = None,
+<         """Layer forward where attention consumes the previous FFN's pre-mix and
+<         the FFN consumes this attention's. Returns (hidden_states, ffn_pre)."""
+>         """Layer forward where each sublayer consumes the previous sublayer's
+===== v4DL._hc_combine  diff-lines=34
+>         combined: Optional[torch.Tensor] = None,
+<         """Collapse and normalize on the main stream, then fork tiny-row stats.
+< 
+<         Preserve the fused quantization and cross-layer precomputed inputs.
+<         Record the stats themselves immediately before their consuming join.
+<         """
+===== v4DL._hc_mix_stats  diff-lines=116
+<         """Record coefficient work just before its join, preserving compensation."""
+<         from sglang.kernels.ops.layernorm.mhc import hc_mix_stats, hc_mix_stats_sinkhorn
+< 
+<         x_flat = x.flatten(1)
+< 
+<         if (
+===== v4DL.hc_post  diff-lines=8
+>         if _is_hip:
+>             y = _hip.hc_post(self, x, residual, post, comb)
+>             if y is not None:
+>                 return y
+> 
+<                 get_platform().is_sm90
+===== v4DL._run_moe_ffn_dp_sync  diff-lines=53
+<         _use_cp = self.dsa_enable_prefill_cp and dsa_use_prefill_cp(forward_batch)
+>         _use_cp = is_cp_active(forward_batch)
+<         mlp_reduce_scatter = _use_cp or _use_reduce_scatterv or _use_reduce_scatter
+>         mlp_reduce_scatter = (
+>             _use_cp
+>             or _use_reduce_scatterv
+===== v4Model.forward  diff-lines=14
+>     @torch.no_grad()
+<         # DSpark aux capture needs the per-layer eager loop (TBO's overlapped
+<         # execution cannot expose per-layer completed hidden states), so skip
+<         # TBO when capturing -- a perf-only downgrade, not a correctness one.
+> 
+>         attn_backend = get_attn_backend()
+===== MQALayer.forward  diff-lines=138
+<             and not (self.dsa_enable_prefill_cp and dsa_use_prefill_cp(forward_batch))
+>             and not is_cp_active(forward_batch)
+<             _is_cuda
+<             and get_platform().is_blackwell
+>             ((_is_cuda and get_platform().is_blackwell) or _is_gfx95_supported)
+<                     and getattr(self.wq_b.quant_method, "mxfp8_dense_backend", None)
+===== v2MoE.forward  diff-lines=10
+<             forward_batch.num_token_non_padded if forward_batch is not None else None
+>             forward_batch.moe_num_token_non_padded()
+>             if forward_batch is not None
+>             else None
+>         use_vision_topk = self.gate.e_score_correction_bias_vl is not None
+>         if use_vision_topk and _is_hip:
+===== v2MoE.forward_normal  diff-lines=46
+>         use_vision_topk: bool = False,
+<             router_logits = self.gate(hidden_states, gemm_output_zero_allocator)
+>             if _is_hip:
+>                 router_logits, router_logits_partials = _hip_moe.forward_gate(
+>                     self,
+>                     hidden_states,
+===== Engram.forward  diff-lines=4
+<         return self.apply_gate(x, kv)
+>         return engram_gate(
+>             x, kv, self.q_weight, self.k_weight, self.eps, self.clamp_value
+>         )
+===== EngramEmbedding.forward  diff-lines=5
+<                 self.weight.data_ptr(),
+<                 self.scale.data_ptr(),
+>                 *self._table_ptrs(),
+<         if self.tp_size > 1 and get_attention_dp_size() > 1:
+>         if self.tp_size > 1 and get_parallel().attn_dp_size > 1:
+===== EngramEmbedding._lookup  diff-lines=4
+<         private host shards zero unowned rows and the all-reduce reassembles."""
+>         per-rank host shards zero unowned rows and the all-reduce reassembles."""
+<             values = tensor_model_parallel_all_reduce(values)
+>             values = self._reduce_owned_rows(values)
+===== hcn.hc_combine_norm  diff-lines=10
+<     assert (0 < m <= 8 or 4096 <= m <= 65536) and x.shape == (m, 20480)
+>     assert (0 < m <= 96 or 4096 <= m <= 65536) and x.shape == (m, 20480)
+<     # when only a few speculative tokens are being processed.
+<     _hc_combine_norm[(m, 4)](
+<         x, pre, weight, y, x.stride(0), pre.stride(0), eps, num_warps=8
+>     # when only a few speculative tokens are being processed; wider batches have
+===== RowParallelLinear.forward  diff-lines=8
+<                 get_tp_group(), disabled=not is_allocation_symmetric()
+>                 get_parallel().tp_group, disabled=not is_allocation_symmetric()
+<         # skip_all_reduce: explicit call-site override. Also honor
+<         # ForwardFlags (fuse_mlp_allreduce / mlp_reduce_scatter) published by
+<         # the decoder — callers should not thread those flags into modules.
+>         # skip_all_reduce: explicit call-site override. Also honor the
+===== MQA._forward_prepare  diff-lines=113
+<         use_cp = self.dsa_enable_prefill_cp and dsa_use_prefill_cp(forward_batch)
+>         use_cp = is_cp_active(forward_batch)
+>                 if use_cp:
+>                     # Store globally ordered KV after the CP gather.
+>                     swa_cache, swa_loc = None, None
+<             elif not (unified and fuse_verify):
+===== MQA._compute_kv_to_cache  diff-lines=5
+>         q_rope: Optional[torch.Tensor] = None,
+>         q_rope ([T, H, head_dim]) has its query heads roped by the same launch.
+>             assert q_rope is None
+>             # the query RoPE fused into this store is HIP only
+>             **({} if q_rope is None else {"q": q_rope}),
