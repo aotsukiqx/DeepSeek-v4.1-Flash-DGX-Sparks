@@ -87,22 +87,22 @@ DEBUG_DUMP = os.environ.get("DSV41_PREFILL_SP_DEBUG_DUMP", "").strip()
 # of inspect.getsource(inspect.unwrap(obj)). The loop below is a copy of the first; the others
 # are the call sites and kernel gates whose behaviour the exactness argument depends on.
 _EXPECTED = {
-    "v4.DeepseekV4Model._forward_layers_hc_pre_from_prev": "bc059d80f038e7f8",
-    "v4.DeepseekV4DecoderLayer.forward_hc_pre_from_prev": "49dc092d369923cf",
-    "v4.DeepseekV4DecoderLayer._hc_combine": "da5688eff1cf6fab",
-    "v4.DeepseekV4DecoderLayer._hc_mix_stats": "0a6edf4b45cd160b",
-    "v4.DeepseekV4DecoderLayer.hc_post": "8adb8062e8e66c31",
-    "v4.DeepseekV4DecoderLayer._run_moe_ffn_dp_sync": "065622659105f3fe",
-    "v4.DeepseekV4Model.forward": "3ab2a4745377b83b",
-    "v4.MQALayer.forward": "d21dfc6533e96207",
-    "v2.DeepseekV2MoE.forward": "d931dfa4d2acacd8",
-    "v2.DeepseekV2MoE.forward_normal": "9da361af16dafbec",
-    "engram.Engram.forward": "841b358015e044b8",
-    "engram.EngramEmbedding.forward": "b2f3ea98879b9437",
-    "engram.EngramEmbedding._lookup": "66a0f98a49fcd266",
-    "hcn.hc_combine_norm": "afa73fe49eb1d4b0",
+    "v4.DeepseekV4Model._forward_layers_hc_pre_from_prev": "1bfb7b472ce265f2",
+    "v4.DeepseekV4DecoderLayer.forward_hc_pre_from_prev": "49f22482d5370465",
+    "v4.DeepseekV4DecoderLayer._hc_combine": "4746993f7aa37013",
+    "v4.DeepseekV4DecoderLayer._hc_mix_stats": "ee25dd1e09fe4554",
+    "v4.DeepseekV4DecoderLayer.hc_post": "3ef49b3b503ebbc7",
+    "v4.DeepseekV4DecoderLayer._run_moe_ffn_dp_sync": "7ffa23906fe498d4",
+    "v4.DeepseekV4Model.forward": "8fe30b4e1874a893",
+    "v4.MQALayer.forward": "993dd09dd878ac95",
+    "v2.DeepseekV2MoE.forward": "99769bb4aba93a80",
+    "v2.DeepseekV2MoE.forward_normal": "2a38e198b48c314e",
+    "engram.Engram.forward": "19df65b564f45d15",
+    "engram.EngramEmbedding.forward": "1fb9f5fce3ef6044",
+    "engram.EngramEmbedding._lookup": "0a035cac21c4c305",
+    "hcn.hc_combine_norm": "f6dfc00796090fc3",
     "hcn._hc_combine_norm_prefill": "74f71ebf85b010ee",
-    "linear.RowParallelLinear.forward": "30be12725b32806b",
+    "linear.RowParallelLinear.forward": "d12039232b310169",
 }
 
 
@@ -110,9 +110,9 @@ _EXPECTED = {
 # Stage 2 additionally relies on these (checked at install when DSV41_PREFILL_SP_FP8=1): which
 # inputs attention's prefill path reads, and when it takes a pre-quantized input.
 _EXPECTED_FP8 = {
-    "v4.MQALayer._forward_prepare": "b3adfe1a07ee6127",
+    "v4.MQALayer._forward_prepare": "5875284fe389563d",
     "v4.MQALayer.accepts_mxfp8_swizzled_input": "5bb4fddfc5b329ca",
-    "v4.MQALayer._compute_kv_to_cache": "f52f600c4986428c",
+    "v4.MQALayer._compute_kv_to_cache": "678224fac8995d64",
     "v4.MQALayer._compute_kv_bf16": "00c4ab90b403d1e9",
 }
 _EXPECTED_TAIL = {
@@ -260,7 +260,7 @@ def _debug_begin(model, hidden_states, forward_batch, input_ids, p):
     if not forward_batch.forward_mode.is_extend_without_speculative():
         return None
     _DBG["chunks"] += 1
-    rank = p.rank if p is not None else _M["v4"].get_tp_group().rank_in_group
+    rank = p.rank if p is not None else _tp_group().rank_in_group
     d = _Dbg(_DBG["chunks"], hidden_states.shape[0], p, rank)
     if rank == 0:
         lens = getattr(forward_batch, "extend_seq_lens_cpu", None)
@@ -434,6 +434,33 @@ def _src_hash(obj):
     return hashlib.sha256(inspect.getsource(obj).encode()).hexdigest()[:16]
 
 
+
+
+def _engram_apply_gate(engram, x, kv):
+    """Engram.apply_gate was inlined into engram_gate(x, kv, q_weight, k_weight, eps,
+    clamp_value) at 620c76f2; resolve either shape."""
+    fn = getattr(engram, "apply_gate", None)
+    if fn is not None:
+        return fn(x, kv)
+    from sglang.srt.layers.engram import engram_gate
+    return engram_gate(x, kv, engram.q_weight, engram.k_weight, engram.eps,
+                       engram.clamp_value)
+
+def _tp_group():
+    """Engine API moved get_tp_group out of the model module (get_parallel() rework).
+    Resolution order: a test-injected _M["v4"].get_tp_group (the fake engine), then
+    the strict runtime_context getter, then a world-1 placeholder for single-proc
+    build-time contexts (makes _plan return None; eligible_rows never shards)."""
+    v4 = _M.get("v4")
+    inj = getattr(v4, "get_tp_group", None)
+    if inj is not None:
+        return inj()
+    from sglang.srt.distributed import get_tp_group
+    try:
+        return get_tp_group()
+    except RuntimeError:
+        import types
+        return types.SimpleNamespace(world_size=1, rank_in_group=0)
 def _resolve(name):
     mod, attr = name.split(".", 1)
     obj = _M[mod]
@@ -541,7 +568,7 @@ def _static_check(model, world):
     if FP8 and MODE == "shard" and world > 1:
         fp8_layers = [i for i in range(model.start_layer, last)
                       if fp8_eligible_attn(model.layers[i].self_attn)]
-        if _M["v4"].get_tp_group().rank_in_group == 0:
+        if _tp_group().rank_in_group == 0:
             print(f"DSV41_PREFILL_SP fp8 attention gather on layers {fp8_layers} "
                   f"({len(fp8_layers)} of {last - model.start_layer}; the rest gather bf16)", flush=True)
     _STATIC["checked"] = True
@@ -563,7 +590,7 @@ def _plan(model, hidden_states, forward_batch):
     if not (hidden_states.dim() == 3 and hidden_states.dtype == torch.bfloat16
             and (hidden_states.is_cuda or not _REQUIRE_CUDA) and hidden_states.is_contiguous()):
         return None
-    group = v4.get_tp_group()
+    group = _tp_group()
     rows, world = hidden_states.shape[0], group.world_size
     if not eligible_rows(rows, world):
         return None
@@ -619,7 +646,7 @@ def _sp_engram(p, engram, x, ids, forward_batch=None):
     if p.sharded:
         emb = _reduce_rows(p, emb) if partial else emb[p.lo:p.hi]
         kv = _wkv_shard(p, engram, emb)
-        out = engram.apply_gate(x, kv.contiguous())
+        out = _engram_apply_gate(engram, x, kv.contiguous())
         if _comparing():
             with _Inner():
                 xg = _gather_rows(p, x)
@@ -633,7 +660,7 @@ def _sp_engram(p, engram, x, ids, forward_batch=None):
     if partial:                 # P0: reduce-scatter + all-gather in place of the all-reduce
         emb = _reduce_out(p, emb)
     kv, _ = engram.wkv(emb.flatten(-2))
-    return engram.apply_gate(x, kv)
+    return _engram_apply_gate(engram, x, kv)
 
 
 # ------------------------------------------------------------------------------------------
@@ -973,11 +1000,13 @@ def hc_combine_norm_rows(x_flat, pre, weight, eps, logical_m):
 
 def _make_hc_combine(orig):
     def _hc_combine(self, x, apply_pre, norm, stats_stream=None, quantized=None, normalized=None,
-                    precomputed=None):
+                    precomputed=None, combined=None):
         p = _ctx.plan
         if (p is None or _ctx.inner or not p.sharded or x.shape[0] != p.shard
-                or precomputed is not None or normalized is not None or stats_stream is not None):
-            return orig(self, x, apply_pre, norm, stats_stream, quantized, normalized, precomputed)
+                or precomputed is not None or normalized is not None or combined is not None
+                or stats_stream is not None):
+            return orig(self, x, apply_pre, norm, stats_stream, quantized, normalized,
+                        precomputed, combined)
         y = _sp_combine(self, orig, p, x, apply_pre, norm, quantized)
         if _comparing():
             with _Inner():
