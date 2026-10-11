@@ -43,14 +43,18 @@ logger = logging.getLogger(__name__)
 ENABLED = os.environ.get("DSV41_HC_FUSED", "0").strip() not in ("0", "", "off", "false")
 MIN_ROWS = int(os.environ.get("DSV41_HC_FUSED_MIN_ROWS", "512"))
 
-# sha256[:16] of the stock sources this kernel reproduces (sglang dsv4.1 f80c91a4b), Triton 3.7.1
+# sha256[:16] of the stock sources this kernel reproduces (sglang main 620c76f2,
+# nightly-dev base with Triton 3.8.0). 620c76f2 vs f80c91a4b changes: docstrings
+# trimmed in both kernels, the wrapper gained a pure `if _is_hip:` detour (CUDA
+# path unchanged), `_num_slices_for` untouched - computation semantics identical,
+# but the exactness argument is re-audited per Triton lowering at first call.
 _EXPECTED = {
-    "_hc_mix_stats_partial_kernel": "869788ff0152119b",
-    "_hc_mix_reduce_sinkhorn_kernel": "be4af40b07b7396d",
-    "hc_mix_stats_sinkhorn": "a65077c012452c36",
+    "_hc_mix_stats_partial_kernel": "ca7ec34b9be7abd7",
+    "_hc_mix_reduce_sinkhorn_kernel": "8e9e13a25eb9885e",
+    "hc_mix_stats_sinkhorn": "8ed53dab69e71a3d",
     "_num_slices_for": "23e78e75dc040b8e",
 }
-_TRITON = "3.7.1"
+_TRITON = "3.8.0"
 _K, _MIX, _HC, _BLOCK_K, _NUM_SLICES = 20480, 24, 4, 64, 80
 
 _state = {"checked": False, "disabled": False}
