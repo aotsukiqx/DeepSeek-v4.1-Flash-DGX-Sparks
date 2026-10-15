@@ -150,6 +150,8 @@ def install(module):
     finish_cls = module.FINISH_MATCHED_STR
     original = cls.update_finish_state
 
+    truncate = os.environ.get('DSV41_LOOP_ABORT_TRUNCATE', '0').strip() not in ('0', '', 'off', 'false')
+
     def update_finish_state(self, new_accepted_len=1):
         original(self, new_accepted_len)
         if self.finished():
@@ -163,11 +165,19 @@ def install(module):
             return
         matched, finished_len = hit
         self.finished_reason = finish_cls(matched=matched)
-        self.finished_len = finished_len
+        if truncate:
+            self.finished_len = finished_len
+        # TRUNCATE=0 (default since 2026-10-15): a post-hoc finished_len set
+        # AFTER original() ran leaves the 620c76f2 pool accounting inconsistent
+        # (invariant checker: available+evictable > total) and hard-crashes the
+        # scheduler. The engine's own stop-string truncation sets finished_len
+        # inside its own flow and is fine; our wrapper's timing is not. Without
+        # truncation the request still terminates early (the main saving: 12.5k
+        # tokens instead of max_tokens) and the client sees the loop tail.
         logger.warning(
-            'DSV41 loop abort rid=%s matched=%s output_tokens=%s kept=%s',
-            getattr(self, 'rid', None), matched, len(ids), finished_len)
-
+            'DSV41 loop abort rid=%s matched=%s output_tokens=%s%s',
+            getattr(self, 'rid', None), matched, len(ids),
+            f' kept={finished_len}' if truncate else ' (no truncation)')
     cls.update_finish_state = update_finish_state
     logger.warning(
         'DSV41 loop abort: ngram=%s-%s x%s, identical=%s, line_repeats=%s '

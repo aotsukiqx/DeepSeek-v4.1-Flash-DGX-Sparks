@@ -154,10 +154,40 @@ def test_install_finishes_looping_req():
         req.update_finish_state(1)
         return req
 
-    req = _with_env({'DSV41_LOOP_ABORT': '1'}, run)
+    req = _with_env({'DSV41_LOOP_ABORT': '1', 'DSV41_LOOP_ABORT_TRUNCATE': '1'}, run)
     assert req.finished()
     assert req.finished_reason.matched == MATCHED_STOP
     assert req.finished_len == 32
+
+    # Default since 2026-10-15: no truncation (post-hoc finished_len trips the
+    # 620c76f2 pool invariant checker); finish early, keep the full output.
+    class FakeReq2:
+        def __init__(self):
+            self.output_ids = list(range(40, 72)) * 4
+            self.finished_reason = None
+            self.finished_len = None
+            self.rid = 't'
+            self.tokenizer = None
+
+        def finished(self):
+            return self.finished_reason is not None
+
+        def update_finish_state(self, new_accepted_len=1):
+            return None
+
+    class FakeMod2:
+        Req = FakeReq2
+        FINISH_MATCHED_STR = FakeFinish
+
+    def run_no_truncate():
+        install(FakeMod2)
+        req = FakeReq2()
+        req.update_finish_state(1)
+        return req
+    req2 = _with_env({'DSV41_LOOP_ABORT': '1', 'DSV41_LOOP_ABORT_TRUNCATE': '0'}, run_no_truncate)
+    assert req2.finished()
+    assert req2.finished_reason.matched == MATCHED_STOP
+    assert req2.finished_len is None
 
 
 def test_install_respects_already_finished():
