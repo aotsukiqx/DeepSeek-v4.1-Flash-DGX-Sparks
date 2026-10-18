@@ -84,10 +84,20 @@ def repeated_line_suffix(text, repeats, min_chars):
 
 
 def detect_repetition(ids, text=None, cfg=None):
-    """Return ``(matched, finished_len)`` or ``None``.
+    """Return ``(matched, finished_len)`` or ``None`` (stable API for tests)."""
+    hit = detect_repetition_detail(ids, text=text, cfg=cfg)
+    if hit is None:
+        return None
+    return MATCHED_STOP, hit[1]
+
+
+def detect_repetition_detail(ids, text=None, cfg=None):
+    """Return ``(art, finished_len, period)`` or ``None``; art is ngram/identical/line.
 
     ``finished_len`` is the prefix to keep: one copy of a cycling n-gram, or
     one token of an identical run. Line hits do not trim (no token boundary).
+    ``period`` is the cycle length for ngram hits (1 for identical, 0 for line) —
+    ported from MiaAI-Lab bdf657c for richer incident logs only.
     """
     if cfg is None:
         cfg = load_config()
@@ -105,7 +115,7 @@ def detect_repetition(ids, text=None, cfg=None):
             run += 1
             i -= 1
         if run >= cfg.identical:
-            return MATCHED_STOP, n - run + 1
+            return 'identical', n - run + 1, 1
 
     if cfg.ngram > 0 and cfg.repeats > 0:
         max_p = min(cfg.ngram_max, n // cfg.repeats)
@@ -120,10 +130,10 @@ def detect_repetition(ids, text=None, cfg=None):
                     break
             if hit:
                 extra = (cfg.repeats - 1) * period
-                return MATCHED_STOP, n - extra
+                return 'ngram', n - extra, period
 
     if text is not None and repeated_line_suffix(text, cfg.line_repeats, cfg.line_min):
-        return MATCHED_STOP, n
+        return 'line', n, 0
     return None
 
 
@@ -160,10 +170,11 @@ def install(module):
         text = None
         if cfg.line_repeats > 0:
             text = _decode_tail(self, ids)
-        hit = detect_repetition(ids, text=text, cfg=cfg)
+        hit = detect_repetition_detail(ids, text=text, cfg=cfg)
         if hit is None:
             return
-        matched, finished_len = hit
+        art, finished_len, period = hit
+        matched = MATCHED_STOP
         self.finished_reason = finish_cls(matched=matched)
         if truncate:
             self.finished_len = finished_len
@@ -174,9 +185,11 @@ def install(module):
         # inside its own flow and is fine; our wrapper's timing is not. Without
         # truncation the request still terminates early (the main saving: 12.5k
         # tokens instead of max_tokens) and the client sees the loop tail.
+        # (named-exit FINISH_ABORT from upstream bdf657c deliberately NOT ported:
+        # it re-adds the unconditional post-hoc finished_len.)
         logger.warning(
-            'DSV41 loop abort rid=%s matched=%s output_tokens=%s%s',
-            getattr(self, 'rid', None), matched, len(ids),
+            'DSV41 loop abort rid=%s matched=%s art=%s period=%s output_tokens=%s%s',
+            getattr(self, 'rid', None), matched, art, period, len(ids),
             f' kept={finished_len}' if truncate else ' (no truncation)')
     cls.update_finish_state = update_finish_state
     logger.warning(

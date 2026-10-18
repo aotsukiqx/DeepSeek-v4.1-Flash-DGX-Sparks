@@ -273,6 +273,38 @@ def with_fp8_gemm_backend(tokens):
           '(required by the MXFP8 route)', flush=True)
     return ['--fp8-gemm-backend', 'flashinfer_cutlass', *tokens]
 
+def sps_table_args(table, env=None):
+    """Flags for a profiled DSpark SPS cost table, or [] to stay on verify-all.
+
+    A table turns on compact ragged verify, which makes the verify batch
+    non-rectangular. V4.1-Flash always has Engram layers, and their hasher
+    (srt/layers/engram.py, target-verify) asserts one equal block per request, so
+    the engine dies during CUDA-graph capture ("engram target-verify expects one
+    equal block per request, got 42 tokens for 8 requests of 6"). The table is
+    therefore ignored, with a message, unless DSPARK_SPS_ALLOW_ENGRAM=1 says the
+    engine has been fixed. Ported from MiaAI-Lab 6eb9a7a (issues #6/#12,
+    upstream sgl-project/sglang#39173).
+    """
+    env = os.environ if env is None else env
+    if not table:
+        return []
+    if not Path(table).is_file():
+        print(f'DSPARK_SPS_TABLE={table} not found; '
+              'staying on the verify-all schedule', flush=True)
+        return []
+    if env.get('DSPARK_SPS_ALLOW_ENGRAM', '0') != '1':
+        print(f'DSPARK_SPS_TABLE={table} ignored: compact ragged verify is '
+              'incompatible with the Engram layers of this model (the engine '
+              'asserts at CUDA-graph capture). Staying on the verify-all '
+              'schedule. Set DSPARK_SPS_ALLOW_ENGRAM=1 to override once '
+              'sgl-project/sglang#39173 is fixed.', flush=True)
+        return []
+    # Fills each step's verify window up to the cuda-graph tier the forward is
+    # padded to anyway: free verification at the same cost.
+    return ['--speculative-dspark-sps-table-path', table,
+            '--speculative-dspark-align-verify-tokens-to-graph-tier']
+
+
 def serve():
     mode = os.environ.get('OFFLOAD_MODE', 'nvme')
     assert mode in ('nvme', 'ram'), 'OFFLOAD_MODE must be nvme or ram'
@@ -329,16 +361,10 @@ def serve():
         # from, and it needs a profiled SPS cost table: without one the planner
         # falls back to verify-all and the whole thing is a no-op. Build one with
         #   python -m sglang.benchmark.dspark_sps_profiler
-        # against a running server, then point DSPARK_SPS_TABLE at it.
-        table = os.environ.get('DSPARK_SPS_TABLE', '').strip()
-        if table and Path(table).is_file():
-            args += ['--speculative-dspark-sps-table-path', table]
-            # Fills each step's verify window up to the cuda-graph tier the
-            # forward is padded to anyway: free verification at the same cost.
-            args += ['--speculative-dspark-align-verify-tokens-to-graph-tier']
-        elif table:
-            print(f'DSPARK_SPS_TABLE={table} not found; '
-                  'staying on the verify-all schedule', flush=True)
+        # against a running server, then point DSPARK_SPS_TABLE at it — but see
+        # sps_table_args(): on this Engram model a table is IGNORED until the
+        # upstream assert is fixed (machine-enforced prohibition).
+        args += sps_table_args(os.environ.get('DSPARK_SPS_TABLE', '').strip())
         sts = os.environ.get('DSPARK_STS_TABLE', '').strip()
         if sts and Path(sts).is_file():
             args += ['--speculative-dspark-confidence-sts-path', sts]

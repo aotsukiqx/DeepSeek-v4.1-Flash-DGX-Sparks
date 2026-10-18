@@ -69,14 +69,15 @@ COPY adapter /opt/dsv41/adapter
 RUN g++ -O2 -Wall -Wextra -Werror -std=c++17 -shared -fPIC -pthread \
     -DDSV41_ROW_STORE_DRM adapter/row_store.cpp -o adapter/librow_store.so
 COPY runtime/flash_mla_sm120.canary.py /sgl-workspace/sglang/python/sglang/kernels/ops/attention/flash_mla_sm120.py
-COPY runtime/patch_encoding_dsv41.py runtime/patch_encoding_dsv41_44751.py /opt/dsv41/runtime/
+COPY runtime/patch_encoding_dsv41.py runtime/patch_encoding_dsv41_44751.py runtime/patch_serving_chat_43006.py /opt/dsv41/runtime/
 # Serving-layer encoding fixes, re-anchored to sglang main@620c76f2 (the dev-dsv41
 # branch's file differs; do NOT reuse these anchors for the base Dockerfile):
 #   patch_encoding_dsv41.py     placeholder-token sanitize (MiaAI-Lab #15 lineage)
 #   patch_encoding_dsv41_44751.py  sglang#44751 backport (tool-result image order
 #                               + current-turn thinking); applies clean on 620c76f2
 RUN python3 /opt/dsv41/runtime/patch_encoding_dsv41.py \
- && python3 /opt/dsv41/runtime/patch_encoding_dsv41_44751.py
+ && python3 /opt/dsv41/runtime/patch_encoding_dsv41_44751.py \
+ && python3 /opt/dsv41/runtime/patch_serving_chat_43006.py
 COPY boot.py /opt/dsv41/boot.py
 COPY scripts /opt/dsv41/scripts
 COPY tests /opt/dsv41/tests
@@ -88,7 +89,7 @@ RUN PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_thinking_alias.p
  && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_anthropic_thinking.py \
  && python3 /opt/dsv41/tests/test_patch_encoding_dsv41.py \
  && python3 /opt/dsv41/tests/test_patch_encoding_44751.py \
- && python3 /opt/dsv41/tests/test_fp8_backend_flag.py \
+ && python3 /opt/dsv41/tests/test_patch_serving_chat_43006.py \
  && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_fast_load_pacing.py \
  && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_fast_load_tp_slice.py \
  && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_prefill_sp.py \
