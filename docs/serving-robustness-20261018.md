@@ -53,3 +53,31 @@ must keep `finished_len` untouched.
 - Code: cluster `git reset --hard pre-serving-robust` (+ Mac reset to 21d7682).
 - Image: 4× `docker tag dsv41-4x-spark:canary-roce-pre-serving dsv41-4x-spark:canary-roce` + serve.
 - Env: `.env.tp4.pre-serving` (no env change was needed this round).
+
+## Window bundle #2 (2026-10-18 下午, commits 11d2461..c374b80)
+
+Diagnostics first (live log, 744 prefills/1h): NO giant fresh prefills in production
+traffic; the only 600k revisits (bench probes) hit cached ratio 1.00; pool pressure
+max full 0.11 / swa 0.09. Conclusions: **--swa-full-tokens-ratio REJECTED** (solves a
+nonexistent residency problem, would only shrink the 600k line's headroom);
+**cache_control breakpoint drift: no symptom** (watch only).
+
+Merged: sglang#43006 backport (tool_choice=none honored; git-apply clean, script
+byte-identical to upstream patch), boot.py sps_table_args SPS-Engram guard
+(DSPARK_SPS_ALLOW_ENGRAM=1 escape hatch; exercised live: "not found; staying on
+verify-all"), loop_abort detect_repetition_detail art/period logging (finished_len
+semantics untouched, FINISH_ABORT still not ported), 10 upstream ops cherry-picks
+ALL clean (remote.py --env-file, pack re-share set, per-host SSH users, shared_pad_k
+TP_SIZE generalization + tests), .env.tp4.example reconciled (6700000 pin value, SPS
+warning, swa note with rejection evidence), fast-load fragmentation runbook section.
+
+Verification: full static suite green; 4/4 nodes content-verified; boot gates green
+(shared-pad ARMED via TP_SIZE path); SMOKE 4/4 + new tool_choice=none wire probe PASS
+(plain answer, no tool_calls); qeval paired vs morning json: **BROKE=0, 2 fixed**
+(json_escape/json_count, the two chronic both-fail primaries); 600k: cold 3852.8
+tok/s, decode net-of-TTFT 47.2/42.2 — at/above band, parity reported (no mechanism,
+no claim). Rollback: tag `pre-bundle2` (=d351896) + 4× `canary-roce-pre-bundle2` +
+`.env.tp4.pre-bundle2`.
+
+Remaining open: #42159 Engram eager-extend A/B (needs prefill_sp hash re-gate — the
+only 600k-prefill-axis backport left); sglang pin migration unchanged DEFERRED.
