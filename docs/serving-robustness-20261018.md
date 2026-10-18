@@ -1,0 +1,55 @@
+# Serving-layer robustness merge — 2026-10-18 (commit a50dbc0)
+
+Merge of the MiaAI-Lab 2026-10-17 robustness wave + sglang#44751 backport onto our
+620c76f2 production line, verified end-to-end on the 600k-optimal config
+(MRR=32, chunk 4096, MAX_TOTAL_TOKENS=6700000 pin — unchanged).
+
+## What landed
+
+| Change | Source | Notes |
+|---|---|---|
+| `adapter/history_repair.py` | MiaAI-Lab bdf657c (PR #55, half) | broken assistant tool-call arguments in history → `{"_unparseable_arguments": raw}` instead of HTTP 400; agent death-loop closed |
+| `encoding_compat.install_anthropic_protocol` | 45dde44 (PR #47) | `/v1/messages` accepts `thinking: {"type":"enabled"}` without `budget_tokens` (stock 620c76f2 400s) |
+| `runtime/patch_encoding_dsv41.py` | 76f43c9+bc2d3ce (#15), anchor 1 re-derived | placeholder `[image]` token in text sanitizes instead of raising (was a self-sustaining /v1/messages 500 loop; 111/145 requests failed upstream) |
+| `runtime/patch_encoding_dsv41_44751.py` | sglang#44751 (a038a0dc) backport | tool-result image order + current-turn thinking preserved; git-apply clean on 620c76f2, re-expressed as count==1 anchors |
+| `boot.py with_fp8_gemm_backend` | 7cc2cc7 (#31) | EXTRA_SGLANG_ARGS can no longer silently drop `--fp8-gemm-backend` (-25..-45% decode if lost) |
+| `--enable-metrics` in `.env.tp4.example` | 786859e | example aligned with the deployed `.env.tp4` (already had it) |
+
+**Deliberately NOT taken**: upstream `adapter/loop_abort.py` (bdf657c). Their merged
+version sets `finished_len` unconditionally post-hoc after `original()` — the exact
+pattern that hard-crashed our scheduler on 10-15 (eff1094, invariant checker
+available+evictable>total, 49 min down). Their dsv4.1-branch base (f80c91a4) likely
+lacks that checker; ours does not. Our 21d7682 no-truncate loop_abort stays. Their
+`detect_repetition_detail` richer logging (art/period) is a possible future port that
+must keep `finished_len` untouched.
+
+**Deferred** (ops hardening, no serving impact, next ff-sync window): remote.py
+`--env-file` pre-scan (6df9f4b), pack re-share (1be7cb4 lineage), per-host SSH users
+(dd02792/5685a5d), shared_pad_k TP_SIZE generalization (e3b4997 — TP4 output identical).
+
+## Verification (2026-10-18, spark-eb1a fleet, image 979fcd336dbb on head)
+
+- Static: 5 new tests PASS locally and in-image (`test_history_repair`,
+  `test_anthropic_thinking`, `test_patch_encoding_dsv41`, `test_patch_encoding_44751`,
+  `test_fp8_backend_flag`); launcher_build unchanged vs HEAD (2 pre-existing failures,
+  present before this merge).
+- Anchors proven against the image's built (post-rocenante) `encoding_dsv41.py`;
+  patch scripts are the build's drift probes (exit non-zero on anchor mismatch).
+- Boot gates: all lines green (shared-pad 576→640 ARMED, indexer native no-op,
+  gamma=5/verify 6, max_total_num_tokens=5613824 chunk 4096, RoCEnante world=4,
+  b12x_next armed EP1, hc_fused bit-identical, sm120_candidates + mm_tokenizer_compat
+  ARMED, history-repair + anthropic-thinking install lines present).
+- Wire smokes 4/4: thinking-no-budget 200 (blocks thinking+text), placeholder-in-text
+  200, broken-args history 200 **with the model retrying corrected arguments**,
+  vision-in-tool-result 200 with correct red-left/blue-right order.
+- qeval paired (worker, c1, live traffic): PRIMARY 53/55 → 53/55, BROKE=0, p=1.000;
+  jsons kept at spark-a89f:~/qeval-{before,after}-serving-20261018.json.
+- 600k probes (45s-gap gated): cold prefill 3584.9 tok/s (10-17 same-stack baseline
+  3645, single-run band), decode net-of-TTFT 41.4/42.5 tok/s (baseline 40.3) — parity,
+  as expected for serving-layer-only changes. `/metrics` 200 with 428 series.
+
+## Rollback
+
+- Code: cluster `git reset --hard pre-serving-robust` (+ Mac reset to 21d7682).
+- Image: 4× `docker tag dsv41-4x-spark:canary-roce-pre-serving dsv41-4x-spark:canary-roce` + serve.
+- Env: `.env.tp4.pre-serving` (no env change was needed this round).
