@@ -81,3 +81,27 @@ no claim). Rollback: tag `pre-bundle2` (=d351896) + 4× `canary-roce-pre-bundle2
 
 Remaining open: #42159 Engram eager-extend A/B (needs prefill_sp hash re-gate — the
 only 600k-prefill-axis backport left); sglang pin migration unchanged DEFERRED.
+
+## #42159 opening CLOSED (2026-10-18, py-spy evidence)
+
+Zero-cost check before any A/B: traffic-gated cold-600k with py-spy (100 Hz, speedscope)
+on the head scheduler_TP0 thread; capture covers the full prefill (the profiler itself
+slowed it ~5x — shares are unaffected). Result over 142.3 s / 14,234 samples:
+
+- ANY engram frame in stack: 0.9 s = **0.62%** of thread wall; leaf self-time 0.25%.
+- sglang#42159's direct target (`_launch_hash_kernel`, engram_hash.py): **0.02 s = 0.014%**.
+- Remaining engram time is mostly OUR adapters (engram_prefetch 0.09 s,
+  _engram_apply_gate 0.01 s), which the upstream patch does not touch.
+
+Perfect elimination of all Engram eager-extend prep buys <1% wall — an order of magnitude
+below the >=2% adoption bar; the 10-12 suspicion that prefill_sp/engram_prefetch already
+restructured this path is confirmed. **Decision: do not backport #42159.**
+
+Recorded side observation (no action): host-side prefill is dominated by CUTLASS-DSL
+argument marshaling (~10%: _adapt_and_get_c_pointers 8.1 s + get_rectified_args 5.9 s),
+torch empty_cache 4%, deep_gemm fp8_fp4_mqa_logits 2.9%, triton driver launch 2.7% —
+all pin-level levers, to fold into the eventual pin-migration evaluation.
+
+Ops note: py-spy record -d 185 did NOT self-terminate (ran ~17 min, ~5x prefill slowdown,
+production shared the window) — always `kill -INT` the in-container py-spy pid after the
+window and verify cadence recovery; the SIGINT flushes the report cleanly.
