@@ -27,12 +27,13 @@ COPY adapter /opt/dsv41/adapter
 RUN g++ -O2 -Wall -Wextra -Werror -std=c++17 -shared -fPIC -pthread \
     -DDSV41_ROW_STORE_DRM adapter/row_store.cpp -o adapter/librow_store.so
 COPY runtime/flash_mla_sm120.canary.py /sgl-workspace/sglang/python/sglang/kernels/ops/attention/flash_mla_sm120.py
-COPY runtime/patch_encoding_dsv41.py runtime/patch_encoding_dsv41_44751.py runtime/patch_serving_chat_43006.py /opt/dsv41/runtime/
+COPY runtime/patch_encoding_dsv41.py runtime/patch_encoding_dsv41_44751.py runtime/patch_serving_chat_43006.py runtime/patch_response_parser_43941.py /opt/dsv41/runtime/
 # Serving-layer encoding fixes, re-anchored to sglang main@620c76f2 (the dev-dsv41
 # branch's file differs; do NOT reuse these anchors for the base Dockerfile).
 RUN python3 /opt/dsv41/runtime/patch_encoding_dsv41.py \
  && python3 /opt/dsv41/runtime/patch_encoding_dsv41_44751.py \
- && python3 /opt/dsv41/runtime/patch_serving_chat_43006.py
+ && python3 /opt/dsv41/runtime/patch_serving_chat_43006.py \
+ && python3 /opt/dsv41/runtime/patch_response_parser_43941.py
 COPY boot.py /opt/dsv41/boot.py
 COPY scripts /opt/dsv41/scripts
 COPY tests /opt/dsv41/tests
@@ -45,6 +46,7 @@ RUN PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_thinking_alias.p
  && python3 /opt/dsv41/tests/test_patch_encoding_dsv41.py \
  && python3 /opt/dsv41/tests/test_patch_encoding_44751.py \
  && python3 /opt/dsv41/tests/test_patch_serving_chat_43006.py \
+ && python3 /opt/dsv41/tests/test_patch_response_parser_43941.py \
  && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_fast_load_pacing.py \
  && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_wo_a_w8.py \
  && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_draft_tau.py \
