@@ -1,0 +1,78 @@
+# MIGRATION ARM IMAGE (experimental): sglang main @ 7d996300 (2026-10-24) on the
+# proven nightly-dev-cu13-20261011 base + 3 pip wheel bumps. Same shape as
+# Dockerfile.canary-roce but: manifest row `sglang-mig`; the four 620c76f2-era
+# serving patch scripts are DROPPED (encoding_dsv41.py is gone upstream — the
+# deepseek-recipe migration replaced it; #43006 and #43941 are absorbed
+# upstream; the placeholder fix is now the placeholder_sanitize ADAPTER; #44751
+# semantics move with the recipe and are wire-probed at boot instead).
+# Expected adapter posture on this line (serve-time env decides): prefill_sp /
+# hc_fused / block_verify / verify_cap / autotune_keep / folded_fence OFF
+# (drift guards raise); b12x_next is the boot-or-die question.
+FROM lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0@sha256:4793eb4075b33cec16c8de140c0e6eeaa439a1986eaac1085f270e52bd50e52d AS fetch
+COPY runtime/sources.manifest runtime/sglang-rocenante.patch runtime/flash_mla_sm120.canary.py /src/runtime/
+COPY scripts/fetch_runtime.sh scripts/b12x_next-compact-n64-m64.patch scripts/roce_ring-sparkring-f16b5f4.patch /src/scripts/
+RUN bash /src/scripts/fetch_runtime.sh /fetched sglang-mig b12x b12x-next
+
+FROM lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0@sha256:4793eb4075b33cec16c8de140c0e6eeaa439a1986eaac1085f270e52bd50e52d AS rustbuild
+ARG RUSTUP_DIST_SERVER=https://rsproxy.cn
+ARG CRATES_MIRROR=sparse+https://rsproxy.cn/index/
+COPY --from=fetch /fetched/sglang-mig/rust /build/rust
+COPY --from=fetch /fetched/sglang-mig/proto /build/proto
+RUN cd /build/rust \
+ && if [ -n "$RUSTUP_DIST_SERVER" ]; then export RUSTUP_DIST_SERVER="$RUSTUP_DIST_SERVER" \
+      RUSTUP_UPDATE_ROOT="$RUSTUP_DIST_SERVER/rustup"; fi \
+ && rustup toolchain install --profile minimal 1.92 \
+ && if [ -n "$CRATES_MIRROR" ]; then \
+      printf '[source.crates-io]\nreplace-with = "mirror"\n\n[source.mirror]\nregistry = "%s"\n' \
+        "$CRATES_MIRROR" >> /root/.cargo/config.toml; fi \
+ && CARGO_TARGET_DIR=/rusttarget PYO3_PYTHON=/opt/sglang/bin/python3 \
+    cargo +1.92 build --release --locked --package sglang-mm --features python,parallel \
+ && cp /rusttarget/release/libsglang_mm_core.so /build/_multimodal.so
+FROM lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0@sha256:4793eb4075b33cec16c8de140c0e6eeaa439a1986eaac1085f270e52bd50e52d
+# sglang 7d996300 pyproject stack: same torch 2.14.1 generation; bump the three
+# wheels only. Mirror arg for pypi reachability from this fleet.
+ARG PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
+RUN rm -rf /sgl-workspace/sglang/python
+COPY --from=fetch /fetched/sglang-mig/python /sgl-workspace/sglang/python
+RUN pip install --no-cache-dir -i ${PIP_INDEX} \
+      "flashinfer_python[cu13]==0.7.2" "sgl-deep-gemm==0.2.3.post2" "sglang-kernel==0.4.10"
+RUN python3 -c "import sglang, sglang.srt.models.deepseek_v4, sglang.srt.layers.attention.deepseek_v4_backend, sglang.srt.models.deepseek_v4_dspark; print('import ok')"
+# RoCEnante overlay (applies clean with -F3 on 7d996300; probes verified 2026-10-24)
+COPY runtime/sglang-rocenante.patch runtime/roce_tp4_adapt.py /tmp/
+RUN cd /sgl-workspace/sglang && patch -p1 -F3 < /tmp/sglang-rocenante.patch && python3 /tmp/roce_tp4_adapt.py && rm /tmp/sglang-rocenante.patch /tmp/roce_tp4_adapt.py
+COPY --from=rustbuild /build/_multimodal.so /sgl-workspace/sglang/python/sglang/srt/rust_extensions/_multimodal.so
+RUN python3 -c "import sglang.srt.rust_extensions._multimodal as m; assert hasattr(m, 'dsv41'); print('bundled rust mm ok, inkling:', hasattr(m, 'inkling'))" \
+ && rm -rf /root/.cargo/bin /root/.rustup
+COPY --from=fetch /fetched/b12x/b12x /opt/b12x/b12x
+COPY --from=fetch /fetched/b12x/LICENSE /opt/b12x/LICENSE
+RUN PYTHONPATH=/opt/b12x python3 -c "from b12x.comm import roce; print('roce', roce.API_VERSION)"
+COPY --from=fetch /fetched/b12x_next/b12x_next /opt/b12x_next/b12x_next
+COPY --from=fetch /fetched/b12x_next/LICENSE /opt/b12x_next/LICENSE
+RUN PYTHONPATH=/opt/b12x:/opt/b12x_next python3 -c "import b12x.comm.roce, b12x_next.moe.fused_moe; print('b12x_next', open('/opt/b12x_next/b12x_next/SOURCE_COMMIT').read().strip())"
+WORKDIR /opt/dsv41
+COPY adapter /opt/dsv41/adapter
+RUN g++ -O2 -Wall -Wextra -Werror -std=c++17 -shared -fPIC -pthread \
+    -DDSV41_ROW_STORE_DRM adapter/row_store.cpp -o adapter/librow_store.so
+COPY runtime/flash_mla_sm120.canary.py /sgl-workspace/sglang/python/sglang/kernels/ops/attention/flash_mla_sm120.py
+COPY boot.py /opt/dsv41/boot.py
+COPY scripts /opt/dsv41/scripts
+COPY tests /opt/dsv41/tests
+COPY benchmarks /opt/dsv41/benchmarks
+RUN PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_thinking_alias.py \
+ && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_loop_abort.py \
+ && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_history_repair.py \
+ && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_anthropic_thinking.py \
+ && PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_placeholder_sanitize.py \
+ && python3 /opt/dsv41/tests/test_fp8_backend_flag.py \
+ && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_fast_load_tp_slice.py \
+ && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_fast_load_slab.py \
+ && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_moe_b12x_next_cpu.py \
+ && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_roce_ring.py
+ENV PYTHONPATH=/opt/dsv41/adapter:/opt/b12x:/opt/b12x_next \
+    MODEL_PATH=/models/DeepSeek-V4.1-Flash \
+    STATE_PATH=/state OFFLOAD_MODE=nvme DSV41_CACHE_GIB=16
+EXPOSE 8888
+HEALTHCHECK --interval=30s --timeout=30s --start-period=30m --retries=3 \
+    CMD ["python3", "-S", "/opt/dsv41/boot.py", "health"]
+ENTRYPOINT ["python3", "-u", "/opt/dsv41/boot.py"]
+CMD ["run"]

@@ -16,6 +16,12 @@
 # python/+rust trees; Apache-2.0.
 sglang-canary  620c76f25db14f1599aa7c7ccb141a91e4944b63  eb86c5481c476ce0cc3f08f7de922069168e626bb4f244481a73eff5c20d26ca  https://github.com/sgl-project/sglang/archive/620c76f25db14f1599aa7c7ccb141a91e4944b63.tar.gz
 
+# MIGRATION ARM (experimental, Dockerfile.canary-mig): SGLang main @ 7d996300
+# (2026-10-24, settled point after the MegaGate merge+revert churn; carries the
+# DSV4.1 host-overhead wave + prefill-graph maturation + the deepseek-recipe
+# migration that replaces encoding_dsv41). python/+rust trees; Apache-2.0.
+sglang-mig  7d996300b98e3f74a7e79adefbac4d95de0da508  5d648297c35a869ee9b27c961d6ce6ed1b8f8b41c6cc605d2d7e9222967d77ed  https://github.com/sgl-project/sglang/archive/7d996300b98e3f74a7e79adefbac4d95de0da508.tar.gz
+
 # b12x as frozen for rhys101's SG17 RoCEnante overlay (b12x.comm.roce); published as a source
 # archive in rhys101/DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8, provenance in
 # runtime/b12x/source-provenance.json. Apache-2.0 (local-inference-lab/b12x).
