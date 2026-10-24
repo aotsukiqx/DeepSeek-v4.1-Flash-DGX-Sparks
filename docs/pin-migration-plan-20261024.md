@@ -105,3 +105,25 @@ hc_fused re-ports with bit-identity ③serving re-derivation + sitecustomize ④
 gates: 24-test, boot, qeval paired, 600k A/B, then the prefill-graphs experiment
 arm). NOT a spontaneous flip. Everything above is zero-production-cost evidence;
 no cluster state was touched beyond /tmp staging.
+
+## Arm-1 boot campaign (2026-10-24 夜) — production incident + current state
+
+Boot iterations on the mig arm (all with prefill_sp/hc_fused OFF, then b12x_next OFF):
+1. b12x_next REFUSED (FusedMoE._load_w13 drift) → stock MoE path.
+2. stock MXFP4 MoE REJECTS TP4/EP1 shapes (intermediate 576 not multiple of 128 — the
+   original reason b12x_next+pad existed) → **EP_SIZE=2 works** (1152 = 9×128).
+3. engram init TypeError (column_bounds) → fixed (kwargs-tolerant, bitwise-equivalent
+   split per upstream shard_range guarantee).
+4. Full 48-shard load COMPLETED (~31 min cold EP2 dequant; healthcheck start-period
+   raised to 60m) → crashed at finish_load: upstream reads `self.peer` (sgl#46180
+   peer-shard reads) — FIXED in repo (self.peer=None, 7516e87), NOT yet booted.
+**Production incident**: the boot campaign shared the production fleet; after the
+serve6 crash the line was down until rolled back (~21:27 restored, bundle#3, SMOKE
+PASS, spec line verified). LESSON (now policy): mig boot iterations need a scheduled
+maintenance window or a dedicated bench slot — each failed boot is a full production
+outage of its duration; remaining iterations must be batched behind the known fix.
+
+Next mig window checklist: rebuild with 7516e87 → serve6' (expect first FULL boot) →
+boot gates → smokes → qeval → 600k A/B vs bundle3 line. Known posture: EP2 + stock
+MoE + prefill_sp/hc_fused/b12x_next OFF; autotune/block_verify/verify_cap/folded_fence
+fate revealed at boot; wo_a_w8/fast_load/engram_prefetch/shared_pad_k armed.
