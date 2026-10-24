@@ -127,3 +127,21 @@ Next mig window checklist: rebuild with 7516e87 → serve6' (expect first FULL b
 boot gates → smokes → qeval → 600k A/B vs bundle3 line. Known posture: EP2 + stock
 MoE + prefill_sp/hc_fused/b12x_next OFF; autotune/block_verify/verify_cap/folded_fence
 fate revealed at boot; wo_a_w8/fast_load/engram_prefetch/shared_pad_k armed.
+
+## Measurement windows 2026-10-24 深夜 — outcome and the fleet-sharing discovery
+
+Window 1 (script bug): Phase 1 lacked a stop; start.sh serve left the PRODUCTION
+container running, so Phase 2 measured bundle#3, not the mig arm (proof: gate showed
+`moe_b12x_next armed`, 30s "health"). Accidental fresh production baseline: cold 600k
+3834/3473 (band OK), decode 20-23 tok/s (contaminated). Window 2 (stop + image-proof
+gate added): Phase 1 failed after 45 min — forensics show the REAL cause: start.sh's
+own guard logged "[x] GPU is busy (glm53-exl3 or similar) — FORCE=1" — **the GLM53
+stack was occupying the fleet's GPUs during the window** (this fleet is shared with
+the glm-5.3/TensorFold line; its lifecycle is independent of ours). The mig arm was
+never actually exercised; its readiness is unchanged (image built incl. peer fix,
+env.mig staged, window script carries the image-proof gate).
+
+**Coordination requirement (new)**: any mig measurement (and arguably any heavy
+production bench) needs an EXCLUSIVE-GPU window agreed with the glm53 stack owner.
+Rollback discipline held: production restored both times, currently healthy and
+alone on the GPUs (95.5 GB/node, verified).
