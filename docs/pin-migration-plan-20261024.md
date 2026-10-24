@@ -70,3 +70,38 @@ decode net-of-TTFT 41.3/40.4 — parity. Rollback: pre-bundle3 tag + 4× canary-
    exactly the pinned base.
 3. Remote `nohup scp` inside `ssh -n` dies with the session — use a `setsid`-detached
    script on the relay host.
+
+## Migration EVALUATION complete (2026-10-24 深夜, candidate 7d996300, tarball sha256 5d648297c35a869ee9b27c961d6ce6ed1b8f8b41c6cc605d2d7e9222967d77ed)
+
+Upstream settled (12h quiet after the MegaGate merge+revert churn). Full replay on head:
+rocenante patch **0 rejects**, roce_tp4_adapt probes **PASS**, flash_mla target exists.
+In-image 24-test drift audit vs candidate tree: **24/24 PASS** (but tests use
+SimpleNamespace fixtures — NOT a hash-gate clearance).
+
+**Decisive hash measurement (in-image, inspect.getsource sha256[:16]):**
+prefill_sp surface = **0 same / 9 drift / 2 missing** (`_hc_combine`/`_hc_mix_stats`
+methods gone; the mHC/MegaMoE/MegaGate wave rewrote the entire wrapped surface).
+hc_fused targets: module moved to `kernels/ops/gemm/hc_mix.py` (+`hc_mix_splitk.py`
+split, new `mhc_mega`/`mhc` family) — re-port + first-call bit-identity revalidation.
+
+**Re-port inventory (work breakdown, in order):**
+1. prefill_sp structural re-port (largest item; the 9 drifted call sites are the
+   exactness argument's spine).
+2. hc_fused re-port to ops/gemm/hc_mix.py; evaluate the new mhc_mega family.
+3. Serving 4 patches re-derived on deepseek-recipe (NONE absorbed upstream —
+   verified: no tool_result/placeholder/tool_choice/is_integer semantics in the
+   renderer/chat_encoding/response_parser).
+4. sitecustomize target list: 15/16 survive at same paths (incl ALL 5 dspark
+   anchored modules — additions, not removals); replace the encoding_dsv41 entry
+   with the recipe renderer path; re-point moe_fused_gate.
+5. Base: same torch 2.14.1 generation; 3 wheel bumps only (flashinfer 0.7.0.post1→
+   0.7.2, sgl-deep-gemm 0.2.2→0.2.3.post2, sglang-kernel 0.4.9→0.4.10) — try the
+   pip-layer-onto-proven-nightly path FIRST (watch the flashinfer cubin/jit-cache
+   pairing), full Dockerfile rebuild only if >2 stacked blockers appear.
+6. b12x_next vs the MegaMoE refactor (serve-time check; import-level passes today).
+
+**Verdict: GO as a planned 2-4 session campaign** (①base+wheels bake ②prefill_sp+
+hc_fused re-ports with bit-identity ③serving re-derivation + sitecustomize ④full
+gates: 24-test, boot, qeval paired, 600k A/B, then the prefill-graphs experiment
+arm). NOT a spontaneous flip. Everything above is zero-production-cost evidence;
+no cluster state was touched beyond /tmp staging.
