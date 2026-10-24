@@ -102,7 +102,12 @@ _cuda = _load_cudart()
 
 def install(module):
     cls = module.EngramEmbedding
-    def init(self, num_embeddings, dim, layer_id):
+    def init(self, num_embeddings, dim, layer_id, *args, **kwargs):
+        # >= 7d996300: upstream passes column_bounds (hash-column shard edges).
+        # shard_range() documents that the column-aligned and equal-row splits are
+        # bitwise interchangeable (one owner per row, zero-fill + all-reduce), so
+        # the equal-row split below stays correct; extra kwargs are accepted and
+        # ignored.
         torch.nn.Module.__init__(self)
         assert dim == 256
         self.dim, self.tp_size = dim, module.get_parallel().tp_size
