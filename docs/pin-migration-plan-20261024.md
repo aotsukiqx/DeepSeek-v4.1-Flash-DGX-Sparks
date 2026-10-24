@@ -44,3 +44,29 @@ prefill graphs (current disable is an old decision; the wave's wins assume them)
 **Standing rejections (unchanged):** #44001 standalone backport (flag absent at pin),
 #42159 (closed on py-spy evidence), #46127 busy-counter (PD-idle accounting, not our
 shape), SM100/AMD/diffusion/PD series.
+
+## Window 1 EXECUTED — serving bundle #3 (2026-10-24 晚, commit 1c36c98 live)
+
+sglang#43941 (whole-number floats for integer tool args) deployed. Full verify:
+boot gates green; smokes 5/5 incl new probe (model tool-call args parse clean);
+qeval paired BROKE=0 +1 fixed (json_count; jsons spark-a89f:~/qeval-*-bundle3-20261024.json);
+600k cold 3751.1 tok/s clean window (first measured run 2398.5 was TRAFFIC-CONTAMINATED:
+4 foreign ~4k prefills interleaved — wall 249s vs clean 159s; rerun verified clean),
+decode net-of-TTFT 41.3/40.4 — parity. Rollback: pre-bundle3 tag + 4× canary-roce-pre-bundle3.
+
+### Ops incidents hit during the window (runbook additions)
+
+1. **`docker image prune` deletes digest-only bases**: the 10-22 cleanup removed the
+   workers' pinned `dev-dsv41@sha256:3dbc...` base (untagged ⇒ dangling ⇒ pruned),
+   while the mutable `dev-dsv41` TAG locally points at a DIFFERENT newer image
+   (381b27f ≠ pinned 37939c26). Never prune bases kept only by digest ref; after any
+   prune, `docker image inspect <digest>` must pass on all 4 nodes BEFORE a build.
+2. **docker hub unreachable from workers (EOF on registry-1.docker.io)** — recovery
+   proven: on head `docker save <digest-ref>` (31GB) → scp per worker → `docker load`
+   restores CONTENT (37939c26) but NOT the digest reference (RepoDigests don't
+   survive save/load). Then build with `BASE_IMAGE=lmsysorg/sglang:dev-dsv41` (tag
+   form) to pass start.sh's inspect/pull gate — the Dockerfiles' hardcoded digest
+   FROM resolves from the LOCAL store in BuildKit (verified), so build content stays
+   exactly the pinned base.
+3. Remote `nohup scp` inside `ssh -n` dies with the session — use a `setsid`-detached
+   script on the relay host.
