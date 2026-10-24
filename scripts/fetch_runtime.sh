@@ -60,21 +60,23 @@ trap 'rm -rf "$tmp"' EXIT
 mkdir -p "$OUT"
 OUT="$(cd "$OUT" && pwd)"
 
-fetch_sglang_canary() {
-  echo "sglang-canary"
-  fetch sglang-canary "$tmp/sglang.tgz"
-  rm -rf "$OUT/sglang-canary"
-  mkdir -p "$OUT/sglang-canary" "$tmp/sglang"
+fetch_sglang() {
+  local id="$1"
+  echo "$id"
+  fetch "$id" "$tmp/sglang.tgz"
+  rm -rf "$OUT/$id"
+  mkdir -p "$OUT/$id" "$tmp/sglang"
   tar -xzf "$tmp/sglang.tgz" -C "$tmp/sglang" --strip-components=1
-  [[ -d "$tmp/sglang/python/sglang" ]] || die "sglang-canary: unexpected archive layout"
-  mv "$tmp/sglang/python" "$OUT/sglang-canary/python"
+  [[ -d "$tmp/sglang/python/sglang" ]] || die "$id: unexpected archive layout"
+  mv "$tmp/sglang/python" "$OUT/$id/python"
   # proto/ and rust/ feed the Dockerfile rustbuild stage: the rust workspace
   # references ../proto, and the built extension must match the pinned python tree.
-  [[ -d "$tmp/sglang/proto" ]] && mv "$tmp/sglang/proto" "$OUT/sglang-canary/proto"
-  [[ -d "$tmp/sglang/rust" ]] && mv "$tmp/sglang/rust" "$OUT/sglang-canary/rust"
-  read -r commit _ <<<"$(row sglang-canary)"
-  echo "$commit" > "$OUT/sglang-canary/REF"
+  [[ -d "$tmp/sglang/proto" ]] && mv "$tmp/sglang/proto" "$OUT/$id/proto"
+  [[ -d "$tmp/sglang/rust" ]] && mv "$tmp/sglang/rust" "$OUT/$id/rust"
+  read -r commit _ <<<"$(row "$id")"
+  echo "$commit" > "$OUT/$id/REF"
 }
+
 
 fetch_b12x() {
   echo "b12x (SG17 + roce_ring)"
@@ -133,10 +135,11 @@ fetch_b12x_next() {
 
 for c in "${COMPONENTS[@]}"; do
   case "$c" in
-    sglang-canary) fetch_sglang_canary ;;
+    sglang-canary) fetch_sglang sglang-canary ;;
+    sglang-mig) fetch_sglang sglang-mig ;;
     b12x) fetch_b12x ;;
     b12x-next) fetch_b12x_next ;;
-    *) die "unknown component $c (sglang-canary, b12x, b12x-next)" ;;
+    *) die "unknown component $c (sglang-canary, sglang-mig, b12x, b12x-next)" ;;
   esac
 done
 check_local runtime/sglang-rocenante.patch
