@@ -145,3 +145,17 @@ env.mig staged, window script carries the image-proof gate).
 production bench) needs an EXCLUSIVE-GPU window agreed with the glm53 stack owner.
 Rollback discipline held: production restored both times, currently healthy and
 alone on the GPUs (95.5 GB/node, verified).
+
+## CORRECTION (2026-10-25): the "glm53 GPU contention" conclusion was WRONG
+
+No third party has ever run on this fleet (docker ps -a: zero glm containers on all 4
+nodes, all time). The real causes were two script bugs, both mine:
+1. Window 1: no stop before serve → start.sh's _busy_gpu guard (line 803) correctly
+   refused to serve while OUR OWN production container held the GPU; the
+   "(glm53-exl3 or similar)" text is a canned historical example in the die message,
+   not a detection. Phase 2 therefore measured production.
+2. Window 2: my edit inserting the stop accidentally REPLACED the serve line — the
+   window stopped production, served nothing, and timed out into rollback.
+The "exclusive-window coordination" requirement is retracted; the mig measurement
+needs no external scheduling, only a correct script. Window-1's low decode numbers
+(20-23 tok/s) are user-traffic contention, not a co-tenant.
