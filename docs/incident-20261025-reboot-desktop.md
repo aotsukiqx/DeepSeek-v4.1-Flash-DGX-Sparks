@@ -81,3 +81,18 @@ retract-log analysis queued; do not cite tier4/6 numbers yet.
 - Production now: bundle#3 + H0a(every-4th empty_cache) + roce ON, SMOKE PASS,
   watchdog rearmed. Mig arm: import chain clean, flash_mla fixed, two more runtime
   unknowns (post-load phases) — ONE more window when scheduled.
+
+## W9 + third restore incident (2026-10-25 18:47-19:25) — STOP for the day
+
+W9 (prewarm removed, flash_mla in): mig boot OOM'd AGAIN during init (rank0 SIGKILL)
+— WITHOUT any prewarm. Structural conclusion: on this GB10 UMA box the stock mmap
+loader fills page cache with the 155 GB of shards while the engine allocates, and
+OOMs; **fast_load is REQUIRED to boot this arm** (its per-shard FADV_DONTNEED pacing
+is the whole point), and fast_load's EP2 slicing (tp_slice=None on ep=(0,2)) is the
+known 60x-slow path. Therefore the mig arm's remaining blocker is exactly the
+deferred O3 item: **port fast_load's slice logic to the EP2 layout** (or test
+DSV41_SERIAL_WEIGHT_LOAD=1 as a boot-through hack — untested; each failed attempt
+now costs ~25 min of production).
+Rollback restore failed a third time after the OOM (swap residue + thrash; recovery:
+stop → drain (swap 1.1G→0.13G) → serve, ~3 min once diagnosed; outage 18:59-19:25).
+Production verified back (SMOKE PASS) with H0a config.
