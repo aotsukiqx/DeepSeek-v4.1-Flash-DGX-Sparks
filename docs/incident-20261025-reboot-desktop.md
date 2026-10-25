@@ -96,3 +96,19 @@ now costs ~25 min of production).
 Rollback restore failed a third time after the OOM (swap residue + thrash; recovery:
 stop → drain (swap 1.1G→0.13G) → serve, ~3 min once diagnosed; outage 18:59-19:25).
 Production verified back (SMOKE PASS) with H0a config.
+
+## W10 + final stop for 2026-10-25 (19:37-20:10)
+
+W10 = fast_load ON + DSV41_FAST_LOAD_TP_SLICE=on (the EP2 slice fix, verified OFFLINE
+first: read_plan on a real expert shard shows 1152/1152 owned-expert tensors correctly
+moe_tp-sliced, 2.40 GB/shard vs EP1's 3.52 — the plan math is right and the fix is a
+pure env knob). Boot STILL OOM'd in ~3 min (early load). Conclusion: the EP2 boot OOM
+is NOT in fast_load's read path — remaining suspects: stock CUTLASS MoE weight
+repack at EP2 materializing host buffers (upstream path never sized for 128GB UMA),
+or the Engram grouping at TP4/EP2 (rows=[0,96M) per rank observed at boot = the
+table splits by the TP2 groups, doubling per-rank Engram working set vs EP1?).
+Restore-aftermath pattern (3rd occurrence): first post-OOM restore boot dies after
+load; clean cycle (stop → drain → serve) boots in ~2.5 min. W10-era outage
+19:41-20:10. NEXT SESSION (offline, zero production): memory-instrument the mig boot
+load phase in-container (tracemalloc/psutil around MoE create_weights + Engram init),
+find the buffer, fix, then one window with SERIAL_WEIGHT_LOAD as fallback arm.
