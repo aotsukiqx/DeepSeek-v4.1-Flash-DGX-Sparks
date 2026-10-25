@@ -48,3 +48,19 @@ Ops notes from the window: the scripted rollback's nohup hit a transient
 "no such file" and failed (engine down 14:48-15:05, manual restore ~3 min);
 the new serve watchdog was correctly held off by the maintenance marker.
 Watchdog validated-by-design; markers are now part of every window protocol.
+
+## H0a ADOPTED + H0b partial (2026-10-25 afternoon)
+
+H0a `DSV41_PREFILL_EMPTY_CACHE_EVERY=4` (empty_cache on every 4th qualifying
+forward; py-spy: per-chunk calls cost ~4% host): cold 600k **4101.4 / 4121.4**
+(band top was 3884; +6%), decode net **44.0** (top of band). qeval ×2: PRIMARY
+BROKE=0 both; one secondary flip = json_count (got 11 want 10), the same
+borderline task that flipped in BOTH directions across knob-less boots this week —
+stable within-boot, recorded as open observation (reverse-boot check folds into the
+next natural reboot). Adopted in production env.
+
+H0b decode-vs-concurrency matrix (scripts/verify/decode_matrix.py, live traffic):
+tier1 41.7 | tier2 31.8-37.7 (agg 63.6) | tier4 21.1/3.0/21.7/3.0 | tier6 median
+2.8 — tier>=4 streams COLLAPSE (3 tok/s class), but the window carried live
+production traffic (pool-pressure retraction suspected). Clean-window re-run +
+retract-log analysis queued; do not cite tier4/6 numbers yet.
