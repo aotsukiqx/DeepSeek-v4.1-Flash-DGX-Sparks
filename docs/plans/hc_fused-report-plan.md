@@ -1,76 +1,75 @@
-# hc_fused Re-port Plan (kernel path update, ~half day)
+# Plan: hc_fused Re-Port (Half Day)
 
-> Expected: +4.3% cold prefill (historically measured on the old pin).
-> The kernel CODE didn't change — only its MODULE PATH moved upstream.
+> Goal: re-port the HC mix-stats fusion kernel to the candidate's new location.
+> Expected recovery: +4.3% cold prefill (historical measurement on old pin).
 
-## Current state
+## 1. What Changed
 
-- **Old pin (620c76f2)**: kernel at `sglang.kernels.ops.layernorm.mhc`
-- **New pin (7d996300)**: kernel at `sglang.kernels.ops.gemm.hc_mix.py` (+ `hc_mix_splitk.py`)
-- **Our adapter**: `adapter/hc_fused.py` — imports from the old path, 4 hash-gated kernel sources
-- **sitecustomize wiring**: hooks `sglang.kernels.ops.layernorm.mhc` (old path)
+The kernel moved from `sglang.srt.layers.attention.deepseek_v4_backend` (old pin)
+to `sglang.kernels.ops.gemm.hc_mix` (new pin). Additionally:
+- A split-K variant was split out to `hc_mix_splitk.py`
+- A new `mhc_mega` family appeared in `sglang.kernels.ops.layernorm/`
+- The adapter's 4 hash-anchored kernel functions need re-verification
 
-## What changed upstream
+## 2. Adapter's Current Anchors
 
-1. Module moved: `sglang.kernels.ops.layernorm.mhc` → `sglang.kernels.ops.gemm.hc_mix`
-2. New split-K variant: `hc_mix_splitk.py` (separate file, may be relevant)
-3. New `mhc_mega` family: `sglang.kernels.ops.layernorm.mhc_mega.py` (evaluate separately)
-4. The 4 kernel sources (`_hc_mix_stats_partial_kernel` etc.) — **content may be identical** (the move was organizational, part of the kernels regroup commit #45112)
-
-## Steps
-
-### Step 1: Verify kernel source hashes (30 min, offline)
-
-```bash
-# In canary-mig container, compare old vs new module's kernel sources:
-docker run --rm --network none \
-  -v ~/nvmodels/DeepSeek-v4.1-Flash-DGX-Sparks:/repo \
-  --entrypoint python3 dsv41-4x-spark:canary-mig -c "
-import inspect, hashlib, sys
-sys.path.insert(0, '/repo/adapter')
-# NEW path
-import sglang.kernels.ops.gemm.hc_mix as new_mod
-for name in ('_hc_mix_stats_partial_kernel', '_hc_mix_reduce_sinkhorn_kernel',
-             'hc_mix_stats_sinkhorn', '_num_slices_for'):
-    obj = getattr(new_mod, name, None)
-    if obj:
-        h = hashlib.sha256(inspect.getsource(obj).encode()).hexdigest()[:16]
-        print(f'{name}: {h}')
-    else:
-        print(f'{name}: MISSING')
-"
+From `adapter/hc_fused.py`:
+```python
+_EXPECTED = {
+    "_hc_mix_stats_partial_kernel": "ca7ec34b9be7abd7",
+    "_hc_mix_reduce_sinkhorn_kernel": "8e9e13a25eb9885e",
+    "hc_mix_stats_sinkhorn": "8ed53dab69e71a3d",
+    "_num_slices_for": "23e78e75dc040b8e",
+}
 ```
 
-If hashes match the adapter's `_EXPECTED` values → **only update the import path** (30 min).
-If hashes differ → compare sources, classify changes, re-port (2-4 hours).
+These are hashes of the KERNEL functions, not the engine call sites.
 
-### Step 2: Update adapter import + sitecustomize wiring (30 min)
+## 3. Steps
 
-- `adapter/hc_fused.py`: change `from sglang.kernels.ops.layernorm import mhc` to `from sglang.kernels.ops.gemm import hc_mix as mhc`
-- `adapter/sitecustomize.py`: change the watched module name from `sglang.kernels.ops.layernorm.mhc` to `sglang.kernels.ops.gemm.hc_mix`
-- Update `_EXPECTED` hashes if Step 1 showed drift
+### Step 1: Verify kernel source stability (30 min)
+Check if the 4 kernel functions in `kernels/ops/gemm/hc_mix.py` are source-identical
+to their old-location versions. If yes, only the import path changes.
 
-### Step 3: Evaluate mhc_mega family (1 hour, optional)
+### Step 2: Update import paths (15 min)
+In `adapter/hc_fused.py`, update the import from:
+```python
+# OLD: implicitly via attention backend
+# NEW: explicit
+from sglang.kernels.ops.gemm import hc_mix as hcm
+```
 
-The new `mhc_mega.py` may already provide what hc_fused does natively. Check:
-- `sglang.kernels.ops.layernorm.mhc_mega` — what does it export?
-- Is it automatically used for prefill-size batches?
-- If so, hc_fused might be OBSOLETE (upstream absorbed the optimization).
+### Step 3: Re-hash and update anchors (15 min)
+```python
+# In-container, against candidate tree:
+import hashlib, inspect
+from sglang.kernels.ops.gemm.hc_mix import (
+    _hc_mix_stats_partial_kernel, _hc_mix_reduce_sinkhorn_kernel,
+    hc_mix_stats_sinkhorn, _num_slices_for,
+)
+for fn in (...):
+    print(fn.__name__, hashlib.sha256(
+        inspect.getsource(fn).encode()).hexdigest()[:16])
+# Update _EXPECTED in adapter/hc_fused.py
+```
 
-### Step 4: Test + boot window
+### Step 4: sitecustomize wiring (5 min)
+The hook at `adapter/sitecustomize.py` needs the module name updated:
+```python
+# OLD: module.__name__ == 'sglang.srt.layers.attention.deepseek_v4_backend'
+# NEW: module.__name__ == 'sglang.kernels.ops.gemm.hc_mix'
+```
 
-1. `python3 -m py_compile adapter/hc_fused.py adapter/sitecustomize.py`
-2. In-container import chain test (32 modules, must stay CLEAN)
-3. Boot window with `DSV41_HC_FUSED=1` added to env
-4. Probes: cold 600k ×2 + decode ×2
-5. Compare vs first mig measurement (cold 3953) — expect ~+4% → ~4110
+### Step 5: Evaluate new mhc_mega family (optional, 2 hours)
+The `mhc_mega` kernels in `sglang.kernels.ops.layernorm/` may offer better performance
+than the original hc_mix path. Evaluate whether to port to those instead.
 
-## Success criteria
+### Step 6: Validation (one boot window)
+- Boot with `DSV41_HC_FUSED=1` on mig arm
+- Verify first-call bit-identity (the adapter logs it)
+- 600k cold comparison
 
-- cold 600k ≥ 4050 (recovering the hc_fused historical +4.3% from 3953 baseline)
-- No regression in decode or conc6
-- qeval BROKE=0
+## 4. Success Criteria
 
-## Rollback
-
-Set `DSV41_HC_FUSED=0` in env; no code changes needed to disable.
+- First-call bit-identity PASS (adapter's built-in check)
+- cold 600k improvement ≥2% (bar from eval methodology)

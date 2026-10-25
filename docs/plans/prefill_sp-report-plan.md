@@ -1,110 +1,98 @@
-# prefill_sp Structural Re-port Plan (2-4 sessions, the main optimization lever)
+# Plan: prefill_sp Re-Port to 7d996300 (Main Effort, 2-4 Sessions)
 
-> Expected: +18% cold prefill + ~8% decode (historical measurements on old pin).
-> This is the LARGEST remaining optimization — recovering it should push the mig
-> line well above the production baseline.
+> Goal: rebuild the prefill sequence-parallel adapter on the new pin's `op_*` API family.
+> Expected recovery: +18% cold prefill + ~8% decode = mig arm surpasses production baseline.
 
-## Background
+## 1. Problem Statement
 
-prefill_sp implements prefill sequence parallelism: it shards the prefill computation
-across TP ranks more efficiently than the stock path, reducing per-chunk wall time.
+prefill_sp (`adapter/prefill_sp.py`) wraps 16 engine functions (hash-checked at install).
+On 7d996300:
+- **9 functions DRIFTED** (source hash changed)
+- **2 functions MISSING** (`_hc_combine`, `_hc_mix_stats` — moved to `op_*` methods)
+- The mHC/MegaMoE wave renamed the API surface
 
-On the old pin (620c76f2) it was worth **+18% cold prefill** (2921→3605, measured
-2026-10-14). It has source-hash gates on 16 engine functions (prefill_sp.py `_EXPECTED`)
-that ALL DRIFTED on 7d996300 because the upstream mHC/MegaMoE wave renamed the API surface.
+The drift guard raises at serve time, so the adapter must be env-OFF (current mig arm).
 
-## Drift analysis (already measured, 2026-10-24)
+## 2. What Changed Upstream
 
-### Hash drift: 0/11 same, 9 drifted, 2 MISSING
+The candidate's `DeepseekV4DecoderLayer` now has these methods (replacing our hooks):
 
-| Old function (620c76f2) | Status on 7d996300 | Lines (new) |
+| Old (620c76f2) | New (7d996300) | Nature |
 |---|---|---|
-| `v4.DeepseekV4Model._forward_layers_hc_pre_from_prev` | DRIFT | 284 |
-| `v4.DeepseekV4Model.forward` | DRIFT | 22 |
-| `v4.DeepseekV4DecoderLayer.forward_hc_pre_from_prev` | DRIFT | 77 |
-| `v4.DeepseekV4DecoderLayer._hc_combine` | **MISSING** | — |
-| `v4.DeepseekV4DecoderLayer._hc_mix_stats` | **MISSING** | — |
-| `v4.DeepseekV4DecoderLayer.hc_post` | DRIFT | 8 |
-| `v4.DeepseekV4DecoderLayer._run_moe_ffn_dp_sync` | DRIFT | 34 |
-| `v4.MQALayer.forward` | DRIFT | 456 |
-| `v2.DeepseekV2MoE.forward` | DRIFT | 82 |
-| `v2.DeepseekV2MoE.forward_normal` | DRIFT | 162 |
-| `engram.Engram.forward` | DRIFT | 39 |
+| `_hc_combine` | `op_combine_a` / `op_combine_b` | Split into two ops |
+| `_hc_mix_stats` | `op_mhc_postprocess` etc. | Absorbed into mHC op chain |
+| `hc_post` | `hc_post` (still exists, DRIFTED) | Modified internals |
+| `forward_hc_pre_from_prev` | same name (DRIFTED) | Modified internals |
+| `_run_moe_ffn_dp_sync` | same name (DRIFTED) | Modified internals |
 
-### Where the missing methods went
+Other drifted targets:
+- `DeepseekV4Model._forward_layers_hc_pre_from_prev` (DRIFTED, 284 lines)
+- `DeepseekV4Model.forward` (DRIFTED, 22 lines)
+- `MQALayer.forward` (DRIFTED, 456 lines)
+- `DeepseekV2MoE.forward` / `forward_normal` (DRIFTED)
+- `Engram.forward` (DRIFTED)
 
-`_hc_combine` and `_hc_mix_stats` were absorbed into the new `op_*` method family:
-- `op_combine_a` / `op_combine_b` (replaces `_hc_combine`)
-- `op_mhc_postprocess` / `op_mhc_prepare_attn` / `op_mhc_post_attn_pre_mlp` (replaces `_hc_mix_stats`)
-- Plus new: `_can_fuse_attn_mhc`, `_can_fuse_ffn_mhc`, `refresh_mhc_norm_weight_cache`
+## 3. Re-Port Strategy
 
-## Re-port strategy
+### Phase A: Classification (offline, ~2 hours)
+For each of the 9 drifted functions:
+1. Diff old-pin source vs candidate source (line-by-line)
+2. Classify each change: cosmetic (docstring, variable rename) / moderate (logic addition, same structure) / rewrite (new architecture)
+3. For MISSING functions: map old → new op_* equivalents
+4. Output: a porting checklist with effort estimates
 
-### Phase A: Read + classify (1 session, offline)
+### Phase B: Core Forward Path (1 session)
+The heart of prefill_sp is `_forward_layers_hc_pre_from_prev` + `forward`:
+1. Read old adapter's wrapped logic for these two functions
+2. Read candidate's new source
+3. Re-apply the SP sharding logic to the new source
+4. Update `_EXPECTED` hashes
+5. Run `test_prefill_sp.py` with updated fixtures
 
-For each of the 9 drifted + 2 missing functions:
-1. Read the OLD source (from 620c76f2, already have hashes)
-2. Read the NEW source (from 7d996300, candidate tree at `/tmp/cand7`)
-3. Classify changes: cosmetic (docstrings/renames) vs structural (logic changes)
-4. For MISSING methods: map to the new `op_*` equivalents
-5. Output: a function-by-function port plan with effort estimates
+### Phase C: Decoder Layer Hooks (1 session)
+- `forward_hc_pre_from_prev`, `hc_post`, `_run_moe_ffn_dp_sync`
+- Map `_hc_combine` → `op_combine_a`/`op_combine_b`
+- Map `_hc_mix_stats` → `op_mhc_*` chain
+- Verify bit-identity: `DSV41_MOE_B12X_NEXT_DETERMINISTIC=1` + greedy OFF/ON comparison
 
-Key questions to answer:
-- Does the new `op_*` family already implement what prefill_sp's wrappers do?
-  (If yes → prefill_sp might be partially OBSOLETE, reducing port work)
-- What is the new `_run_moe_ffn_dp_sync` shape? (It's now 34 lines vs larger before)
-- How does `MQALayer.forward` (456 lines) differ from the old version?
+### Phase D: MQA + MoE + Engram (1 session)
+- `MQALayer.forward` (456 lines — the largest)
+- `DeepseekV2MoE.forward` / `forward_normal`
+- `Engram.forward` (already partially fixed with attr defaults)
 
-### Phase B: Port + test (1-2 sessions)
+### Phase E: Validation (1 boot window)
+- Boot with prefill_sp ON
+- qeval paired (BROKE=0 gate)
+- 600k cold + decode + conc6 (vs both baselines)
+- If pass → mig arm should now EXCEED production baseline
 
-For each function in order of dependency:
-1. Update `_EXPECTED` hash after confirming source equivalence
-2. For MISSING methods: write NEW hook logic targeting the `op_*` API
-3. For DRIFTED methods: re-port the wrapper logic to the new source shape
-4. After each function: in-container import chain test (must stay CLEAN)
-5. After all functions: bit-identity check (`DSV41_MOE_B12X_NEXT_DETERMINISTIC=1` greedy match)
+## 4. Hash Re-generation
 
-### Phase C: Boot + measure (1 session)
+After each phase, recompute hashes:
+```python
+import hashlib, inspect
+def _src_hash(obj):
+    return hashlib.sha256(inspect.getsource(inspect.unwrap(obj)).encode()).hexdigest()[:16]
+# For each expected key, compute new hash and update _EXPECTED dict
+```
 
-1. Add `DSV41_PREFILL_SP=1 DSV41_PREFILL_SP_FP8=1` to env
-2. Boot window (auto-rollback)
-3. Verify boot log shows `PREFILL_SP shard: chunk of N rows -> shards of M`
-4. Probes: cold 600k ×2 + decode ×2 + conc6
-5. qeval paired (BROKE=0)
-6. Compare vs: first mig (3953) + config arm result + production baseline (4101)
+The adapter has ~16+2=18 hash entries. Some may not need changing (if the function is
+identical). Only update the ones that drifted.
 
-### Phase D: Full A/B decision
+## 5. Key Files
 
-With all three optimizations active (prefill_sp + hc_fused + config arm):
-- cold 600k target: **≥4500** (18% over first mig measurement)
-- decode target: **≥44** (parity with production)
-- conc6 target: **≥4100** (both above production AND above first mig)
-- If met → **ADOPT the mig line as new production**
+| File | Role |
+|---|---|
+| `adapter/prefill_sp.py` | The adapter (1367 lines) — main edit target |
+| `tests/test_prefill_sp.py` | Unit tests (SimpleNamespace fixtures) |
+| `/tmp/cand7/python/sglang/srt/models/deepseek_v4.py` | Candidate source (on head) |
+| `/tmp/cand7/python/sglang/srt/models/deepseek_v2.py` | Candidate source |
+| `/tmp/cand7/python/sglang/srt/layers/engram.py` | Candidate source |
 
-## prefill_sp internal structure (for the port)
+## 6. Success Criteria
 
-The adapter wraps these entry points:
-- `install(module)` — called when `sglang.srt.models.deepseek_v4` imports
-- `_load_modules()` — imports v4, v2, engram, hcn, linear (module refs)
-- `check_engine()` — validates all 16 hash expectations
-- The actual SP logic lives in the wrapped function bodies:
-  - Shards prefill rows across TP ranks
-  - Manages communication buffers
-  - Handles FP8 quantization for sharded projections (when _FP8=1)
-  - The `_tail_rows` compatibility layer for attention backend integration
-
-## Dependencies on other adapters
-
-prefill_sp interacts with:
-- `hc_fused` (SP requires hc_fused's SP_LOGICAL_ROWS=True gate) — port hc_fused FIRST
-- `engram_backend` (SP reads engram row boundaries) — already fixed for 7d996300
-- `block_verify` (verify rows use SP's row mapping) — config arm turns it ON
-- `fast_load` (SP's weight loading interacts with fast_load slices) — already compatible
-
-## Risk assessment
-
-- **High value**: +18% cold prefill is the single largest remaining optimization
-- **Medium risk**: 11 functions to re-port, but the ADAPTER logic (our code) stays
-  the same — only the WRAPPER TARGETS change (upstream function signatures)
-- **Mitigation**: env-gated (DSV41_PREFILL_SP=0 disables), boot-time hash check,
-  bit-identity verification available
+- Boot with `DSV41_PREFILL_SP=1` on mig arm
+- qeval paired BROKE=0
+- cold 600k ≥ 4500 (production baseline 4101 + expected recovery)
+- decode ≥ 42 (production baseline 44.0, partial recovery)
+- conc6 ≥ 4021 (current mig arm, should not regress)
