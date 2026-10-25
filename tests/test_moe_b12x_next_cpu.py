@@ -82,8 +82,11 @@ FAKE_FILES = {
     "sglang/srt/layers/moe/fused_moe_triton/layer.py": textwrap.dedent("""\
         class FusedMoE:
             def _load_w13(self, loaded_weight, shard_dim):
-                if getattr(self.quant_method, "load_up_proj_weight_first", False):
-                    pass
+                switch_w13 = getattr(
+                    _weight_layout_method(self),
+                    "load_up_proj_weight_first",
+                    False,
+                )
                 shard_size = loaded_weight.shape[shard_dim] // self.moe_tp_size
                 start = shard_size
             def _load_w2(self, loaded_weight, shard_dim):
