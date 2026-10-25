@@ -35,7 +35,7 @@ ARG PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
 RUN rm -rf /sgl-workspace/sglang/python
 COPY --from=fetch /fetched/sglang-mig/python /sgl-workspace/sglang/python
 RUN pip install --no-cache-dir -i ${PIP_INDEX} \
-      "flashinfer_python[cu13]==0.7.2" "sgl-deep-gemm==0.2.3.post2" "sglang-kernel==0.4.10"
+      "flashinfer_python[cu13]==0.7.2" "sgl-deep-gemm==0.2.3.post2" "sglang-kernel==0.4.10" "sgl-flash-mla==1.0.0"
 RUN python3 -c "import sglang, sglang.srt.models.deepseek_v4, sglang.srt.layers.attention.deepseek_v4_backend, sglang.srt.models.deepseek_v4_dspark; print('import ok')"
 # RoCEnante overlay (applies clean with -F3 on 7d996300; probes verified 2026-10-24)
 COPY runtime/sglang-rocenante.patch runtime/roce_tp4_adapt.py /tmp/
