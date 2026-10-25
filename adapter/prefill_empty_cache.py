@@ -28,10 +28,17 @@ logger = logging.getLogger(__name__)
 
 def install(module):
     threshold = int(os.environ.get('DSV41_PREFILL_EMPTY_CACHE_TOKENS', '8192'))
+    # DSV41_PREFILL_EMPTY_CACHE_EVERY: empty only on every Nth qualifying extend
+    # forward (default 1 = every chunk, the 2026-09 behavior). py-spy 2026-10-24:
+    # the per-chunk calls cost ~39 ms host sync each, ~4% of cold-600k wall; N=4
+    # keeps the square-growth bounded (peak ~N chunks of tile transients) and
+    # recovers ~3/4 of that cost. Measured arm: 2026-10-25.
+    every = max(1, int(os.environ.get('DSV41_PREFILL_EMPTY_CACHE_EVERY', '1')))
     if threshold <= 0:
         return
     cls = module.ModelRunner
     original = cls.forward
+    state = {'n': 0}
 
     def forward(self, forward_batch, *args, **kwargs):
         output = original(self, forward_batch, *args, **kwargs)
@@ -40,11 +47,14 @@ def install(module):
                 lens = forward_batch.seq_lens_cpu
                 longest = int(lens.max()) if lens is not None and lens.numel() else 0
                 if longest >= threshold:
-                    torch.cuda.empty_cache()
+                    state['n'] += 1
+                    if state['n'] % every == 0:
+                        torch.cuda.empty_cache()
         except Exception as exc:  # bookkeeping must never break a forward
             logger.warning('DSV41 prefill empty_cache hook: %s', exc)
         return output
 
     cls.forward = forward
     logger.warning('DSV41 prefill empty_cache hook installed (extend forwards with a '
-                   'sequence >= %d tokens)', threshold)
+                   'sequence >= %d tokens, every %dth qualifying forward)',
+                   threshold, every)
