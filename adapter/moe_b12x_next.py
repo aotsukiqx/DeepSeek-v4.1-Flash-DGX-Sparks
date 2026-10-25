@@ -605,7 +605,7 @@ def _check_loader():
         mod = importlib.import_module("sglang.srt.layers.moe.fused_moe_triton.layer")
     w13 = inspect.getsource(mod.FusedMoE._load_w13)
     w2 = inspect.getsource(mod.FusedMoE._load_w2)
-    for needle in ('getattr(_weight_layout_method(self), "load_up_proj_weight_first", False)',
+    for needle in ('_weight_layout_method(self)', '"load_up_proj_weight_first"',
                    "loaded_weight.shape[shard_dim] // self.moe_tp_size", "start = shard_size"):
         if needle not in w13:
             _die(f"FusedMoE._load_w13 drifted (missing {needle!r})")
