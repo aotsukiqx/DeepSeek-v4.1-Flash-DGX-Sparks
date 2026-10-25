@@ -159,3 +159,34 @@ nodes, all time). The real causes were two script bugs, both mine:
 The "exclusive-window coordination" requirement is retracted; the mig measurement
 needs no external scheduling, only a correct script. Window-1's low decode numbers
 (20-23 tok/s) are user-traffic contention, not a co-tenant.
+
+## Windows 3-6 (2026-10-25 上午) — bring-up chain findings, stop-loss called
+
+All windows ran the corrected script (stop→serve→image-proof; window-1/2 script bugs
+fixed; bundle relays now content-verified after the head-repo rollback discovery).
+
+- W3: peer AttributeError — the 7516e87 fix had never reached the head repo (bundle
+  relays silently landed in temp shells; head reflog proved it). Re-relayed with
+  content verification (self.peer + 60m healthcheck confirmed in working tree).
+- W4 (fix verified in image): **peer fix WORKED** — 48/48 shards loaded, finish_load
+  passed, wo_a twins done; boot killed by MY 45-min cap 36s after load completed
+  (cold-cache EP2 load = 43:44 at 54s/shard).
+- W5: 60-min healthcheck reaped the boot mid-load — load even slower (90-120s/shard):
+  **fast_load degrades on the EP2 layout** (target layout ep=(0,2) tp_slice=None vs
+  EP1's tp_slice=(0,4)) — ~60x slower than the EP1 line. Staged fast_load=0.
+- W6 (fast_load off): new failure in ~6 min — `duplicate invariant
+  'dspark.verify_len_budget'`: dspark_draft imports dspark_planner; the SECOND
+  execution of the planner module re-registers the Invariant → the FIRST import
+  (through our sitecustomize preload chain) failed somewhere earlier and was retried.
+  First-failure site not yet isolated.
+- W6 rollback incident: spark-141e's worker was not recreated → head health timeout →
+  production down ~13 min until a clean stop/serve restart (env verified EP1+b12x,
+  SMOKE PASS). Rollback serves must verify all 3 workers exist.
+
+**STOP-LOSS called after W6**: five distinct mig-line incompatibilities surfaced one
+per boot (b12x/EP1→EP2, column_bounds, peer, fast_load-EP2, dspark_planner import
+chain). Live-window iteration is the wrong instrument; bring-up continues OFFLINE:
+(1) in-container import-chain replication with sitecustomize+env to catch import-time
+failures without fleet boots (planner first-failure next); (2) fast_load EP2 slice
+audit (fix vs keep-off); (3) then ONE validation window. Production: bundle#3,
+healthy, untouched config.
