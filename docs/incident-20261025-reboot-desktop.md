@@ -64,3 +64,20 @@ tier1 41.7 | tier2 31.8-37.7 (agg 63.6) | tier4 21.1/3.0/21.7/3.0 | tier6 median
 2.8 — tier>=4 streams COLLAPSE (3 tok/s class), but the window carried live
 production traffic (pool-pressure retraction suspected). Clean-window re-run +
 retract-log analysis queued; do not cite tier4/6 numbers yet.
+
+## Evening mig windows W7/W8 + the prewarm lesson (2026-10-25 17:37-18:42)
+
+- W7: /tmp cleanup had eaten mig_window.sh itself (launch failed silently; the
+  maintenance marker stayed set, masking the watchdog). Script recreated (v3) and
+  moved INTO THE REPO (scripts/verify/mig_window.sh) — /tmp is untrusted storage.
+- W7 retry: mig boot died on `ModuleNotFoundError: flash_mla` — 7d996300's dsv4
+  backend hard-imports it. FIXED: sgl-flash-mla==1.0.0 added to the mig wheel layer.
+- W8 (flash_mla in): boot died on OS OOM SIGKILL — MY prewarm `cat` design was
+  harmful: on GB10 unified memory, filling 155 GB of page cache competes with the
+  engine's own allocations (and the cats outlived the window into the rollback
+  boot: rank-desync crash, swap activation fleet-wide, 59-82 s/shard thrash).
+  PREWARM REMOVED from the script. Recovery: full stop -> memory drained
+  (avail 119.6G, swap residual 0.1G) -> clean 2.5-min boot.
+- Production now: bundle#3 + H0a(every-4th empty_cache) + roce ON, SMOKE PASS,
+  watchdog rearmed. Mig arm: import chain clean, flash_mla fixed, two more runtime
+  unknowns (post-load phases) — ONE more window when scheduled.
