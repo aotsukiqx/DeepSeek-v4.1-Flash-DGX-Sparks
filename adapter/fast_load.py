@@ -55,7 +55,7 @@ import json
 import logging
 import os
 import struct
-import threading
+import time
 
 logger = logging.getLogger(__name__)
 
@@ -507,11 +507,39 @@ def _alloc_host(n):
     return flat
 
 
+def _slab_cap_bytes():
+    try:
+        return int(float(os.environ.get("DSV41_FAST_LOAD_SLAB_CAP_GB", "12")) * 2**30)
+    except ValueError:
+        return 12 * 2**30
+
+
 def _new_slab(n, path, members):
     """Allocate one slab and register a storage weak reference to it (expired = all views gone).
 
     ``members``: the ``slab_layout`` entries ``(name, offset, kept)`` placed in it.
+
+    Backpressure (2026-10-25, the EP2 OOM fix): the engine's EP>1 loader accumulates
+    completed futures that keep whole slabs alive past the copy-byte budget (observed
+    peak 157 live slabs = 39.7 GB anonymous on top of the page cache at TP4/EP2 ->
+    OOM). Block a new slab while LIVE slab bytes exceed DSV41_FAST_LOAD_SLAB_CAP_GB
+    (default 12); readers wait for the engine to consume and drop views. Deadlock
+    safety: the wait is bounded (60s) and skipped when a single slab exceeds the cap.
     """
+    cap = _slab_cap_bytes()
+    if n <= cap:
+        deadline = time.monotonic() + 60.0
+        while True:
+            with _lock:
+                live = sum(r[1] for r in _slab_refs
+                           if r[0] is not None and not r[0].expired())
+                if live + n <= cap:
+                    break
+            if time.monotonic() > deadline:
+                logger.warning("DSV41 fast load: slab cap wait timed out "
+                               "(live=%.2f GB, need %.2f GB); proceeding", live / 2**30, n / 2**30)
+                break
+            time.sleep(0.05)
     flat = _alloc_host(n)
     try:
         from torch.multiprocessing.reductions import StorageWeakRef
