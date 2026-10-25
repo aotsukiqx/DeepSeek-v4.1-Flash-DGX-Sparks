@@ -112,3 +112,18 @@ load; clean cycle (stop → drain → serve) boots in ~2.5 min. W10-era outage
 19:41-20:10. NEXT SESSION (offline, zero production): memory-instrument the mig boot
 load phase in-container (tracemalloc/psutil around MoE create_weights + Engram init),
 find the buffer, fix, then one window with SERIAL_WEIGHT_LOAD as fallback arm.
+
+## W11 (20:23-21:24) — slab cap works, OOM moves post-load; HARD STOP called
+
+Fix chain this session: (1) EP2 fast_load slice = DSV41_FAST_LOAD_TP_SLICE=on (env-only,
+verified offline: 1152/1152 owned experts sliced, 2.40GB/shard); (2) live-slab byte cap
+DSV41_FAST_LOAD_SLAB_CAP_GB=12 (backpressure in _new_slab; fixes the 157-live-slab
+39.7GB pile-up — W11 read phases completed: 107.1GB read / 83GB kept / 46k expert
+tensors sliced). OOM moved AGAIN: now dies AFTER target+draft reads, during model
+init/copy (~15 min into boot). Each iteration advances one phase; each costs ~30 min
+production (restore-aftermath included). W11-era outage 20:45-21:24.
+HARD STOP on live boot iterations — the remaining post-load OOM needs an instrumented
+boot (external RSS sampler during the window) or in-container memory tracing, both
+offline-designed first. Today's 5 boot attempts (W7-W11) mapped the full failure
+surface: import chain → wheel deps → read-phase slab pile-up (FIXED) → post-load init
+(last unknown).
