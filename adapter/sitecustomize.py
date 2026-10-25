@@ -145,7 +145,10 @@ class EngramLoader(importlib.abc.Loader):
                 if int(os.environ.get('DSPARK_BLOCK_SIZE', '5') or 5) > 5:
                     from verify_cap import install_confidence_module
                     install_confidence_module(module)
-            if _tp4_launcher():
+            if _tp4_launcher() and os.environ.get('DSV41_FAST_LOAD', '0').strip() not in ('0', 'off', 'false', ''):
+                # Arm note: this install is NOT free — it drifts against pins that move
+                # the dspark model file. Gate it like the weight_utils path so
+                # DSV41_FAST_LOAD=0 disables fast_load COMPLETELY (7d996300 arm).
                 from fast_load import install_dspark
                 install_dspark(module)
             if os.environ.get('DSV41_WO_A_W8', '0').strip() not in ('0', 'off', 'false', ''):
