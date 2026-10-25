@@ -30,3 +30,21 @@ mig windows W1-W6 this morning) are UNCONTAMINATED. The mig-window load slowness
 - Probes live in the REPO now (scripts/verify/{probe600k,decode600k,svc_smoke}.py);
   /tmp versions age out (systemd-tmpfiles) — deploy via `cp` to /tmp on the head.
 - The 12:07 synchronized reboot needs ops follow-up (PDU/rack power? watch for recurrence).
+
+## R2 experiment result (2026-10-25 14:06-15:05, post-desktop-fix)
+
+conc6 aggregate (6×600k, probe600k.py conc from scripts/verify/):
+- RoCE ON (production config): **3883.8 tok/s** (top of the historical band)
+- RoCE OFF (SGLANG_ROCE_ALLREDUCE stripped): **3209.4 tok/s** (**-17.4%**)
+- cold single (roce off): 3754.6 (parity); decode 20.3 (traffic-confounded both arms)
+
+**Verdict: the RoCEnante overlay is a +17% conc6 ASSET — fully exonerated for the
+10-11 4652 vs 10-17 3838 gap.** That gap is not roce, not weights, not pool, not
+desktop noise (pre-reboot era) — remaining explanation is measurement-era/stack
+state; the mig validation window's conc6 probe (vs both 3884 today and 4652) is the
+last open test of the scheduler-admission family.
+
+Ops notes from the window: the scripted rollback's nohup hit a transient
+"no such file" and failed (engine down 14:48-15:05, manual restore ~3 min);
+the new serve watchdog was correctly held off by the maintenance marker.
+Watchdog validated-by-design; markers are now part of every window protocol.
