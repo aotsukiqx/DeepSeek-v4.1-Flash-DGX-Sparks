@@ -61,7 +61,7 @@ def probe3():
         dict(role='user', content='Use lookup for key alpha.'),
         dict(role='assistant', content='', tool_calls=[{
             'id': 'c1', 'type': 'function',
-            'function': {'name': 'lookup', 'arguments': '{"k": "alph"}}}]),
+            'function': {'name': 'lookup', 'arguments': '{"k": "alph"'}}]),
         dict(role='tool', tool_call_id='c1',
              content='{"error": "Invalid JSON input for tool lookup. Please try again."}'),
         dict(role='user', content='The key was alpha after all. Call lookup again with the exact key.'),
