@@ -127,3 +127,20 @@ boot (external RSS sampler during the window) or in-container memory tracing, bo
 offline-designed first. Today's 5 boot attempts (W7-W11) mapped the full failure
 surface: import chain → wheel deps → read-phase slab pile-up (FIXED) → post-load init
 (last unknown).
+
+## 🎉 FINAL: first full mig boot + measurement (2026-10-26 06:13-06:42)
+
+The "post-load OOM" from W9-W11 + EP1a-c was **deepseek-recipe missing from the image**
+(the new pin's serving_chat builds a DeepSeekRecipeChatEncodingAdapter that imports it;
+the detokenizer -9 was cleanup, not the OS killer). One pip install line fixed it.
+
+### Results (EP1 + b12x_next, prefill_sp/hc_fused OFF, H0a empty_cache every-4th):
+- cold 600k: 3235.0 (discard) / **3953.4** (measured) vs baseline 4101-4121 = **-3.7%**
+- decode: **37.8 / 36.3** vs 44.0 = **-14%** (prefill_sp OFF suspected)
+- conc6: **4021.0** vs 3884 = **+3.5%** (upstream scheduler improvement!)
+- smoke: 4/4 PASS; boot gates: all green; image proof: canary-mig confirmed
+
+### Decision table: -3.7% → "migration + re-port" path
+prefill_sp re-port is the main gap (historically +18% cold prefill); recovering it should
+push the mig line ABOVE the current baseline. The upstream wave (host-sync elimination,
+index-K caching, scheduler improvements) contributes the conc6 +3.5% already.
