@@ -114,6 +114,10 @@ def install(module):
         # sgl#46180). Our host-table backend has no peer; None disables that path
         # upstream-side. Harmless on 620c76f2 (attribute unused there).
         self.peer = None
+        # >= 7d996300: upstream forward() reads these in the staged-read path.
+        # Defaults match the stock non-staged behavior; harmless on 620c76f2.
+        self.staged_by_scheduler = False
+        self._sort_host_reads = False
         self.dim, self.tp_size = dim, module.get_parallel().tp_size
         rank = module.get_parallel().tp_rank
         self.row_start = num_embeddings * rank // self.tp_size
