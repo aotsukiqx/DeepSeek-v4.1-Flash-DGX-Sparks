@@ -8,7 +8,7 @@
 | Original item | Verdict | Why |
 |---|---|---|
 | Enable prefill CUDA graphs | **NOT AVAILABLE** | DSV4 auto-disable rule: `PREFILL_CP_BCG_SUPPORTED_COMBINATIONS` = {(ZIGZAG,TRTLLM_MHA),(INTERLEAVE,DSA)}; `dsv4` backend not whitelisted. Flag vocabulary also changed: `--cuda-graph-backend-{decode,prefill}={full,breakable,disabled}`. |
-| Enable verify_cap + block_verify + draft family | **Symbol-verified OK, deferred** | All six adapters (verify_cap/block_verify/draft_tau/wo_a_w8/autotune_keep/folded_result_fence) have their required symbols on 7d996300. BUT none ever ran in production (all default OFF) — new experiment, not recovery. Second window. |
+| Enable verify_cap + block_verify + draft family | **Symbol-verified OK → NEXT WINDOW (production-proven)** | All six adapters have their required symbols on 7d996300. CORRECTION 2026-10-26: all six ARE production-enabled (VERIFY_CAP=conf:0.1, BLOCK_VERIFY=1, DRAFT_TAU=0.7, WO_A_W8=1+DROP+MID, AUTOTUNE_KEEP=1, FOLDED_FENCE=1 in .env.tp4's quoted EXTRA_CONTAINER_ENV line — earlier "never prod" claim was a `^`-grep artifact). Recovery, not experiment: copy exact prod values; expected +4-6% decode. |
 | (new) `--enable-prefill-cp --cp-strategy interleave` | **PRIMARY BET, launched 07:52** | Native context-parallel prefill works for DSV4 (`is_dsa_enable_prefill_cp()` True for V4). Upstream equivalent of prefill_sp (+18% hist.). env.mig v2 = v1 + CP flags ONLY; backup `/tmp/env.mig.v1-nocp`. |
 
 ## Symbol Verification Record (2026-10-26, in-image)

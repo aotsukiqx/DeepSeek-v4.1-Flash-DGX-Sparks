@@ -83,12 +83,12 @@ spent on a pip install. Check pip deps in the Dockerfile FIRST.
 | `history_repair.py` | Broken tool-call args → repaired history | ✅ ON |
 | `placeholder_sanitize.py` | Image placeholder token → `[image]` on recipe line | ✅ ON |
 | `encoding_compat.py` | Thinking alias, max_tokens cap, anthropic protocol | ✅ ON |
-| `block_verify.py` | Block verification for sampled rows | ❌ OFF (symbol-verified OK, never prod-tested) |
-| `verify_cap.py` | Per-request verify length via acceptance cutoff | ❌ OFF (symbol-verified OK, never prod-tested) |
-| `folded_result_fence.py` | Folded results cloned off persistent buffers | ❌ OFF (FIELDS match upstream, never prod-tested) |
-| `autotune_keep.py` | FlashInfer autotune cache across boots | ❌ OFF (symbol-verified OK, never prod-tested) |
-| `draft_tau.py` | Draft proposal temperature | ❌ OFF (never prod-tested) |
-| `wo_a_w8.py` | FP8 twin for verify/draft wo_a weights | ❌ OFF (never prod-tested) |
+| `block_verify.py` | Block verification for sampled rows | ❌ mig OFF — prod ON (=1), symbol-verified on 7d996 |
+| `verify_cap.py` | Per-request verify length via acceptance cutoff | ❌ mig OFF — prod ON (=conf:0.1), symbol-verified |
+| `folded_result_fence.py` | Folded results cloned off persistent buffers | ❌ mig OFF — prod ON (=1), FIELDS match upstream |
+| `autotune_keep.py` | FlashInfer autotune cache across boots | ❌ mig OFF — prod ON (=1), symbol-verified |
+| `draft_tau.py` | Draft proposal temperature | ❌ mig OFF — prod ON (=0.7), symbol-verified |
+| `wo_a_w8.py` | FP8 twin for verify/draft wo_a weights | ❌ mig OFF — prod ON (=1+DROP+MID), symbol-verified |
 | `draft_head_fp8.py` / `_tp4.py` | Draft LM head from FP8 copy | ❌ OFF |
 | `sitecustomize.py` | Import hook that installs all adapters | ✅ active |
 
@@ -215,18 +215,22 @@ hidden — always run checks CUDA-visible.
 
 ### Then
 - hc_fused re-port: `docs/plans/hc_fused-report-plan.md` (+4.3% cold, half day)
-- Optional one-window experiment: six-adapter arm (verify_cap/block_verify/draft_tau/
-  wo_a_w8/autotune_keep/folded_result_fence) — all symbol-verified compatible with
-  7d996300 (verification record in docs/plans/config-arm-plan.md), never prod-tested,
-  targets decode. Off critical path.
-- Full A/B + qeval paired → adopt if net positive
-- If adopted: update `.env.tp4.example`, `docs/tp4.md`, tag rollback points
+- **Six-adapter mig window (HIGH-VALUE, run first)**: verify_cap/block_verify/draft_tau/
+  wo_a_w8(+DROP+MID)/autotune_keep/folded_fence — symbol-verified compatible AND
+  production-proven (see §8a). Copy exact prod values; expected +4-6% decode.
+- Full A/B + qeval paired → adopt if net positive; if adopted update `.env.tp4.example`, `docs/tp4.md`, tag rollback points
 
-## 8a. Decode-Gap Attribution (CORRECTED 2026-10-26)
-Earlier attribution gave ~-4% to "verify/draft family OFF" — WRONG: those six adapters
-were never enabled in production either. Corrected: prefill_sp OFF (~-8% primary),
-hc_fused OFF (~-2%), ~-4% unattributed (candidates: engine-level prefill_sp decode-path
-effects, DSpark-spec interaction, flashinfer 0.7.2-vs-0.7.0 delta).
+## 8a. Decode-Gap Attribution (RE-VERIFIED 2026-10-26, full env evidence)
+⚠️ Two wrong turns this session, both from `^`-anchored greps missing the quoted
+EXTRA_CONTAINER_ENV line (the decoy-line trap this repo's skill warns about).
+**Final evidence**: production .env.tp4 (== /tmp/env.prod.live, diff empty) runs the
+FULL adapter stack — VERIFY_CAP=conf:0.1, BLOCK_VERIFY=1, DRAFT_TAU=0.7,
+WO_A_W8=1(+DROP=1+MID=1), AUTOTUNE_KEEP=1, FOLDED_FENCE=1, DRAFT_HEAD_FP8=1(tp4),
+DRAFT_MAIN_PROJ_SPLIT=1, L2_PREFETCH=1, PREFILL_SP=1(shard)+FP8=1, HC_FUSED=1.
+So mig decode 37.8 vs prod 44.0 (-14%) = prefill_sp OFF (~-8%) + hc_fused OFF (~-2%)
+**+ six-adapter family OFF (~-4%)** — the original attribution stands; the six
+adapters ARE production-proven. To audit env vars in future: `grep -o
+'DSV41_[A-Z_0-9]*=[^ "]*' .env.tp4 | sort -u` (never `^`-anchor).
 
 ## 9. Historical Context (for reference)
 
