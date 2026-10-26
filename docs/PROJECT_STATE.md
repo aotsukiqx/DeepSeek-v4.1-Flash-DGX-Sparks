@@ -215,9 +215,21 @@ hidden — always run checks CUDA-visible.
 
 ### Then
 - hc_fused re-port: `docs/plans/hc_fused-report-plan.md` (+4.3% cold, half day)
-- **Six-adapter mig window (HIGH-VALUE, run first)**: verify_cap/block_verify/draft_tau/
-  wo_a_w8(+DROP+MID)/autotune_keep/folded_fence — symbol-verified compatible AND
-  production-proven (see §8a). Copy exact prod values; expected +4-6% decode.
+- **Six-adapter mig window COMPLETE 2026-10-26 11:37 (4 crash-fix iterations)**:
+  cold 3994.3 (+1.0% vs v1 3953), conc6 4033.0 (+0.3%), decode flat (36.8 avg),
+  smoke 4/4, qeval 71/75. **Flat because verify_cap is INERT** on 7d996300 — its
+  planner hook point (`compute_confidence_tensor`) was absorbed into the budget
+  machinery; without conf capture the verify trimming (the decode contributor)
+  never engages. Unlock = small verify_cap re-port onto the new planner's
+  confidence path (confidence_budget_prepare & co).
+  Crash chain root-caused & fixed (commits 6b5abd6..793125f): (1) wo_a_w8 kernel
+  path moved (gemm/dsv4_wo_a) — the old-path fallback einsum-bridge detonated via
+  (2) sitecustomize hook exceptions evicting engine modules (importlib removes
+  failed-import modules while registrations persist → duplicate-invariant);
+  sitecustomize now NEVER propagates hook exceptions; (3) verify_cap planner hook
+  hasattr-guarded (loud INERT note); (4) block_verify execute needs **kw passthrough
+  (7d996300 passes block_verification kwarg). mig_window.sh rollback now captures
+  worker logs FIRST (before start-tp4.sh stop deletes containers).
 - Full A/B + qeval paired → adopt if net positive; if adopted update `.env.tp4.example`, `docs/tp4.md`, tag rollback points
 
 ## 8a. Decode-Gap Attribution (RE-VERIFIED 2026-10-26, full env evidence)
