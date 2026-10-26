@@ -2,17 +2,32 @@
 
 > Goal: rebuild the prefill sequence-parallel adapter on the new pin's CUDA op_* seams.
 > Expected recovery: +18% cold prefill + ~8% decode = mig arm surpasses production baseline.
-> **Phase A (classification) COMPLETE 2026-10-26 — see §2. Phase B starts at §5.**
+> **Phase A (classification) COMPLETE. Phase B (hash tables + dual-pin + CUDA-safe
+> install) COMPLETE 2026-10-26, commit 6592aee — verified in-image on BOTH pins
+> (7d996: 28/28 MATCH + CPU tests ok; 620c: probe+check PASS). Phase C remains.**
+
+## 0. CORRECTION to §2b (2026-10-26, later session)
+`hc_pre_from_prev_sublayer` is **True** for our model: the pin's config CLASS
+`configs/deepseek_v41.py:47` defaults it True (raw config.json has no hc keys —
+checking json alone is misleading). So on CUDA the driving loop IS
+`Model._forward_layers_hc_pre_from_prev` (269 lines, DRIFTED but ACTIVE); inside it,
+per-layer dispatch is `if _is_cuda: layers[i](...)` (CudaDecoderLayer.forward, 37
+lines) else `layers[i].forward_hc_from_prev(...)` (Platform). The adapter's PRIMARY
+wrap point (the Model loop) survives; `_sp_forward_layers` must be rewritten to the
+new per-layer signature (no prev_pre/precomputed_attn kwargs; hc state via
+residual_batch + state.materialized at loop end).
 
 ## 1. Problem Statement
 
-prefill_sp (`adapter/prefill_sp.py`, 1166 lines) hash-guards 23 engine anchors
-(16 MAIN + 4 FP8 + 3 TAIL). On 7d996300 most drifted; the CUDA layer architecture was
-restructured around declared HC boundaries. The drift guard raises at serve time.
+prefill_sp (`adapter/prefill_sp.py`, 1215 lines) hash-guards engine anchors
+(20 MAIN + 4 FP8 + 3 TAIL on 7d996; 16+1 legacy on 620c, probe-selected). On
+7d996300 most drifted; the CUDA layer architecture was restructured around declared
+HC boundaries. The drift guard raises at serve time.
 
 ## 2. Phase A Findings (2026-10-26, verified in mig image)
 
 ### 2a. Class architecture changed (v4.py split into 5 modules)
+
 - `deepseek_v4.py`: `DeepseekV4DecoderLayerBase` (3070) → `DeepseekV4CudaDecoderLayer` (3517)
   → `DeepseekV4PlatformDecoderLayer` (3704, = NonCudaDecoderMixin + Base);
   alias `DeepseekV4DecoderLayer = Cuda if _is_cuda else Platform` (3708)

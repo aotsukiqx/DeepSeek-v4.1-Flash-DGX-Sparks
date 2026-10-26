@@ -200,12 +200,16 @@ Prefill CUDA graphs likewise unavailable: `PREFILL_CP_BCG_SUPPORTED_COMBINATIONS
 (c4-indexer scratch OOMs the capture pool). Flag vocabulary changed on 7d996300:
 `--cuda-graph-backend-{decode,prefill}={full,breakable,disabled}`.
 
-### CRITICAL PATH: prefill_sp re-port — Phase A DONE (2026-10-26, commit d34dfd4)
-Classification complete (7 match / 8 port / 4 redirect / 2 gone-on-CUDA); CUDA runtime
-path identified (residual_batch + CudaDecoderLayer.forward + op_* seams); new anchor
-hash table computed and staged in `docs/plans/prefill_sp-report-plan.md` §6.
-**Resume at Phase B** (rebuild _EXPECTED + port 8 wrappers + re-target SP core to
-op_gather/op_moe/transports — see plan §3). Offline work; one validation window after.
+### CRITICAL PATH: prefill_sp re-port — Phase A+B DONE (commits d34dfd4, 6592aee)
+Phase A: classification (7 match / 8 port / 4 redirect / 2 gone-on-CUDA); CUDA runtime
+path identified — **Model._forward_layers_hc_pre_from_prev is STILL the CUDA driving
+loop** (V4.1 config class defaults hc_pre_from_prev_sublayer=True; config.json alone
+misleads); per-layer seam = CudaDecoderLayer.forward (37 lines) + op_*.
+Phase B: dual-pin hash tables (28-anchor 7d996300 set + 620c legacy, probe-selected —
+production rebuild safe); CUDA-safe install() (comm/shard refuse with Phase C pointer);
+verified in-image BOTH pins (28/28 MATCH; 620c probe PASS; CPU tests ok).
+**Resume at Phase C** (rewrite _sp_forward_layers to new per-layer signature; SP wraps
+at op_gather_a/b + MoeTransport + op_combine/op_mhc; then validation window).
 ⚠️ Alias gotcha: `DeepseekV4DecoderLayer` resolves to Platform class when CUDA is
 hidden — always run checks CUDA-visible.
 
