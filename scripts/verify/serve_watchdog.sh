@@ -20,7 +20,15 @@ while true; do
     continue
   fi
   mark "engine down ($code) and no serve running -> auto-recover"
+  # Proven recovery sequence (2026-10-26 adoption): stop + clean + DRAIN before
+  # serve — skipping the drain caused slab-cap thrash and a 4-rank barrier timeout.
+  "$ROOT/start-tp4.sh" stop >>"$LOG" 2>&1 || true
+  for h in spark-a89f spark-141e spark-2fe7; do
+    ssh -n "$h" 'docker ps -aq --filter name=dsv41-worker | xargs -r docker rm -f' >/dev/null 2>&1 || true
+  done
   nohup python3 "$ROOT/scripts/verify/boot_hygiene.py" reap --minutes 16 >>"$LOG" 2>&1 &
+  mark "draining 60s for swap/page release"
+  sleep 60
   cd "$ROOT" && nohup ./start-tp4.sh serve >>/tmp/serve-watchdog.log 2>&1 &
   mark "recovery serve dispatched (see /tmp/serve-watchdog.log)"
 done
