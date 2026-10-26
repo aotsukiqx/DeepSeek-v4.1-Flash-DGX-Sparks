@@ -86,11 +86,23 @@ monoliths — cleaner wrap targets.
 4. Unit-test the hash table via `scripts/verify/sp_drift_check.py` (extend for CUDA-visible)
 
 ### Phase C (1 session): SP core re-target
-- Rewrite `_sp_forward_layers` to drive the else-branch loop shape (residual_batch +
-  layer.forward) instead of `_forward_layers_hc_pre_from_prev`
-- Wire SP row-sharding at: op_gather_a/b (attention input gather), MoeTransport (MoE
-  boundary), op_combine (hc stats combine), Engram/wo_b full-row layers
-- Keep EXACT/FP8/WKV_SHARD modes behind env as before
+**Strategy (refined 2026-10-26 after reading boundary.py)**: upstream's boundary system
+(`srt/models/deepseek_v4_boundary.py`, 547 lines) is a DECLARATIVE row-layout/transport
+machine: `stages()` builds `TransportRows(source, compute, output, SumGroup)` tables
+per BatchVariant; `Layout.sharded_over(TokenAxis.ATTN_TP)` already models "rows sharded
+over ATTN_TP" (used for the EP case). Two candidate approaches, evaluate both:
+1. **Layout-declaration approach (preferred, less code)**: for prefill EXTEND batches,
+   declare compute rows sharded over ATTN_TP (mirroring the EP row in `table_ffn`) so
+   upstream transports perform the gather/reduce-scatter natively. Wrap or extend
+   `stages()`/the variant tables rather than hand-rolling collectives.
+2. **Wrapper approach (fallback)**: wrap `CudaDecoderLayer.forward` + op_gather_a/b +
+   op_moe/MoeTransport with SP-aware versions (port of the old `_make_*` factories).
+Also: rewrite `_sp_forward_layers` to the new per-layer signature
+(`layers[i](positions=, hidden_states=, input_ids=, forward_batch=, input_ids_global=)`,
+no prev_pre; hc state via residual_batch; loop tail = `residual_batch.read_output` +
+`state.materialized`). Extracted sources on Mac: `~/dsv41-srcdiff/new/{boundary.py,v4.py}`;
+still to extract: `layers/layer_boundary/{layout,residual}.py`.
+Keep EXACT/FP8/WKV_SHARD modes behind env as before.
 
 ### Phase D (validation, 1 window)
 - Boot mig arm with `DSV41_PREFILL_SP=1`
