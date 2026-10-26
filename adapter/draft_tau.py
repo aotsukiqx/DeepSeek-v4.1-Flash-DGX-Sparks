@@ -31,7 +31,17 @@ def install(module):
 
     def stage_sampling_params(self, *, bs, sampling_info):
         orig(self, bs=bs, sampling_info=sampling_info)
-        if self.folded_sampling and self.temperatures is not None and sampling_info is not None:
+        # 7d996300: params is a DraftParams buffer set (temperatures/greedy_mask/
+        # step_temperatures) staged by resolve_draft_params; the graph reads it.
+        params = getattr(self, "params", None)
+        if params is not None:
+            temps = getattr(params, "temperatures", None)
+            if temps is not None and sampling_info is not None:
+                temps[:bs].mul_(TAU)
+            return
+        # 620c76f2: the folded sampler's own buffer.
+        if getattr(self, "folded_sampling", False) and getattr(self, "temperatures", None) is not None \
+                and sampling_info is not None:
             self.temperatures[:bs].mul_(TAU)
 
     cls.stage_sampling_params = stage_sampling_params
