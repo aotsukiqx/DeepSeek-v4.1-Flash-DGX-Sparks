@@ -16,24 +16,25 @@
 
 ## 2. Two Code Lines (running simultaneously)
 
-### Production line (LIVE, stable, verified)
-- **Image**: `dsv41-4x-spark:canary-roce` (bundle#3, code `1c36c98`)
-- **sglang pin**: `620c76f2` on base `nightly-dev-cu13-20261011@4793eb40`
-- **Config**: EP1, TP4, b12x_next ON, prefill_sp ON, hc_fused ON, verify/draft family ON
+### Production line (LIVE since 15:44 — the ADOPTED mig v4)
+- **Image**: `dsv41-4x-spark:canary-mig` (sglang **7d996300**, Dockerfile.canary-mig)
+- **Config**: EP1, TP4, b12x_next ON (needle fix), six-adapter family ON,
+  DSV41_PIN7=1, prefill_sp OFF (Phase C deferred), hc_fused absorbed upstream
+- **Wheels**: flashinfer 0.7.2, deep-gemm 0.2.3.post2, kernel 0.4.10, flash-mla 1.0.0, deepseek-recipe
 - **KV pool**: MAX_TOTAL_TOKENS=6700000, MRR=32, chunk=4096, MEM_FRACTION_STATIC=0.80
-- **H0a adopted**: `DSV41_PREFILL_EMPTY_CACHE_EVERY=4` (empty_cache every 4th chunk)
-- **RoCE**: ON (SGLANG_ROCE_ALLREDUCE=1, +17% conc6 asset, R2-proven)
-- **Rollback points**: tags `pre-bundle3`, `pre-bundle2`, `pre-serving`, `pre-660c` + `.env.tp4.pre-*` backups on all 4 nodes
+- **EVERY=4, RoCE ON** (unchanged from the old line)
+- **Adoption evidence**: paired qeval BROKE=0 (75 tasks identical per-task),
+  decode 43.9 (window) / 47.6 (spot), conc6 +4.1%, cold -3.0% accepted
+- **Cutover procedure (proven)**: stop → clean workers → **drain ≥45s (MANDATORY:
+  skipping it caused slab-cap thrash + 4-rank barrier timeout on the first try)** →
+  `cp /tmp/env.mig .env.tp4` → serve → 200
 
-### Migration arm (measured twice, NOT adopted)
-- **Image**: `dsv41-4x-spark:canary-mig` (Dockerfile.canary-mig)
-- **sglang pin**: `7d996300` (2026-10-24, settled after MegaGate churn)
-- **Config v1**: EP1, TP4, b12x_next ON, prefill_sp OFF, hc_fused OFF, six-adapter family OFF
-- **Config v3 (current /tmp/env.mig on head)**: v1 + six adapters ON
-  (VERIFY_CAP=conf:0.1, BLOCK_VERIFY=1, DRAFT_TAU=0.7, WO_A_W8=1+DROP+MID,
-  AUTOTUNE_KEEP=1, FOLDED_FENCE=1) — **boot-green since commit 793125f**
-- **Extra wheels**: flashinfer 0.7.2, deep-gemm 0.2.3.post2, kernel 0.4.10, flash-mla 1.0.0, **deepseek-recipe**
-- **Boot requires**: Dockerfile.canary-mig + `/tmp/env.mig` (regen: docs/plans/config-arm-plan.md §appendix + scripts/verify/env_mig_add_six.py)
+### Rollback line (old production, proven path)
+- **Image**: `dsv41-4x-spark:canary-roce` (bundle#3, code `1c36c98`, pin 620c76f2)
+- **Env**: `/tmp/env.pre-adoption-620c` (== old .env.tp4); tag `pre-adoption-v4`
+- **Procedure**: stop → drain 45s → `cp /tmp/env.pre-adoption-620c .env.tp4` → serve
+- **Keep** the image/env/tag on all nodes until the 24h soak clears (criteria:
+  smoke clean, decode ≥42, no crash loops, no quality complaints).
 
 ## 3. Latest Measurements (2026-10-26 13:20, four-way)
 
