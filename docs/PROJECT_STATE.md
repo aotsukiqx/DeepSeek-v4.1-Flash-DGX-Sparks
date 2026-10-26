@@ -55,6 +55,15 @@ before — production's 44.0 was achieved without them; now active on mig, froze
 **Decode gap CLOSED** (43.9 vs 44.0). Remaining: cold -3.0% — prefill_sp Phase C
 (+18% hist.) is the last unlock. conc6 already beats production by +4.1%.
 
+### Input-scattered shortcut: DEAD END (2026-10-26 14:19)
+`--enable-attn-tp-input-scattered` + `--moe-dense-tp-size 4` (the eligibility
+predicate requires dense FFN not fully-DP): flag resolved to 4, adapter logged
+"not enabled while other conditions are not met", and the boot crashed at SWA
+replay (`raw_positions - swa_replay_start`: 131 vs 128 row mismatch — interaction
+with the SPARK_PREFILL_TP_SPLIT row-splitting already in our env). Upstream
+territory; not retried. The remaining cold gap belongs to prefill_sp Phase C
+(manual wrapper port; plan fully staged) or is accepted at adoption time.
+
 ## 4. Migration Boot Blockers — ALL RESOLVED (9 total)
 
 The mig arm required 9 fixes across 8 boot attempts (W7-W11 + EP1a-c + final):
