@@ -35,21 +35,25 @@
 - **Extra wheels**: flashinfer 0.7.2, deep-gemm 0.2.3.post2, kernel 0.4.10, flash-mla 1.0.0, **deepseek-recipe**
 - **Boot requires**: Dockerfile.canary-mig + `/tmp/env.mig` (regen: docs/plans/config-arm-plan.md §appendix + scripts/verify/env_mig_add_six.py)
 
-## 3. Latest Measurements (2026-10-26, three-way)
+## 3. Latest Measurements (2026-10-26 13:20, four-way)
 
-| Metric | Production | mig v1 (adapters off) | mig v3 (six on) | v3 vs prod |
-|---|---:|---:|---:|---:|
-| cold 600k tok/s (seed3) | 4101-4121 | 3953.4 | **3994.3** | -2.6% |
-| decode net tok/s (avg) | 44.0 | 37.05 | 36.8 | -16% |
-| conc6 aggregate | 3884 | 4021 | **4033** | **+3.8%** |
-| smoke | 4/4 | 4/4 | 4/4 | ✓ |
-| qeval | 53/55 BROKE=0 | (gate: pass) | 71/75 | ✓ (paired run pending) |
+| Metric | Production | mig v1 | mig v3 | **mig v4 FINAL** | v4 vs prod |
+|---|---:|---:|---:|---:|---:|
+| cold 600k tok/s (seed3) | 4101-4121 | 3953.4 | 3994.3 | **3978.8** | -3.0% |
+| decode net tok/s (avg) | 44.0 | 37.05 | 36.8 | **43.9** | **-0.2% ✓ closed** |
+| conc6 aggregate | 3884 | 4021 | 4033 | **4042** | **+4.1%** |
+| smoke | 4/4 | 4/4 | 4/4 | 4/4 | ✓ |
+| qeval | 53/55 | — | 71/75 | 71/75 (median 76.6 tok/s) | ✓ |
 
-**Reading**: v3 vs v1 ≈ flat (cold +1.0%, decode flat) because **verify_cap runs
-INERT** — its conf-capture hook point (`DSparkVerifyPlanner.compute_confidence_tensor`)
-was absorbed upstream into the budget machinery; without conf the verify trimming
-never engages. The remaining decode gap decomposes as: prefill_sp OFF (~-8%),
-hc_fused OFF (~-2%), verify_cap INERT (~-4%, the re-port unlock).
+**v4 config** (env.mig + DSV41_PIN7=1): six adapters + verify_cap STATIC-PATH re-port
+(begin_static_step writes conf-derived cutoffs into verify_lens_buf after the engine's
+full-stride reset; conf from DraftBlockProposer.propose wrap) + shadowed-elif fix
+(draft_tau / folded_fence / verify_cap executor wraps NEVER installed on any pin
+before — production's 44.0 was achieved without them; now active on mig, frozen on
+620c behind DSV41_PIN7) + draft_tau DraftParams re-port.
+
+**Decode gap CLOSED** (43.9 vs 44.0). Remaining: cold -3.0% — prefill_sp Phase C
+(+18% hist.) is the last unlock. conc6 already beats production by +4.1%.
 
 ## 4. Migration Boot Blockers — ALL RESOLVED (9 total)
 
