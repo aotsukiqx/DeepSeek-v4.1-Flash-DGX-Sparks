@@ -12,6 +12,9 @@ mkdir -p "$RES"
 
 rollback() {
   MARK "ROLLBACK to production line"
+  # Capture worker container logs BEFORE start-tp4.sh stop deletes the containers
+  # (worker crash evidence; containers are named exactly dsv41-worker).
+  for h in spark-a89f spark-141e spark-2fe7; do ssh -n "$h" 'docker logs --tail 400 dsv41-worker > /tmp/worker-crash.log 2>&1' >/dev/null 2>&1 || true; done
   cp /tmp/env.prod.live "$ROOT/.env.tp4" 2>/dev/null || true
   "$ROOT/start-tp4.sh" stop >>"$LOG" 2>&1 || true
   for h in spark-a89f spark-141e spark-2fe7; do ssh -n "$h" 'docker ps -aq --filter name=dsv41-worker | xargs -r docker rm -f' >/dev/null 2>&1; done
