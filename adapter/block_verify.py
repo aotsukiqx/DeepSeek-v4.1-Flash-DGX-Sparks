@@ -90,13 +90,15 @@ def install(accept_module):
     import sglang.srt.speculative.dflash_utils as du
 
     def execute(*, candidates, target_logits, draft_probs, sampling_info, draft_input, gamma,
-                verify_num_draft_tokens, cutoff_verify_lens=None):
+                verify_num_draft_tokens, cutoff_verify_lens=None, **kw):
+        # 7d996300 passes a new `block_verification` kwarg (and possibly more later):
+        # unknown kwargs pass through to the stock execute untouched.
         if cutoff_verify_lens is not None and os.environ.get("DSV41_VERIFY_CAP", "").strip() in ("", "0", "off"):
             return cls._dsv41_orig_execute(candidates=candidates, target_logits=target_logits,
                                            draft_probs=draft_probs, sampling_info=sampling_info,
                                            draft_input=draft_input, gamma=gamma,
                                            verify_num_draft_tokens=verify_num_draft_tokens,
-                                           cutoff_verify_lens=cutoff_verify_lens)
+                                           cutoff_verify_lens=cutoff_verify_lens, **kw)
         bs = candidates.shape[0]
         if not sampling_info.need_top_k_sampling and not sampling_info.need_top_p_sampling:
             target_probs = softmax_temp.execute(logits=target_logits, temperatures=sampling_info.temperatures,
