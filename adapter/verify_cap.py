@@ -273,6 +273,29 @@ def install_verify(verify_module):
 
     ex.run_non_compact = run_non_compact
 
+    # 7d996300 static verify path (the production decode route): the verify CUDA
+    # graph reads live lengths from the epilogue's persistent verify_lens_buf, which
+    # begin_static_step resets to full stride before every replay. Apply the
+    # confidence-derived cutoffs AFTER the reset so the replay trims dead rows.
+    # (Conf comes from the DraftBlockProposer.propose wrap — install_draft.)
+    # 620c76f2 has begin_static_step too but no StaticVerifyIO/run_static: its
+    # verify graph predates the new live-length plumbing — keep old-pin behavior
+    # unchanged (run_non_compact wrap covers it there).
+    orig_bss = getattr(ep, "begin_static_step", None)
+    if orig_bss is not None and hasattr(verify_module, "StaticVerifyIO"):
+        def begin_static_step(self, bs: int, armed: bool):
+            orig_bss(self, bs, armed)
+            if _state["thr"] is not None:
+                set_live_from_confidence(_state["conf"], bs)
+                if not _state["logged"]:
+                    _state["logged"] = True
+                    print(f"[verify_cap] static path: confidence "
+                          f"{'present' if _state['conf'] is not None else 'MISSING'}", flush=True)
+                _state["conf"] = None
+                self.verify_lens_buf[:bs].copy_(live_buf()[:bs])
+                self.verify_lens_buf[bs:].zero_()
+        ep.begin_static_step = begin_static_step
+
     # DSV41_VERIFY_CAP_LOG=/state/vcap-log.bin (rank 0): per verify step and request, the confidence
     # vector, the live length used and the accepted drafts. Costs a device sync per step: measurement only.
     log_path = os.environ.get("DSV41_VERIFY_CAP_LOG", "")

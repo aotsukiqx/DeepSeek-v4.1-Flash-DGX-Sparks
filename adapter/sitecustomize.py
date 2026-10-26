@@ -8,6 +8,14 @@ def _tp4_launcher():
     """True only inside containers started by start-tp4.sh (DSV41_LAUNCHER=tp4)."""
     return os.environ.get('DSV41_LAUNCHER', '') == 'tp4'
 
+def _pin7():
+    """True only when DSV41_PIN7=1 (the 7d996300 mig-arm env). Guards adapters whose
+    activation would change 620c76f2 production behavior after the 2026-10-26 shadowed
+    -elif fix (draft_tau, folded_fence, verify_cap executor wraps): production env
+    omits the flag, so the old line stays byte-for-byte frozen until deliberately
+    window-tested; set it in env.mig (see scripts/verify/env_mig_add_six.py)."""
+    return os.environ.get('DSV41_PIN7', '0') == '1'
+
 class EngramLoader(importlib.abc.Loader):
     def __init__(self, original):
         self.original = original
@@ -190,6 +198,13 @@ class EngramLoader(importlib.abc.Loader):
                 if os.environ.get('DSV41_DUAL_GRAPH', '0').strip() not in ('0', 'off', 'false', ''):
                     from dual_graph import install_sampler_hook
                     install_sampler_hook(module)
+                # (FIXED 2026-10-26: draft_tau lived in a DUPLICATE elif branch below,
+                # shadowed by this dual_graph branch — it never installed on ANY pin.
+                # Reactivated behind DSV41_PIN7 (set only in the mig-arm env): 620c76f2
+                # production behavior stays frozen until deliberately window-tested.)
+                if _pin7() and os.environ.get('DSV41_DRAFT_TAU', '1').strip() not in ('', '1', '1.0'):
+                    from draft_tau import install as install_draft_tau
+                    install_draft_tau(module)
             elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_verify':
                 # DSV41_DUAL_GRAPH: the verify batch builds at the selected width (narrow family),
                 # and the static epilogue's stride follows the step/batch width. Installed BEFORE
@@ -198,32 +213,32 @@ class EngramLoader(importlib.abc.Loader):
                     from dual_graph import install_verify_hook, install_executor_hook
                     install_verify_hook(module)
                     install_executor_hook(module)
+                # (FIXED 2026-10-26: this block lived in a DUPLICATE elif branch that
+                # the dual_graph branch above shadowed — folded_fence and verify_cap's
+                # executor wraps never installed on ANY pin. Merged here, but gated to
+                # 7d996300 (StaticVerifyIO probe): 620c76f2 production behavior stays
+                # frozen until these are deliberately window-tested there.)
+                if _pin7() and hasattr(module, 'StaticVerifyIO'):
+                    # DSV41_FOLDED_FENCE: folded results cloned off the persistent
+                    # verify buffers (sglang#40919 race under overlap scheduling).
+                    if os.environ.get('DSV41_FOLDED_FENCE', '0').strip() not in ('0', 'off', 'false', ''):
+                        from folded_result_fence import install as install_folded_fence
+                        install_folded_fence(module)
+                    # DSV41_VERIFY_CAP: per-request verify length via acceptance cutoff.
+                    if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
+                        from verify_cap import install_verify as install_verify_cap_verify
+                        install_verify_cap_verify(module)
             elif module.__name__ == 'sglang.srt.model_executor.runner.decode_cuda_graph_runner':
                 # DSV41_DUAL_GRAPH: capture the narrow verify-graph family at widened blocks
                 # (W1, capture-only; adapter/dual_graph.py).
                 if os.environ.get('DSV41_DUAL_GRAPH', '0').strip() not in ('0', 'off', 'false', ''):
                     from dual_graph import install as install_dual_graph
                     install_dual_graph(module)
-            elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_draft_sampler':
-                # Gated on DSV41_DRAFT_TAU (unset or 1 = off): draft proposal temperature.
-                if os.environ.get('DSV41_DRAFT_TAU', '1').strip() not in ('', '1', '1.0'):
-                    from draft_tau import install as install_draft_tau
-                    install_draft_tau(module)
             elif module.__name__ == 'sglang.kernels.ops.speculative.dspark.dspark_accept':
                 # Gated on DSV41_BLOCK_VERIFY: block verification for sampled rows (lossless).
                 if os.environ.get('DSV41_BLOCK_VERIFY', '0').strip() not in ('0', 'off', 'false', ''):
                     from block_verify import install as install_block_verify
                     install_block_verify(module)
-            elif module.__name__ == 'sglang.srt.speculative.dspark_components.dspark_verify':
-                # Gated on DSV41_FOLDED_FENCE: folded results cloned off the persistent verify buffers
-                # (sglang#40919 race under overlap scheduling).
-                if os.environ.get('DSV41_FOLDED_FENCE', '0').strip() not in ('0', 'off', 'false', ''):
-                    from folded_result_fence import install as install_folded_fence
-                    install_folded_fence(module)
-                # Gated on DSV41_VERIFY_CAP: per-request verify length through the acceptance cutoff.
-                if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
-                    from verify_cap import install_verify as install_verify_cap_verify
-                    install_verify_cap_verify(module)
             elif module.__name__ == 'sglang.kernels.ops.moe.moe_fused_gate':
                 if os.environ.get('DSV41_VERIFY_CAP', '').strip() not in ('', '0', 'off'):
                     from verify_cap import install_gate as install_verify_cap_gate
