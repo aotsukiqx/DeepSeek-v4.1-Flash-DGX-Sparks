@@ -247,20 +247,34 @@ at op_gather_a/b + MoeTransport + op_combine/op_mhc; then validation window).
 ⚠️ Alias gotcha: `DeepseekV4DecoderLayer` resolves to Platform class when CUDA is
 hidden — always run checks CUDA-visible.
 
-### Priority queue (resume here)
-1. **verify_cap re-port** (small, decode unlock ~+4%): hook the new planner's
-   confidence path (`confidence_budget_prepare` / budget machinery in
-   `dspark_planner.py` class `DSparkVerifyPlanner`, line 68+) so conf capture works
-   again; verify trimming then engages (block_verify's cutoff path needs it:
-   DSV41_VERIFY_CAP=conf:0.1). One validation window.
-2. **prefill_sp Phase C** (main, cold unlock ~+18%): rewrite `_sp_forward_layers` to
-   the new per-layer signature; SP wraps at op_gather_a/b + MoeTransport +
-   op_combine/op_mhc (wrapper approach chosen; layout-declaration rejected —
-   AttentionTransport hard-validates row preservation, BatchVariant has no SP
-   variant, blast radius includes decode). Plan: docs/plans/prefill_sp-report-plan.md §3.
-3. **hc_fused re-port** (half day, +4.3% cold): docs/plans/hc_fused-report-plan.md.
-4. **Full A/B + qeval paired** → adopt if net positive → update `.env.tp4.example`,
-   `docs/tp4.md`, tag rollback points.
+### Priority queue (REVISED 2026-10-26 15:00 after strategic review)
+1. **Adoption A/B for mig v4** (the next action):
+   a. Paired qeval on the SAME 55-task PRIMARY set vs production (McNemar, BROKE=0
+      gate) — the 71/75 window gate used a different task set, not comparable.
+   b. Traffic-weighted verdict: v4 is decode ✓ (43.9/44.0), conc6 +4.1% (4042/3884,
+      the representative metric for concurrent real traffic), cold -3.0% (3978.8/
+      4101, single-stream only). Runbook: tag `pre-adoption-v4`, new .env.tp4 = v4
+      env (+DSV41_PIN7=1), cutover window, 24h soak with watchdog, explicit
+      rollback (env.prod.live + canary-roce image — proven path).
+2. **prefill_sp Phase C: DEFERRED, post-adoption, conditional** — ceiling re-derived:
+   the -3.0% cold gap = prefill_sp missing + engine delta (positive: conc6 +4.1%);
+   hc_fused's share ≈ 0 (absorbed, item 3). Expected recovery +4-5% → final cold ≈
+   parity to +2% over production. Worth 1-2 sessions of the hardest port ONLY IF
+   real traffic shows cold/TTFT pain post-adoption. Plan staged and warm:
+   docs/plans/prefill_sp-report-plan.md §3 (wrapper approach; hash tables 28/28).
+3. **hc_fused re-port: SKIPPED — win absorbed upstream** (verified 2026-10-26):
+   `deepseek_v4_mhc.py:370 _mix_stats_impl` — "The default split-K/Sinkhorn fusion
+   preserves batch invariance", gated only on `x.is_cuda and use_fused_stats and
+   bf16`; kernels live in `kernels/ops/layernorm/mhc.py` (sinkhorn{,_bf16x3,
+   _deepgemm}). Re-port yield ≈ 0.
+4. Post-adoption hygiene: `.env.tp4.example`, `docs/tp4.md`, rollback tags, 24h
+   soak review; keep the Phase C plan warm.
+
+### Retired shortcuts (all evidence-backed)
+- Native prefill-CP: V4.1 vision model rejects CP.
+- Prefill CUDA graphs: dsv4 backend not in the BCG whitelist.
+- `--enable-attn-tp-input-scattered --moe-dense-tp-size 4`: SWA replay row crash.
+- hc_fused re-port: absorbed upstream (above).
 
 ### Completed this campaign (2026-10-26)
 - Six-adapter arm boot-green after 4 crash fixes (wo_a_w8 kernel path, sitecustomize
