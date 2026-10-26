@@ -87,6 +87,36 @@ DEBUG_DUMP = os.environ.get("DSV41_PREFILL_SP_DEBUG_DUMP", "").strip()
 # of inspect.getsource(inspect.unwrap(obj)). The loop below is a copy of the first; the others
 # are the call sites and kernel gates whose behaviour the exactness argument depends on.
 _EXPECTED = {
+    # 7d996300 hashes (recomputed 2026-10-26, CUDA-visible, image canary-mig).
+    # Platform-only anchors REMOVED (absent on DeepseekV4CudaDecoderLayer):
+    #   _hc_combine -> op_combine_a/b; _hc_mix_stats -> op_mhc_*;
+    #   forward_hc_pre_from_prev / _run_moe_ffn_dp_sync live in deepseek_v4_platform_stage.
+    "v4.DeepseekV4Model._forward_layers_hc_pre_from_prev": "279b059d580002a0",
+    "v4.DeepseekV4DecoderLayer.hc_post": "3b26f9cbb485778a",
+    "v4.DeepseekV4DecoderLayer.forward": "119ec8cf2f4b24b8",
+    "v4.DeepseekV4DecoderLayer.op_combine_a": "e56937a61eaa0223",
+    "v4.DeepseekV4DecoderLayer.op_combine_b": "3b54be04ca8233a2",
+    "v4.DeepseekV4DecoderLayer.op_gather_a": "ad56ac6cf2ecc430",
+    "v4.DeepseekV4DecoderLayer.op_gather_b": "2a879ac1d41fbfec",
+    "v4.DeepseekV4DecoderLayer.op_moe": "3bbe8b5550dc1682",
+    "v4.DeepseekV4DecoderLayer.op_mhc_prepare_attn": "dde98ef728494d10",
+    "v4.DeepseekV4DecoderLayer.op_mhc_post_attn_pre_mlp": "46cda3fc3d09de38",
+    "v4.DeepseekV4DecoderLayer.op_mhc_postprocess": "c6eb37f49f7526a8",
+    "v4.DeepseekV4Model.forward": "5a66a844669ee55d",
+    "v4.MQALayer.forward": "b0d19428fed97020",
+    "v2.DeepseekV2MoE.forward": "f3a64ad5dbad841b",
+    "v2.DeepseekV2MoE.forward_normal": "8dbf1872ed9ed3b8",
+    "engram.Engram.forward": "1d5bacd6d43c08f2",
+    "engram.EngramEmbedding.forward": "d6fdfbdef32819a7",
+    "engram.EngramEmbedding._lookup": "0a035cac21c4c305",
+    "hcn.hc_combine_norm": "c272feb67f8189b6",
+    "hcn._hc_combine_norm_prefill": "74f71ebf85b010ee",
+    "linear.RowParallelLinear.forward": "fdc660bd4e36a7d0",
+}
+
+# Legacy pin 620c76f2 (production line canary-roce): keep for dual-pin support so a
+# production image rebuild still passes its drift guard. Selected by _pin_probe().
+_EXPECTED_620C = {
     "v4.DeepseekV4Model._forward_layers_hc_pre_from_prev": "1bfb7b472ce265f2",
     "v4.DeepseekV4DecoderLayer.forward_hc_pre_from_prev": "49f22482d5370465",
     "v4.DeepseekV4DecoderLayer._hc_combine": "4746993f7aa37013",
@@ -104,13 +134,16 @@ _EXPECTED = {
     "hcn._hc_combine_norm_prefill": "74f71ebf85b010ee",
     "linear.RowParallelLinear.forward": "d12039232b310169",
 }
+_EXPECTED_FP8_620C = {
+    "v4.MQALayer._forward_prepare": "5875284fe389563d",
+}
 
 
 # sglang.srt.layers.attention.deepseek_v4_backend: the tail-row semantics _tail_rows reproduces.
 # Stage 2 additionally relies on these (checked at install when DSV41_PREFILL_SP_FP8=1): which
 # inputs attention's prefill path reads, and when it takes a pre-quantized input.
 _EXPECTED_FP8 = {
-    "v4.MQALayer._forward_prepare": "5875284fe389563d",
+    "v4.MQALayer._forward_prepare": "e45619be35c3ba0f",
     "v4.MQALayer.accepts_mxfp8_swizzled_input": "5bb4fddfc5b329ca",
     "v4.MQALayer._compute_kv_to_cache": "678224fac8995d64",
     "v4.MQALayer._compute_kv_bf16": "00c4ab90b403d1e9",
@@ -473,10 +506,19 @@ def engine_hashes():
     return {k: _src_hash(_resolve(k)) for k in _EXPECTED}
 
 
+def _pin_probe():
+    """Which pin's class shape is loaded: probe one stable anchor."""
+    try:
+        return "v620c" if _src_hash(_resolve("v4.DeepseekV4Model.forward")) == "8fe30b4e1874a893" else "7d996"
+    except AttributeError:
+        return "7d996"
+
+
 def check_engine():
-    exp = dict(_EXPECTED)
+    pin = _pin_probe()
+    exp = dict(_EXPECTED_620C if pin == "v620c" else _EXPECTED)
     if FP8:
-        exp.update(_EXPECTED_FP8)
+        exp.update(_EXPECTED_FP8_620C if pin == "v620c" else _EXPECTED_FP8)
     got = {k: _src_hash(_resolve(k)) for k in exp}
     bad = [f"{k} {got[k]} != {exp[k]}" for k in got if exp[k] != got[k]]
     if bad:
@@ -1142,12 +1184,20 @@ def install(model_mod):
     Model._forward_layers_hc_pre_from_prev = _forward_layers_hc_pre_from_prev
     model_mod.MQALayer.forward = _make_attn_forward(model_mod.MQALayer.forward)
     MoE.forward = _make_moe_forward(MoE.forward)
+    # 7d996300 CUDA layer: _hc_combine/_hc_mix_stats moved to op_* seams and
+    # forward_hc_pre_from_prev is Platform-only. _sp_forward_layers still drives the
+    # old per-layer signature until Phase C — refuse comm/shard rather than run wrong.
+    if MODE in ("comm", "shard") and not hasattr(Layer, "forward_hc_pre_from_prev"):
+        raise RuntimeError(
+            "DSV41_PREFILL_SP=" + MODE + " on 7d996300 CUDA layer: op_* seam port (Phase C) "
+            "not done — _sp_forward_layers still uses the Platform per-layer signature; "
+            "refusing. See docs/plans/prefill_sp-report-plan.md §3")
     if MODE == "shard":
         Layer._hc_combine = _make_hc_combine(Layer._hc_combine)
         Layer.hc_post = _make_hc_post(Layer.hc_post)
         if "compare" in DEBUG:
             Layer._hc_mix_stats = _make_hc_mix_stats(Layer._hc_mix_stats)
-    if DEBUG:
+    if DEBUG and hasattr(Layer, "forward_hc_pre_from_prev"):
         Layer.forward_hc_pre_from_prev = _make_layer_forward(Layer.forward_hc_pre_from_prev)
         print(f"DSV41_PREFILL_SP DEBUG {sorted(DEBUG)} ARMED for the first {DEBUG_CHUNKS} extend "
               f"forwards{' (dumps in ' + DEBUG_DUMP + ')' if DEBUG_DUMP else ''}: NOT FOR PRODUCTION",

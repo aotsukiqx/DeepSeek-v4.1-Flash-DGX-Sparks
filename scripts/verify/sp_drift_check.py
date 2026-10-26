@@ -11,14 +11,20 @@ import sys, hashlib, inspect
 sys.path.insert(0, "/opt/dsv41/adapter")
 import prefill_sp as ps
 
+from sglang.srt.layers.attention import deepseek_v4_backend as backend
 from sglang.srt.models import deepseek_v4 as v4
 from sglang.srt.models import deepseek_v2 as v2
 from sglang.srt.layers import engram, linear
 from sglang.kernels.ops.layernorm import hc_combine_norm as hcn
 
 M = dict(v4=v4, v2=v2, engram=engram, hcn=hcn, linear=linear)
-
+ 
 def resolve(name):
+    if name.startswith(("LateLayerTail", "_tail_rows")):
+        obj = backend
+        for part in name.split("."):
+            obj = getattr(obj, part)
+        return obj
     mod, attr = name.split(".", 1)
     obj = M[mod]
     for part in attr.split("."):
