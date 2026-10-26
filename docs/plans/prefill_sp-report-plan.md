@@ -95,3 +95,50 @@ monoliths — cleaner wrap targets.
 | `~/dsv41-srcdiff/{old,new}/` (Mac) | extracted sources for diffing: v4.py v2.py engram.py hcn.py linear.py backend.py |
 | Head `/tmp/srcdiff.tgz` | same bundle on cluster |
 | tests: `tests/test_prefill_sp.py` | unit tests (SimpleNamespace fixtures) |
+
+## 6. New Anchor Hash Table (Phase B ready — computed 2026-10-26, CUDA-visible, image canary-mig)
+
+```
+KEEP (hash unchanged from _EXPECTED):
+  engram.EngramEmbedding._lookup                 0a035cac21c4c305
+  hcn._hc_combine_norm_prefill                   74f71ebf85b010ee
+  v4.MQALayer._compute_kv_bf16                   00c4ab90b403d1e9   (FP8 table)
+  v4.MQALayer._compute_kv_to_cache               678224fac8995d64   (FP8)
+  v4.MQALayer.accepts_mxfp8_swizzled_input       5bb4fddfc5b329ca   (FP8)
+  deepseek_v4_backend.LateLayerTail.rows         c58392d3ef651408   (TAIL)
+  deepseek_v4_backend.LateLayerTail.real_rows    c78962c2e01e0e3d   (TAIL)
+  deepseek_v4_backend._tail_rows                 54a3cbff5e674e84   (TAIL)
+
+UPDATE (drifted — new hash):
+  v4.DeepseekV4Model._forward_layers_hc_pre_from_prev  279b059d580002a0  (Platform path; hash-check harmless)
+  v4.DeepseekV4DecoderLayer.hc_post                    3b26f9cbb485778a  (now 8 lines in Base)
+  v4.DeepseekV4Model.forward                           5a66a844669ee55d
+  v4.MQALayer.forward                                  b0d19428fed97020
+  v4.MQALayer._forward_prepare                         e45619be35c3ba0f  (FP8)
+  v2.DeepseekV2MoE.forward                             f3a64ad5dbad841b
+  v2.DeepseekV2MoE.forward_normal                      8dbf1872ed9ed3b8
+  engram.Engram.forward                                1d5bacd6d43c08f2
+  engram.EngramEmbedding.forward                       d6fdfbdef32819a7
+  hcn.hc_combine_norm                                  c272feb67f8189b6
+  linear.RowParallelLinear.forward                     fdc660bd4e36a7d0
+
+REMOVE from _EXPECTED (resolve fails on CUDA → guard raises):
+  v4.DeepseekV4DecoderLayer._hc_combine               (→ op_combine_a/b)
+  v4.DeepseekV4DecoderLayer._hc_mix_stats             (→ op_mhc_*)
+  v4.DeepseekV4DecoderLayer.forward_hc_pre_from_prev  (Platform-only)
+  v4.DeepseekV4DecoderLayer._run_moe_ffn_dp_sync      (Platform-only; → op_moe)
+
+ADD (new op_* seams):
+  v4.DeepseekV4DecoderLayer.forward                   119ec8cf2f4b24b8
+  v4.DeepseekV4DecoderLayer.op_combine_a              e56937a61eaa0223
+  v4.DeepseekV4DecoderLayer.op_combine_b              3b54be04ca8233a2
+  v4.DeepseekV4DecoderLayer.op_gather_a               ad56ac6cf2ecc430
+  v4.DeepseekV4DecoderLayer.op_gather_b               2a879ac1d41fbfec
+  v4.DeepseekV4DecoderLayer.op_moe                    3bbe8b5550dc1682
+  v4.DeepseekV4DecoderLayer.op_mhc_prepare_attn       dde98ef728494d10
+  v4.DeepseekV4DecoderLayer.op_mhc_post_attn_pre_mlp  46cda3fc3d09de38
+  v4.DeepseekV4DecoderLayer.op_mhc_postprocess        c6eb37f49f7526a8
+```
+
+Hash-stability: computed from the pinned image source (7d996300) — stable across boots.
+Re-verify after any image rebuild with `scripts/verify/sp_drift_check.py` (CUDA-visible!).

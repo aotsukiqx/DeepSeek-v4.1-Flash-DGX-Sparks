@@ -200,10 +200,14 @@ Prefill CUDA graphs likewise unavailable: `PREFILL_CP_BCG_SUPPORTED_COMBINATIONS
 (c4-indexer scratch OOMs the capture pool). Flag vocabulary changed on 7d996300:
 `--cuda-graph-backend-{decode,prefill}={full,breakable,disabled}`.
 
-### CRITICAL PATH: prefill_sp re-port (2-4 sessions)
-`docs/plans/prefill_sp-report-plan.md`. Expected +18% cold, ~+8% decode — the only
-remaining route to recover the cold -3.7% / decode -14% gaps. Phase A (classification
-of the 9 drifted + 2 missing functions) is pure offline work, no production impact.
+### CRITICAL PATH: prefill_sp re-port — Phase A DONE (2026-10-26, commit d34dfd4)
+Classification complete (7 match / 8 port / 4 redirect / 2 gone-on-CUDA); CUDA runtime
+path identified (residual_batch + CudaDecoderLayer.forward + op_* seams); new anchor
+hash table computed and staged in `docs/plans/prefill_sp-report-plan.md` §6.
+**Resume at Phase B** (rebuild _EXPECTED + port 8 wrappers + re-target SP core to
+op_gather/op_moe/transports — see plan §3). Offline work; one validation window after.
+⚠️ Alias gotcha: `DeepseekV4DecoderLayer` resolves to Platform class when CUDA is
+hidden — always run checks CUDA-visible.
 
 ### Then
 - hc_fused re-port: `docs/plans/hc_fused-report-plan.md` (+4.3% cold, half day)
