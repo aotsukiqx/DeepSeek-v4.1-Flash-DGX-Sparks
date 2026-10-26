@@ -320,7 +320,16 @@ def install_planner(planner_module):
     if not ENABLED or _state["thr"] is None:
         return
     cls = planner_module.DSparkVerifyPlanner
-    orig = cls.compute_confidence_tensor
+    orig = getattr(cls, "compute_confidence_tensor", None)
+    if orig is None:
+        # 7d996300 absorbed the confidence flow into the planner's budget
+        # machinery (confidence_budget_prepare & co); the old hook point is gone.
+        # Without the conf capture verify_cap stays inert (no verify trimming) —
+        # loud note, never raise (a raising hook evicts the engine module and
+        # detonates the duplicate-invariant crash via lilicorr's guarded import).
+        print("[verify_cap] planner hook: compute_confidence_tensor gone on this "
+              "pin (absorbed upstream); verify trimming INERT this boot", flush=True)
+        return
 
     def compute_confidence_tensor(self, **kw):
         out = orig(self, **kw)
