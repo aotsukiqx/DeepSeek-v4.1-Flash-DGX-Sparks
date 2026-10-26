@@ -1,74 +1,42 @@
-# Plan: Config-Arm Optimization (Immediate, Zero Code Changes)
+# Plan: Config-Arm Optimization (Superseded → See Status)
 
-> Goal: recover 5-12% on the mig arm by enabling adapters and features that are
-> already compatible but currently env-OFF. One boot window (~25 min).
+> Status 2026-10-26 08:00: this plan's original three items were revised after offline
+> verification. Current authoritative status: `docs/PROJECT_STATE.md` §8.
 
-## What to Enable
+## Verification Outcome (2026-10-26)
 
-### 1. Prefill CUDA Graphs
-The new pin (7d996300) supports breakable prefill CUDA graphs; the old pin (620c76f2)
-disabled them due to "incompatible with DeepSeek-V4, heavy capture-pool memory pressure"
-(docs/600k-migration-20261011.md:393). The upstream wave (#37958 shared-read default-on,
-#43733 replay-at-any-context, #45565 MLA prefill capture to 8192) has matured them.
+| Original item | Verdict | Why |
+|---|---|---|
+| Enable prefill CUDA graphs | **NOT AVAILABLE** | DSV4 auto-disable rule: `PREFILL_CP_BCG_SUPPORTED_COMBINATIONS` = {(ZIGZAG,TRTLLM_MHA),(INTERLEAVE,DSA)}; `dsv4` backend not whitelisted. Flag vocabulary also changed: `--cuda-graph-backend-{decode,prefill}={full,breakable,disabled}`. |
+| Enable verify_cap + block_verify + draft family | **Symbol-verified OK, deferred** | All six adapters (verify_cap/block_verify/draft_tau/wo_a_w8/autotune_keep/folded_result_fence) have their required symbols on 7d996300. BUT none ever ran in production (all default OFF) — new experiment, not recovery. Second window. |
+| (new) `--enable-prefill-cp --cp-strategy interleave` | **PRIMARY BET, launched 07:52** | Native context-parallel prefill works for DSV4 (`is_dsa_enable_prefill_cp()` True for V4). Upstream equivalent of prefill_sp (+18% hist.). env.mig v2 = v1 + CP flags ONLY; backup `/tmp/env.mig.v1-nocp`. |
 
-**Expected**: +5-10% cold prefill (py-spy: ~10% host wall is CUTLASS-DSL marshaling that
-graphs absorb).
+## Symbol Verification Record (2026-10-26, in-image)
 
-**Action**: Add to EXTRA_SGLANG_ARGS in `/tmp/env.mig`:
 ```
---enable-prefill-cuda-graph
-```
-
-**Risk**: Capture-pool memory pressure on 128GB UMA (the original disable reason).
-Mitigation: if boot OOMs, remove the flag and retry.
-
-### 2. verify_cap + block_verify
-These installed OK on the candidate (import-level, no drift-gate raise). They were
-turned OFF in the arm env out of caution.
-
-**Expected**: ~+2% decode (verify window control improves DSpark acceptance).
-
-**Action**: Add to EXTRA_CONTAINER_ENV in `/tmp/env.mig`:
-```
-DSV41_VERIFY_CAP=conf:0.1 DSV41_BLOCK_VERIFY=1
+dspark_accept.py:        AcceptSampling(32) _accept_sampling_core(94) SoftmaxTemp(278)  ✅
+dspark_draft_sampler.py: DsparkDraftSampler.stage_sampling_params                        ✅
+dsv4_wo_a.py:            wo_a_bf16_small_batch(_mxfp8) _wo_a_reduce _quantize_partial    ✅
+flashinfer_autotune.py:  _autotune_cache_digest flashinfer_autotune_context              ✅
+dspark_verify.py:        TargetVerifyExecutor.accept_and_finalize(165) AcceptOuts(547)   ✅
+                         AcceptOuts fields == FIELDS exactly (cap_trim/commit absorbed)  ✅
+deepseek_v4_dspark.py:   DeepseekV4ForCausalLMDSpark + _apply_wo_a_bf16_matmul           ✅
 ```
 
-**Risk**: The drift-gate may fire at serve time (install passed ≠ serve-time pass).
-If boot refuses: remove these two vars.
+## Decision tree after CP window
 
-### 3. draft_tau + wo_a_w8
-Also installed OK at import level.
+- cold ≥ 4400: CP replaces prefill_sp → full A/B + qeval
+- cold 3953-4400: keep CP; layer hc_fused re-port next
+- cold < 3953 or boot fail: restore v1 env (`cp /tmp/env.mig.v1-nocp /tmp/env.mig`); prefill_sp re-port required
 
-**Expected**: ~+2% decode (draft path optimization).
+## Appendix: env.mig generation script
 
-**Action**: Add to EXTRA_CONTAINER_ENV:
-```
-DSV41_DRAFT_TAU=0.7 DSV41_WO_A_W8=1
-```
-
-### 4. autotune_keep + folded_fence
-Import-level pass, but these have drift-gates that may fire at serve.
-
-**Expected**: ~+1% combined.
-
-**Action**: Add:
-```
-DSV41_AUTOTUNE_KEEP=1 DSV41_FOLDED_FENCE=1
-```
-
-## Execution
-
-1. Generate new `/tmp/env.mig` with all additions
-2. Run `scripts/verify/mig_window.sh` (one boot + probes + rollback)
-3. Compare vs arm-1 baseline: cold 3953, decode 37.8, conc6 4021
-4. Success = any metric improves ≥2%
-
-## Appendix: env.mig Generation Script
+Still valid for regenerating the v1 base (adapters OFF, EP1, mig image); add
+`--enable-prefill-cp --cp-strategy interleave` to EXTRA_SGLANG_ARGS for v2:
 
 ```python
 # Run on Mac, then scp to spark-eb1a:/tmp/env.mig
-# Based on production .env.tp4 with mig-arm deltas
-import re, subprocess
+import subprocess
 prod = subprocess.run(['ssh','-n','spark-eb1a','cat ~/nvmodels/DeepSeek-v4.1-Flash-DGX-Sparks/.env.tp4'],
                       capture_output=True, text=True).stdout
 OFF = ('DSV41_MOE_B12X_NEXT','DSV41_FAST_LOAD','DSV41_PREFILL_SP','DSV41_HC_FUSED',
@@ -90,26 +58,20 @@ for l in prod.splitlines(keepends=True):
         body=l[len('EXTRA_CONTAINER_ENV="'):].rstrip('\n')[:-1]
         toks=[t for t in body.split() if not any(t.startswith(f) for f in OFF)]
         keep=[
-            # Core (proven on mig)
             'DSV41_PREFILL_EMPTY_CACHE_EVERY=4',
             'DSV41_ENGRAM_PREFETCH=1', 'DSV41_SHARED_PAD_K=1',
             'DSV41_FAST_LOAD=1', 'DSV41_FAST_LOAD_TP_SLICE=on',
             'DSV41_FAST_LOAD_INFLIGHT_GB=6', 'DSV41_FAST_LOAD_N_EXPERTS=384',
             'DSV41_FAST_LOAD_SLAB_CAP_GB=12',
-            # MoE (b12x_next with needle fix)
             'DSV41_MOE_B12X_NEXT=1',
             'DSV41_MOE_B12X_NEXT_GRAPH_BS=1,2,3,4,5,6,7,8,10,12,14,16,20,24,28,32',
             'DSV41_MOE_B12X_NEXT_TUNE_ROWS=6:5+6',
-            # CONFIG ARM ADDITIONS (this plan's changes):
-            'DSV41_VERIFY_CAP=conf:0.1', 'DSV41_BLOCK_VERIFY=1',
-            'DSV41_DRAFT_TAU=0.7', 'DSV41_WO_A_W8=1',
-            'DSV41_AUTOTUNE_KEEP=1', 'DSV41_FOLDED_FENCE=1',
         ]
         l='EXTRA_CONTAINER_ENV="'+' '.join(keep+toks)+'"\n'
     elif l.startswith('EXTRA_SGLANG_ARGS='):
-        # Add prefill CUDA graphs flag
-        if '--enable-prefill-cuda-graph' not in l:
-            l = l.rstrip('\n').rstrip('"') + ' --enable-prefill-cuda-graph"\n'
+        # v2: append CP flags
+        if '--enable-prefill-cp' not in l:
+            l = l.rstrip('\n').rstrip('"') + ' --enable-prefill-cp --cp-strategy interleave"\n'
     out.append(l)
 open('/tmp/env.mig','w').write(''.join(out))
 ```

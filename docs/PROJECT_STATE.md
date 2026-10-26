@@ -1,7 +1,7 @@
 # PROJECT STATE — DeepSeek-V4.1-Flash DGX Spark TP4 Fleet
 
 > **Single source of truth.** This document must survive context compaction and enable
-> any future session to resume exactly where we left off. Last updated: 2026-10-26 07:00.
+> any future session to resume exactly where we left off. Last updated: 2026-10-26 08:00.
 
 ## 1. Fleet & Repository
 
@@ -13,18 +13,17 @@
 | Cluster repo | `spark-eb1a:~/nvmodels/DeepSeek-v4.1-Flash-DGX-Sparks` (origin: MiaAI-Lab main) |
 | Mac working tree | `/Volumes/LLM2/Projects/DeepSeek-v4.1-Flash-DGX-Sparks` (origin: aotsukiqx fork) |
 | Deploy method | Mac commits → `git push origin main` → `git bundle create /tmp/x.bundle main` → `scp` to head → `git fetch + merge --ff-only` → **ALWAYS verify with `git log --oneline -1` + grep the change** |
-| Current repo HEAD | `6dd33ac` (Mac and cluster in sync) |
 
 ## 2. Two Code Lines (running simultaneously)
 
 ### Production line (LIVE, stable, verified)
 - **Image**: `dsv41-4x-spark:canary-roce` (bundle#3, code `1c36c98`)
 - **sglang pin**: `620c76f2` on base `nightly-dev-cu13-20261011@4793eb40`
-- **Config**: EP1, TP4, b12x_next ON, prefill_sp ON, hc_fused ON, full adapter set
+- **Config**: EP1, TP4, b12x_next ON, prefill_sp ON, hc_fused ON
 - **KV pool**: MAX_TOTAL_TOKENS=6700000, MRR=32, chunk=4096, MEM_FRACTION_STATIC=0.80
 - **H0a adopted**: `DSV41_PREFILL_EMPTY_CACHE_EVERY=4` (empty_cache every 4th chunk)
 - **RoCE**: ON (SGLANG_ROCE_ALLREDUCE=1, +17% conc6 asset, R2-proven)
-- **Rollback points**: tags `pre-bundle3`, `pre-bundle2`, `pre-serving`, `pre-620c` + `.env.tp4.pre-*` backups on all 4 nodes
+- **Rollback points**: tags `pre-bundle3`, `pre-bundle2`, `pre-serving`, `pre-660c` + `.env.tp4.pre-*` backups on all 4 nodes
 
 ### Migration arm (measured once, NOT adopted)
 - **Image**: `dsv41-4x-spark:canary-mig` (Dockerfile.canary-mig)
@@ -38,12 +37,13 @@
 | Metric | Production (baseline) | Migration arm | Delta | Root cause |
 |---|---:|---:|---:|---|
 | cold 600k tok/s | 4101-4121 | 3953.4 | **-3.7%** | prefill_sp OFF (-18% hist.) partially compensated by upstream wave |
-| decode net tok/s | 44.0 | 37.8 | **-14%** | prefill_sp OFF (~-8%), hc_fused OFF (~-2%), verify/draft family OFF (~-4%) |
+| decode net tok/s | 44.0 | 37.8 | **-14%** | prefill_sp OFF (~-8%), hc_fused OFF (~-2%), ~-4% unattributed (see §8a) |
 | conc6 aggregate | 3884 | 4021 | **+3.5%** | upstream scheduler improvement |
 | smoke | 4/4 PASS | 4/4 PASS | ✓ | all serving-layer fixes work on both lines |
 | qeval | 53/55 BROKE=0 | (not compared) | — | needs paired run |
 
-**Decision table verdict**: -3.7% → "migration + re-port" path (prefill_sp re-port should push above baseline).
+**Decision table verdict**: -3.7% → "migration + re-port" path. But see §8: native
+prefill-CP may replace the re-port.
 
 ## 4. Migration Boot Blockers — ALL RESOLVED (9 total)
 
@@ -57,13 +57,15 @@ The mig arm required 9 fixes across 8 boot attempts (W7-W11 + EP1a-c + final):
 | 4 | engram `column_bounds` kwarg | kwargs-tolerant init (bitwise-equivalent split) | `2c0d9a3` |
 | 5 | engram `peer` attr | `self.peer = None` in init | `7516e87` |
 | 6 | fast_load EP2 slicing 60x slow | `DSV41_FAST_LOAD_TP_SLICE=on` (env-only knob) | — |
-| 7 | slab pile-up (39.7GB anon) | `DSV41_FAST_LOAD_SLAB_CAP_GB=12` backpressure | `c6b314d` |
+| 7 | slab pile-up (39.7GB anon) | `DSV41_FAST_LOAD_SLAB_CAP_GB=12` backpressure in `_new_slab()` | `c6b314d` |
 | 8 | b12x_next needle drift | `_weight_layout_method(self)` substrings (multi-line-safe) | `bd6b744` |
-| 9 | **`deepseek-recipe` missing** | `pip install deepseek-recipe` — this was misdiagnosed as "OOM" for 7 boots | `edaf31c` |
+| 9 | **`deepseek-recipe` missing** | `pip install deepseek-recipe` — misdiagnosed as "OOM" for 7 boots | `edaf31c` |
 
-Also: engram `staged_by_scheduler` + `_sort_host_reads` attrs → `0094702`
+Also: engram `staged_by_scheduler` + `_sort_host_reads` attrs → `0094702`.
 
-**Key lesson**: the "-9 SIGKILL / OOM" errors in W9-W11 were ALL the missing `deepseek-recipe` package. The detokenizer exit was cleanup, not the OS killer. 7 boot attempts × ~25 min = ~3 hours spent on a pip install.
+**Key lesson**: the "-9 SIGKILL / OOM" errors in W9-W11 were ALL the missing `deepseek-recipe`
+package (detokenizer exit was cleanup, not the OS killer). 7 boot attempts × ~25 min ≈ 3 hours
+spent on a pip install. Check pip deps in the Dockerfile FIRST.
 
 ## 5. Key Files & Their Roles
 
@@ -71,7 +73,7 @@ Also: engram `staged_by_scheduler` + `_sort_host_reads` attrs → `0094702`
 | File | Function | Mig arm status |
 |---|---|---|
 | `moe_b12x_next.py` | SM120 MXFP4 MoE on b12x (raced plans) | ✅ ON (needle fix) |
-| `prefill_sp.py` | Prefill sequence parallel (+18% cold) | ❌ OFF (structural re-port needed) |
+| `prefill_sp.py` | Prefill sequence parallel (+18% cold) | ❌ OFF — native CP replaces it (see §8) |
 | `hc_fused.py` | HC mix stats fusion (+4.3% cold) | ❌ OFF (module moved) |
 | `fast_load.py` | Eager weight reads with pacing | ✅ ON (slab cap + TP_SLICE=on) |
 | `engram_backend.py` | NVMe-resident Engram tables | ✅ ON (3 attr fixes) |
@@ -79,16 +81,21 @@ Also: engram `staged_by_scheduler` + `_sort_host_reads` attrs → `0094702`
 | `prefill_empty_cache.py` | Host memory reclaim during long prefills | ✅ ON (EVERY=4) |
 | `loop_abort.py` | Repetition loop detection & abort | ✅ ON |
 | `history_repair.py` | Broken tool-call args → repaired history | ✅ ON |
-| `placeholder_sanitize.py` | Image placeholder token → `[image]` on recipe line | ✅ ON (new for mig) |
+| `placeholder_sanitize.py` | Image placeholder token → `[image]` on recipe line | ✅ ON |
 | `encoding_compat.py` | Thinking alias, max_tokens cap, anthropic protocol | ✅ ON |
-| `block_verify.py` | Block verification for sampled rows | ❌ OFF (drift) |
-| `verify_cap.py` | Per-request verify length via acceptance cutoff | ❌ OFF (drift) |
-| `folded_result_fence.py` | Folded results cloned off persistent buffers | ❌ OFF (drift) |
-| `autotune_keep.py` | FlashInfer autotune cache across boots | ❌ OFF (drift) |
-| `draft_tau.py` | Draft proposal temperature | ❌ OFF |
-| `wo_a_w8.py` | FP8 twin for verify/draft wo_a weights | ❌ OFF |
+| `block_verify.py` | Block verification for sampled rows | ❌ OFF (symbol-verified OK, never prod-tested) |
+| `verify_cap.py` | Per-request verify length via acceptance cutoff | ❌ OFF (symbol-verified OK, never prod-tested) |
+| `folded_result_fence.py` | Folded results cloned off persistent buffers | ❌ OFF (FIELDS match upstream, never prod-tested) |
+| `autotune_keep.py` | FlashInfer autotune cache across boots | ❌ OFF (symbol-verified OK, never prod-tested) |
+| `draft_tau.py` | Draft proposal temperature | ❌ OFF (never prod-tested) |
+| `wo_a_w8.py` | FP8 twin for verify/draft wo_a weights | ❌ OFF (never prod-tested) |
 | `draft_head_fp8.py` / `_tp4.py` | Draft LM head from FP8 copy | ❌ OFF |
 | `sitecustomize.py` | Import hook that installs all adapters | ✅ active |
+
+**IMPORTANT (2026-10-26 correction)**: the six "verify/draft family" adapters
+(verify_cap/block_verify/draft_tau/wo_a_w8/autotune_keep/folded_result_fence) were
+**never enabled in production either** — all default OFF, absent from .env.tp4. Treat
+them as new experiments, not as "recovery of lost production features".
 
 ### Dockerfiles
 | File | Purpose |
@@ -132,31 +139,23 @@ ssh spark-eb1a 'cd ~/nvmodels/DeepSeek-v4.1-Flash-DGX-Sparks && ./start-tp4.sh s
 # Wait ~2.5 min for health
 ```
 
-### Boot mig arm (requires `/tmp/env.mig`)
+### Boot mig arm via measurement window (preferred — auto-rollback)
 ```bash
-# /tmp/env.mig is generated from production .env.tp4 with:
-#   IMAGE=canary-mig, BUILD_DOCKERFILE=Dockerfile.canary-mig, EP_SIZE=1
-#   b12x_next ON, fast_load ON+TP_SLICE=on+SLAB_CAP, prefill_sp/hc_fused/verify-family OFF
-# Generate: see docs/plans/config-arm-plan.md §appendix
-ssh spark-eb1a 'touch /tmp/dsv41-maintenance; \
-  cd ~/nvmodels/DeepSeek-v4.1-Flash-DGX-Sparks && \
-  cp .env.tp4 /tmp/env.prod.live && cp /tmp/env.mig .env.tp4 && \
-  ./start-tp4.sh build && \
-  ./start-tp4.sh stop && \
-  nohup python3 scripts/verify/boot_hygiene.py reap --minutes 30 & \
-  nohup ./start-tp4.sh serve &'
-# ~18 min to health (48-shard load + init)
-# ALWAYS: touch /tmp/dsv41-maintenance during window; rm it after
-# ALWAYS: cp /tmp/env.prod.live back + serve to rollback
+# Prereqs: /tmp/env.mig staged (see docs/plans/config-arm-plan.md §appendix),
+# /tmp/mig_window.sh present, /tmp/dsv41-maintenance touched during window.
+ssh spark-eb1a 'L=$(wc -l < /tmp/mig-window.log); echo "LOG_BASELINE=$L" > /tmp/window-marker.txt; \
+  touch /tmp/dsv41-maintenance; \
+  setsid nohup bash /tmp/mig_window.sh > /tmp/mig-window-stdout.log 2>&1 < /dev/null &'
+# Monitor: tail -n +$((LOG_BASELINE+1)) /tmp/mig-window.log | grep -E '^\['
+# Window: PHASE0 build (fast if cached) → PHASE1 serve (~18 min) → PHASE2 (~26 min) → rollback
 ```
 
 ### Measurement probes (traffic-gated)
 ```bash
 # Wait for 45s POST gap, then:
-python3 /tmp/probe600k.py cold <seed>      # single cold prefill
+python3 /tmp/probe600k.py cold <seed>      # single cold prefill (discard first after boot)
 python3 /tmp/probe600k.py conc 6 <seed>    # 6-concurrent aggregate
 python3 /tmp/decode600k.py <seed>           # single decode net-of-TTFT
-# ALWAYS: discard first cold run after boot; post-check probe window for foreign batches
 ```
 
 ### Post-crash recovery (proven 4+ times)
@@ -172,37 +171,54 @@ nohup ./start-tp4.sh serve &
 
 ## 7. Hard-Won Operational Rules
 
-1. **Mig boot = ~25 min production outage.** Only attempt with offline-verified fixes. Always check pip deps in Dockerfile first (deepseek-recipe cost 7 boots).
+1. **Mig boot = ~25 min production outage.** Only attempt with offline-verified fixes. Check pip deps in Dockerfile first (deepseek-recipe cost 7 boots).
 2. **GB10 UMA**: NEVER prewarm page cache (OOM). Swap activation = thrash (59-82s/shard). Recovery = stop→drain→serve.
-3. **`/tmp` is untrusted** (systemd-tmpfiles ages it out). All probes/scripts live in `scripts/verify/`; deploy via `cp` to `/tmp` before use.
+3. **`/tmp` is untrusted** (systemd-tmpfiles ages it out — `/tmp/cand7` died this way). All probes/scripts live in `scripts/verify/`; deploy via `cp` to `/tmp` before use.
 4. **Bundle relays**: always verify with `git log --oneline -1` + grep after merge. Several "successful" relays ran in temp shells and never landed.
 5. **`pkill` patterns must not self-match** (use `[.]` in regex). Remote `.env` edits must be line-based (comment lines contain decoy matches).
 6. **Maintenance marker**: `touch /tmp/dsv41-maintenance` during every experiment window; `rm` it after. The watchdog respects it.
-7. **Desktop services**: masked via `systemctl --user mask` on all 4 nodes (reboot-surviving). If they return: `systemctl --user stop pipewire pipewire-pulse wireplumber snap.snapd-desktop-integration...`
+7. **Desktop services**: masked via `systemctl --user mask` on all 4 nodes (reboot-surviving). If they return after reboot: `systemctl --user stop pipewire pipewire-pulse wireplumber snap.snapd-desktop-integration...`
 8. **Node reboots happen** (2026-10-25 12:07 cluster-wide event). Watchdog auto-recovers. Check `last reboot` for timing.
+9. **Candidate source access** (2026-10-26): `/tmp/cand7` aged out; the only candidate copy now lives in the mig image: `ssh spark-eb1a "docker run --rm --entrypoint /bin/bash dsv41-4x-spark:canary-mig -c 'grep ... /sgl-workspace/sglang/python/sglang/...'"`.
 
-## 8. Next Steps (Prioritized)
+## 8. Next Steps (Prioritized — updated 2026-10-26 08:00)
 
-### Immediate (config-level, zero code changes)
-See `docs/plans/config-arm-plan.md`
-- Enable prefill CUDA graphs on mig arm
-- Enable verify_cap + block_verify + draft family on mig arm
-- Expected: +5-12% recovery, one boot window
+### Native prefill-CP: CLOSED (rejected by model, 2026-10-26 08:00)
+`--enable-prefill-cp --cp-strategy interleave` → boot exit 1 at 70s:
+```
+deepseek_v4.py:4641 ValueError: V4.1 vision supports TP/EP/DP without CP or PP;
+MoE A2A requires CUDA MegaMoE
+```
+CP engaged at topology level (log prefix became ATTN_CP0), then the V4.1 vision model
+constructor rejected it. Adapters armed fine before the raise — failure is purely the
+CP flag. env.mig restored to v1 (backup `/tmp/env.mig.v1-nocp`). First launch also hit
+a transient worker-DNS SERVFAIL (spark-a89f systemd-resolved on registry-1.docker.io;
+retry succeeded).
 
-### Short-term (half day)
-See `docs/plans/hc_fused-report-plan.md`
-- hc_fused re-port to `kernels/ops/gemm/hc_mix.py`
-- Expected: +4.3% cold prefill
+Prefill CUDA graphs likewise unavailable: `PREFILL_CP_BCG_SUPPORTED_COMBINATIONS` =
+{(ZIGZAG,TRTLLM_MHA),(INTERLEAVE,DSA)}; our `dsv4` backend is not whitelisted
+(c4-indexer scratch OOMs the capture pool). Flag vocabulary changed on 7d996300:
+`--cuda-graph-backend-{decode,prefill}={full,breakable,disabled}`.
 
-### Main effort (2-4 sessions)
-See `docs/plans/prefill_sp-report-plan.md`
-- prefill_sp structural re-port to `op_*` API family
-- Expected: +18% cold prefill + ~8% decode
-- This is the critical path to mig arm exceeding production baseline
+### CRITICAL PATH: prefill_sp re-port (2-4 sessions)
+`docs/plans/prefill_sp-report-plan.md`. Expected +18% cold, ~+8% decode — the only
+remaining route to recover the cold -3.7% / decode -14% gaps. Phase A (classification
+of the 9 drifted + 2 missing functions) is pure offline work, no production impact.
 
-### After all three
-- Full A/B with qeval paired + 600k + conc6 → adopt if net positive
+### Then
+- hc_fused re-port: `docs/plans/hc_fused-report-plan.md` (+4.3% cold, half day)
+- Optional one-window experiment: six-adapter arm (verify_cap/block_verify/draft_tau/
+  wo_a_w8/autotune_keep/folded_result_fence) — all symbol-verified compatible with
+  7d996300 (verification record in docs/plans/config-arm-plan.md), never prod-tested,
+  targets decode. Off critical path.
+- Full A/B + qeval paired → adopt if net positive
 - If adopted: update `.env.tp4.example`, `docs/tp4.md`, tag rollback points
+
+## 8a. Decode-Gap Attribution (CORRECTED 2026-10-26)
+Earlier attribution gave ~-4% to "verify/draft family OFF" — WRONG: those six adapters
+were never enabled in production either. Corrected: prefill_sp OFF (~-8% primary),
+hc_fused OFF (~-2%), ~-4% unattributed (candidates: engine-level prefill_sp decode-path
+effects, DSpark-spec interaction, flashinfer 0.7.2-vs-0.7.0 delta).
 
 ## 9. Historical Context (for reference)
 
@@ -211,6 +227,7 @@ See `docs/plans/prefill_sp-report-plan.md`
 - `docs/incident-20261025-reboot-desktop.md` — Cluster reboot + desktop noise + W7-W11 boot campaign + final measurement
 - `docs/600k-migration-20261011.md` — Original 620c76f2 migration (prefill_sp, hc_fused ports)
 - `docs/tp4.md` — Production "what runs" reference (may be slightly stale)
+- `docs/plans/` — config-arm / hc_fused / prefill_sp implementation plans
 
 ## 10. EP2 vs EP1 Theory (2026-10-25 analysis)
 
