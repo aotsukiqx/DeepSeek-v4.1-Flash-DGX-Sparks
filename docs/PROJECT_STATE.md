@@ -1,7 +1,7 @@
 # PROJECT STATE — DeepSeek-V4.1-Flash DGX Spark TP4 Fleet
 
 > **Single source of truth.** This document must survive context compaction and enable
-> any future session to resume exactly where we left off. Last updated: 2026-10-27 20:40.
+> any future session to resume exactly where we left off. Last updated: 2026-10-27 22:20.
 
 ## 1. Fleet & Repository
 
@@ -16,27 +16,35 @@
 
 ## 2. Two Code Lines (running simultaneously)
 
-### Production line (LIVE since 15:44 — the ADOPTED mig v4)
-- **Image**: `dsv41-4x-spark:canary-mig` (sglang **7d996300**, Dockerfile.canary-mig)
-- **Config**: EP1, TP4, b12x_next ON (needle fix), six-adapter family ON,
-  DSV41_PIN7=1, prefill_sp OFF (Phase C deferred), hc_fused absorbed upstream
-- **Wheels**: flashinfer 0.7.2, deep-gemm 0.2.3.post2, kernel 0.4.10, flash-mla 1.0.0, deepseek-recipe
-- **KV pool**: MAX_TOTAL_TOKENS=6700000, MRR=32, chunk=4096, MEM_FRACTION_STATIC=0.80
-- **EVERY=4, RoCE ON** (unchanged from the old line)
-- **Adoption evidence**: paired qeval BROKE=0 (75 tasks identical per-task),
-  decode 43.9 (window) / 47.6 (spot), conc6 +4.1%, cold -3.0% accepted
-- **Cutover procedure (proven)**: stop → clean workers → **drain ≥45s (MANDATORY:
-  skipping it caused slab-cap thrash + 4-rank barrier timeout on the first try)** →
-  `cp /tmp/env.mig .env.tp4` → serve → 200
+### Production line (LIVE since 21:55 2026-10-27 — mig v4 + bp1 backports)
+- **Image**: `dsv41-4x-spark:canary-mig-bp1` (sglang **7d996300** + bp1 source
+  patches #46706/py + #46404 + #41275, Dockerfile.canary-mig patch chain)
+- **Config**: unchanged from v4 (EP1, TP4, b12x_next ON, six adapters,
+  DSV41_PIN7=1, prefill_sp OFF, hc_fused absorbed; env identical to pre-bp1)
+- **bp1 evidence (2026-10-27 window)**: qeval paired BROKE=0 (55 tasks,
+  p=1.000, median 73.7→75.3 tok/s); smoke 4/4 + trailing-toolcall-turn,
+  assistant-null-content+tool_calls, numeric-effort-0.5, sampled request all
+  PASS; decode600k **45.6** (gate ≥42); cold 600k seed5 **3977.8** (v4
+  baseline 3978.8, -0.03%); conc6 contaminated by live traffic (4828, batching
+  inversion — re-measure quiet during soak)
+- **Known capacity change (#41275, expected)**: `max_total_num_tokens`
+  6336256 → **6169856** (-166400 = 2600 pages): explicit cap re-validated
+  through the patched auto path — the reserved-page overcommit upstream
+  removes. NOT the predicted no-op; mechanism understood, accepted
+- **Cutover procedure (proven)**: stop → clean workers → **drain ≥45s MANDATORY** →
+  serve → 200 (env unchanged; no env copy needed for image-only flips)
 
-### Rollback line (old production, proven path)
-- **Image**: `dsv41-4x-spark:canary-roce` (bundle#3, code `1c36c98`, pin 620c76f2)
-- **Env**: `/tmp/env.pre-adoption-620c` (== old .env.tp4); tag `pre-adoption-v4`
-- **Procedure**: stop → drain 45s → `cp /tmp/env.pre-adoption-620c .env.tp4` → serve
-- **Keep** the image/env/tag on all nodes until the 24h soak clears (criteria:
-  smoke clean, decode ≥42, no crash loops, no quality complaints). Soak CLEARED
-  2026-10-27 20:33 (29h healthy, 0 crash, smoke 4/4; decode spot-check folded
-  into the W1 baseline). Keep until the bp1 backport's own 24h clears.
+### Rollback line (pre-bp1, one step back)
+- **Image**: `dsv41-4x-spark:canary-mig-pre-bp1` on all 4 nodes (v4 FINAL
+  without bp1); git tag `pre-bp1`; env unchanged (`/tmp/env.pre-bp1` backup ==
+  live .env.tp4)
+- **Procedure (image-only flip)**: stop → drain ≥45s →
+  `docker tag dsv41-4x-spark:canary-mig-pre-bp1 dsv41-4x-spark:canary-mig` on
+  all 4 nodes → serve. Keep until bp1's 24h soak clears (ends ~2026-10-28
+  22:00; criteria: smoke 4/4, decode ≥42, no crash loops, no quality
+  complaints) + a quiet-window conc6 re-measure.
+- Second-step rollback (pre-adoption, proven): `canary-roce` image +
+  `/tmp/env.pre-adoption-620c` + tag `pre-adoption-v4` — keep one more cycle.
 
 ## 3. Latest Measurements (2026-10-26 13:20, four-way)
 
@@ -250,29 +258,29 @@ at op_gather_a/b + MoeTransport + op_combine/op_mhc; then validation window).
 ⚠️ Alias gotcha: `DeepseekV4DecoderLayer` resolves to Platform class when CUDA is
 hidden — always run checks CUDA-visible.
 
-### Priority queue (REVISED 2026-10-26 15:00 after strategic review)
-1. **Upstream backport W1 (bp1) — NEXT** (2026-10-27, plan:
-   docs/plans/backport-20261027-plan.md): bundle #46706 recipe render fix (py;
-   trailing tool-call turn / null content / numeric effort — serving
-   correctness) + #46404 dspark sim-bonus (calibration-only) + #41275 pool
-   accounting (expected no-op under explicit MAX_TOTAL_TOKENS; gate = boot-log
-   full_token unchanged). New patch chain in Dockerfile.canary-mig (has none).
-   One window, qeval BROKE=0, 24h soak, tag canary-mig-bp1. W2 (#45794 BF16
-   indexer score width) conditional on torch-scoring-path pre-check, bar ≥2%
-   cold/conc6. Adoption A/B below is DONE (adopted 10-26 15:44, soak cleared).
-2. **prefill_sp Phase C: DEFERRED, post-adoption, conditional** — ceiling re-derived:
-   the -3.0% cold gap = prefill_sp missing + engine delta (positive: conc6 +4.1%);
-   hc_fused's share ≈ 0 (absorbed, item 3). Expected recovery +4-5% → final cold ≈
-   parity to +2% over production. Worth 1-2 sessions of the hardest port ONLY IF
-   real traffic shows cold/TTFT pain post-adoption. Plan staged and warm:
-   docs/plans/prefill_sp-report-plan.md §3 (wrapper approach; hash tables 28/28).
-3. **hc_fused re-port: SKIPPED — win absorbed upstream** (verified 2026-10-26):
+### Priority queue (REVISED 2026-10-27 22:20 after bp1 adoption)
+1. **bp1 ADOPTED 2026-10-27 21:55** (live, tag `canary-mig-bp1`; plan:
+   docs/plans/backport-20261027-plan.md): #46706(py)+#46404+#41275.
+   Gates: qeval BROKE=0 (55 tasks, p=1.0), smoke 4/4 + 4 new probes,
+   decode 45.6, cold 3977.8 (-0.03% vs v4). DEVIATION accepted:
+   max_total_num_tokens 6336256→6169856 (-2.6%, #41275 reserved-page
+   correction — the explicit cap IS re-validated through the auto path).
+   NEXT: 24h soak review (~10-28 22:00) + quiet-window conc6 re-measure.
+2. **W2 (#45794 BF16 indexer score width) — pre-check first**: confirm on the
+   live image (CUDA-visible) that SM120 prefill runs the torch
+   `prefill_requests`/`_score_chunks` path, not DeepGEMM tiles; then A/B
+   window, bar ≥2% cold or conc6 with decode flat. W2 only after bp1 soak.
+3. **prefill_sp Phase C: DEFERRED, conditional** — cold now at parity
+   (3977.8 vs v4 3978.8); re-open only on real-traffic cold/TTFT pain.
+   Plan warm: docs/plans/prefill_sp-report-plan.md §3.
+4. **hc_fused re-port: SKIPPED — win absorbed upstream** (verified 2026-10-26):
    `deepseek_v4_mhc.py:370 _mix_stats_impl` — "The default split-K/Sinkhorn fusion
    preserves batch invariance", gated only on `x.is_cuda and use_fused_stats and
    bf16`; kernels live in `kernels/ops/layernorm/mhc.py` (sinkhorn{,_bf16x3,
    _deepgemm}). Re-port yield ≈ 0.
-4. Post-adoption hygiene: `.env.tp4.example`, `docs/tp4.md`, rollback tags, 24h
-   soak review; keep the Phase C plan warm.
+5. Hygiene after bp1 soak clears: retire the pre-adoption rollback set
+   (keep `canary-mig-pre-bp1` one more cycle), update `docs/tp4.md` +
+   `.env.tp4.example` if env semantics changed (bp1: none).
 
 ### Retired shortcuts (all evidence-backed)
 - Native prefill-CP: V4.1 vision model rejects CP.

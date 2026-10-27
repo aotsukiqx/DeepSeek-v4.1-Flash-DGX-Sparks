@@ -23,6 +23,27 @@ its own smoke probe in the window.
 `tests.test_launcher_build` fails 2 canary-roce rows (rust fetch source + base
 pin) — same failures on unmodified HEAD. Window = build → cutover → gates.
 
+**W1 WINDOW RESULT — bp1 ADOPTED 2026-10-27 21:55** (`canary-mig-bp1` live,
+rollback `canary-mig-pre-bp1` ×4 + git tag `pre-bp1` + `/tmp/env.pre-bp1`):
+- qeval paired BROKE=0 (55 tasks, p=1.000; median 73.7→75.3 tok/s)
+- smoke 4/4; new probes: trailing-toolcall-turn ✓, assistant
+  null-content+tool_calls ✓, numeric effort 0.5 ✓, sampled ✓. NOTE: wire-level
+  `content:null` on a USER message and string effort "8" are rejected (400) by
+  the http_server pydantic schema BEFORE the recipe adapter — pre-existing,
+  not the patch's surface; the string-effort fix is reachable via the env
+  default and internal callers (covered by the synthetic test).
+- decode600k seed4 **45.6** (gate ≥42) · cold seed5 **3977.8** (v4 3978.8)
+  · conc6 4828 = live-traffic contamination (batching inversion; re-measure
+  quiet during soak) · first cold after boot (seed4) = warm-cache artifact,
+  discarded per rule
+- **Gate deviation accepted**: `max_total_num_tokens` 6336256 → 6169856
+  (-166400 = 2600 reserved pages). #41275 is NOT a no-op here: the explicit
+  MAX_TOTAL_TOKENS cap exceeds available bytes and is re-validated through the
+  patched auto path. The old number over-committed reserved pages; the new one
+  is upstream's intended accounting. 600k workloads unaffected.
+- 24h light soak ends ~2026-10-28 22:00 (smoke 4/4, decode ≥42, no crash
+  loops, no quality complaints) + quiet-window conc6.
+
 ### W1 — correctness bundle (bp1) — target 10-28 low-traffic window
 
 | # | Commit | Change | Why / expected effect |
