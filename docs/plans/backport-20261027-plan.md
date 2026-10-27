@@ -16,6 +16,13 @@ One build per wave, one production outage per window (~25 min mig boot + gates
 + probes ≈ 1.5–2h). Bundling per the backport skill: each merged change gets
 its own smoke probe in the window.
 
+**W1 prep DONE 2026-10-27 21:35** (commit relayed to head): 3 patch scripts
+(35 anchor pairs, fidelity = byte-identical to `git apply` on pristine 7d996300),
+3 synthetic tests green, Dockerfile.canary-mig patch chain + patched-import check
++ self-test rows wired. Known pre-existing (NOT bp1): Mac-tree
+`tests.test_launcher_build` fails 2 canary-roce rows (rust fetch source + base
+pin) — same failures on unmodified HEAD. Window = build → cutover → gates.
+
 ### W1 — correctness bundle (bp1) — target 10-28 low-traffic window
 
 | # | Commit | Change | Why / expected effect |

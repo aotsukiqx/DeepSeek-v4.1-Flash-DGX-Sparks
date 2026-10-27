@@ -40,6 +40,15 @@ RUN python3 -c "import sglang, sglang.srt.models.deepseek_v4, sglang.srt.layers.
 # RoCEnante overlay (applies clean with -F3 on 7d996300; probes verified 2026-10-24)
 COPY runtime/sglang-rocenante.patch runtime/roce_tp4_adapt.py /tmp/
 RUN cd /sgl-workspace/sglang && patch -p1 -F3 < /tmp/sglang-rocenante.patch && python3 /tmp/roce_tp4_adapt.py && rm /tmp/sglang-rocenante.patch /tmp/roce_tp4_adapt.py
+# Upstream backports bp1 (2026-10-27): sglang#46706 deepseek-recipe render fixes
+# (py half), sglang#46404 dspark simulated-bonus row, sglang#41275 DSV4.1 pool
+# capacity accounting. Fidelity-gated: patched output byte-identical to
+# `git apply` on the pristine 7d996300 tree (verified 2026-10-27).
+COPY runtime/patch_recipe_46706.py runtime/patch_dspark_sim_46404.py runtime/patch_poolcap_41275.py /opt/dsv41/runtime/
+RUN python3 /opt/dsv41/runtime/patch_recipe_46706.py \
+ && python3 /opt/dsv41/runtime/patch_dspark_sim_46404.py \
+ && python3 /opt/dsv41/runtime/patch_poolcap_41275.py \
+ && python3 -c "import sglang.srt.entrypoints.openai.serving_deepseek_recipe, sglang.srt.model_executor.pool_configurator, sglang.kernels.ops.speculative.dspark.static_accept_tail, sglang.srt.speculative.dspark_components.dspark_sampling_accept_graph, sglang.srt.speculative.dspark_components.dspark_verify, sglang.srt.speculative.dspark_components.dspark_worker_v2; print('bp1 patched imports ok')"
 COPY --from=rustbuild /build/_multimodal.so /sgl-workspace/sglang/python/sglang/srt/rust_extensions/_multimodal.so
 RUN python3 -c "import sglang.srt.rust_extensions._multimodal as m; assert hasattr(m, 'dsv41'); print('bundled rust mm ok, inkling:', hasattr(m, 'inkling'))" \
  && rm -rf /root/.cargo/bin /root/.rustup
@@ -67,7 +76,10 @@ RUN PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_thinking_alias.p
  && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_fast_load_tp_slice.py \
  && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_fast_load_slab.py \
  && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_moe_b12x_next_cpu.py \
- && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_roce_ring.py
+ && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_roce_ring.py \
+ && python3 /opt/dsv41/tests/test_patch_recipe_46706.py \
+ && python3 /opt/dsv41/tests/test_patch_dspark_sim_46404.py \
+ && python3 /opt/dsv41/tests/test_patch_poolcap_41275.py
 ENV PYTHONPATH=/opt/dsv41/adapter:/opt/b12x:/opt/b12x_next \
     MODEL_PATH=/models/DeepSeek-V4.1-Flash \
     STATE_PATH=/state OFFLOAD_MODE=nvme DSV41_CACHE_GIB=16
