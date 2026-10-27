@@ -1,7 +1,7 @@
 # PROJECT STATE — DeepSeek-V4.1-Flash DGX Spark TP4 Fleet
 
 > **Single source of truth.** This document must survive context compaction and enable
-> any future session to resume exactly where we left off. Last updated: 2026-10-26 12:10.
+> any future session to resume exactly where we left off. Last updated: 2026-10-27 20:40.
 
 ## 1. Fleet & Repository
 
@@ -34,7 +34,9 @@
 - **Env**: `/tmp/env.pre-adoption-620c` (== old .env.tp4); tag `pre-adoption-v4`
 - **Procedure**: stop → drain 45s → `cp /tmp/env.pre-adoption-620c .env.tp4` → serve
 - **Keep** the image/env/tag on all nodes until the 24h soak clears (criteria:
-  smoke clean, decode ≥42, no crash loops, no quality complaints).
+  smoke clean, decode ≥42, no crash loops, no quality complaints). Soak CLEARED
+  2026-10-27 20:33 (29h healthy, 0 crash, smoke 4/4; decode spot-check folded
+  into the W1 baseline). Keep until the bp1 backport's own 24h clears.
 
 ## 3. Latest Measurements (2026-10-26 13:20, four-way)
 
@@ -249,14 +251,15 @@ at op_gather_a/b + MoeTransport + op_combine/op_mhc; then validation window).
 hidden — always run checks CUDA-visible.
 
 ### Priority queue (REVISED 2026-10-26 15:00 after strategic review)
-1. **Adoption A/B for mig v4** (the next action):
-   a. Paired qeval on the SAME 55-task PRIMARY set vs production (McNemar, BROKE=0
-      gate) — the 71/75 window gate used a different task set, not comparable.
-   b. Traffic-weighted verdict: v4 is decode ✓ (43.9/44.0), conc6 +4.1% (4042/3884,
-      the representative metric for concurrent real traffic), cold -3.0% (3978.8/
-      4101, single-stream only). Runbook: tag `pre-adoption-v4`, new .env.tp4 = v4
-      env (+DSV41_PIN7=1), cutover window, 24h soak with watchdog, explicit
-      rollback (env.prod.live + canary-roce image — proven path).
+1. **Upstream backport W1 (bp1) — NEXT** (2026-10-27, plan:
+   docs/plans/backport-20261027-plan.md): bundle #46706 recipe render fix (py;
+   trailing tool-call turn / null content / numeric effort — serving
+   correctness) + #46404 dspark sim-bonus (calibration-only) + #41275 pool
+   accounting (expected no-op under explicit MAX_TOTAL_TOKENS; gate = boot-log
+   full_token unchanged). New patch chain in Dockerfile.canary-mig (has none).
+   One window, qeval BROKE=0, 24h soak, tag canary-mig-bp1. W2 (#45794 BF16
+   indexer score width) conditional on torch-scoring-path pre-check, bar ≥2%
+   cold/conc6. Adoption A/B below is DONE (adopted 10-26 15:44, soak cleared).
 2. **prefill_sp Phase C: DEFERRED, post-adoption, conditional** — ceiling re-derived:
    the -3.0% cold gap = prefill_sp missing + engine delta (positive: conc6 +4.1%);
    hc_fused's share ≈ 0 (absorbed, item 3). Expected recovery +4-5% → final cold ≈
