@@ -1,7 +1,7 @@
 # PROJECT STATE — DeepSeek-V4.1-Flash DGX Spark TP4 Fleet
 
 > **Single source of truth.** This document must survive context compaction and enable
-> any future session to resume exactly where we left off. Last updated: 2026-10-27 22:20.
+> any future session to resume exactly where we left off. Last updated: 2026-10-28 20:35.
 
 ## 1. Fleet & Repository
 
@@ -34,17 +34,22 @@
 - **Cutover procedure (proven)**: stop → clean workers → **drain ≥45s MANDATORY** →
   serve → 200 (env unchanged; no env copy needed for image-only flips)
 
-### Rollback line (pre-bp1, one step back)
+### Rollback line (pre-bp1, one step back) — the ONLY staged rollback
 - **Image**: `dsv41-4x-spark:canary-mig-pre-bp1` on all 4 nodes (v4 FINAL
   without bp1); git tag `pre-bp1`; env unchanged (`/tmp/env.pre-bp1` backup ==
   live .env.tp4)
 - **Procedure (image-only flip)**: stop → drain ≥45s →
   `docker tag dsv41-4x-spark:canary-mig-pre-bp1 dsv41-4x-spark:canary-mig` on
-  all 4 nodes → serve. Keep until bp1's 24h soak clears (ends ~2026-10-28
-  22:00; criteria: smoke 4/4, decode ≥42, no crash loops, no quality
-  complaints) + a quiet-window conc6 re-measure.
-- Second-step rollback (pre-adoption, proven): `canary-roce` image +
-  `/tmp/env.pre-adoption-620c` + tag `pre-adoption-v4` — keep one more cycle.
+  all 4 nodes → serve.
+- **bp1 soak CLEARED 2026-10-28 20:20 (23h, user-authorized early)**: smoke
+  4/4, decode spot 43.7 (≥42), RestartCount 0, 0 crash/OOM/traceback in 23h
+  logs, no quality complaints. conc6 clean measurement NOT obtainable under
+  live traffic (4789 @ ~57 prefill/3m — window-conditioned, both runs
+  consistent, direction up = no regression signal; treat conc6 on this fleet
+  as window-conditioned going forward). Pre-adoption rollback set RETIRED
+  (canary-roce image ×4 deleted, /tmp/env.pre-adoption-620c removed; git tag
+  pre-adoption-v4 kept as history; old canary-roce-pre-* tags left for disk
+  history).
 
 ## 3. Latest Measurements (2026-10-26 13:20, four-way)
 
@@ -258,14 +263,15 @@ at op_gather_a/b + MoeTransport + op_combine/op_mhc; then validation window).
 ⚠️ Alias gotcha: `DeepseekV4DecoderLayer` resolves to Platform class when CUDA is
 hidden — always run checks CUDA-visible.
 
-### Priority queue (REVISED 2026-10-27 22:20 after bp1 adoption)
-1. **bp1 ADOPTED 2026-10-27 21:55** (live, tag `canary-mig-bp1`; plan:
-   docs/plans/backport-20261027-plan.md): #46706(py)+#46404+#41275.
-   Gates: qeval BROKE=0 (55 tasks, p=1.0), smoke 4/4 + 4 new probes,
-   decode 45.6, cold 3977.8 (-0.03% vs v4). DEVIATION accepted:
-   max_total_num_tokens 6336256→6169856 (-2.6%, #41275 reserved-page
-   correction — the explicit cap IS re-validated through the auto path).
-   NEXT: 24h soak review (~10-28 22:00) + quiet-window conc6 re-measure.
+### Priority queue (REVISED 2026-10-28 20:35 — campaign closed, steady state)
+1. **bp1 ADOPTED + soak CLEARED (2026-10-27 21:55 → 10-28 20:20)** (live,
+   tag `canary-mig-bp1`; plan: docs/plans/backport-20261027-plan.md):
+   #46706(py)+#46404+#41275. Gates: qeval BROKE=0 (55 tasks, p=1.0), smoke
+   4/4 + 4 new probes, decode 45.6/43.7, cold 3978 (-0.03% vs v4),
+   23h zero-crash soak. Accepted deviation: max_total_num_tokens
+   6336256→6169856 (-2.6%, #41275 reserved-page correction via cap
+   re-validation). **Backport campaign CLOSED** — upstream 10-24..10-27
+   sweep fully adjudicated (W1 adopted, W2 no-path, rest pin-migration).
 2. **W2 (#45794 BF16 indexer score width): CLOSED — no path (2026-10-28)**.
    In-image probe on canary-mig-bp1 (docker exec, CUDA-visible): capability
    (12,1), deep_gemm 0.2.3.post2 HAS `fp8_fp4_mqa_logits` →
@@ -274,9 +280,10 @@ hidden — always run checks CUDA-visible.
    `prefill_requests`/`_score_chunks` surface #45794 optimizes is DEAD CODE on
    this fleet (it runs only pre-SM100 / without the fp4 kernel). Do not
    backport; revisit only if a future pin/deep-gemm drops the fp4 kernel.
-3. **prefill_sp Phase C: DEFERRED, conditional** — cold now at parity
-   (3977.8 vs v4 3978.8); re-open only on real-traffic cold/TTFT pain.
-   Plan warm: docs/plans/prefill_sp-report-plan.md §3.
+3. **prefill_sp Phase C: CLOSED (2026-10-28)** — the motivation (cold -3.0%
+   vs old prod) is GONE: bp1 cold 3977.8 = v4 parity, no real-traffic
+   cold/TTFT complaints. Re-open only with fresh evidence of prefill pain
+   (plan stays warm: docs/plans/prefill_sp-report-plan.md §3).
 4. **hc_fused re-port: SKIPPED — win absorbed upstream** (verified 2026-10-26):
    `deepseek_v4_mhc.py:370 _mix_stats_impl` — "The default split-K/Sinkhorn fusion
    preserves batch invariance", gated only on `x.is_cuda and use_fused_stats and
