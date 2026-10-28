@@ -30,6 +30,7 @@ retroactively trims output, e.g. a repetition-loop detector (our production
 adapter, and the MiaAI-Lab bdf657c lineage `FINISH_ABORT` loop-abort, both do
 this):
 
+
 ```python
 def update_finish_state(self, new_accepted_len=1):
     original(self, new_accepted_len)
@@ -56,6 +57,20 @@ Observed signature (2026-10-15 incident):
   the wrapper in the SAME scheduler iteration
 - removing ONLY the post-hoc `finished_len` assignment (keeping the early
   finish) makes the violation disappear entirely
+
+## Prior art checked (not duplicates)
+
+- **#31599** (closed, fixed by #31569): the adjacent ordering bug in the same
+  function — `max_new_tokens` cap evaluated before the stop checks masks an
+  in-budget stop and leaks post-stop tokens **to the client**. Engine-internal,
+  finish-reason selection; no pool accounting involvement, no extension angle.
+  Our report is the complement: an **extension** mutating `finished_len`
+  **after** the flow desyncs **pool accounting** (checker over-free).
+- Pool-leak family — #39838 (session_held sessions), #35270 (radix
+  `evictable_size()` double-count), #38840 (shared boundary page double-free):
+  all distinct root causes; none involve `finished_len` or post-hoc mutation.
+- No upstream repetition/loop-detector feature or issue exists as of
+  2026-10-28 (search: `repetition loop detect`, `post-hoc`, `output_ids trim`).
 
 ## Suggested directions
 
