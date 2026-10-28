@@ -266,10 +266,14 @@ hidden — always run checks CUDA-visible.
    max_total_num_tokens 6336256→6169856 (-2.6%, #41275 reserved-page
    correction — the explicit cap IS re-validated through the auto path).
    NEXT: 24h soak review (~10-28 22:00) + quiet-window conc6 re-measure.
-2. **W2 (#45794 BF16 indexer score width) — pre-check first**: confirm on the
-   live image (CUDA-visible) that SM120 prefill runs the torch
-   `prefill_requests`/`_score_chunks` path, not DeepGEMM tiles; then A/B
-   window, bar ≥2% cold or conc6 with decode flat. W2 only after bp1 soak.
+2. **W2 (#45794 BF16 indexer score width): CLOSED — no path (2026-10-28)**.
+   In-image probe on canary-mig-bp1 (docker exec, CUDA-visible): capability
+   (12,1), deep_gemm 0.2.3.post2 HAS `fp8_fp4_mqa_logits` →
+   `_use_deep_gemm_prefill()` True; `dense_blocks.publish_prefill` hard-branches
+   to `_deep_gemm_publish_prefill`/`score_tiles`. The torch
+   `prefill_requests`/`_score_chunks` surface #45794 optimizes is DEAD CODE on
+   this fleet (it runs only pre-SM100 / without the fp4 kernel). Do not
+   backport; revisit only if a future pin/deep-gemm drops the fp4 kernel.
 3. **prefill_sp Phase C: DEFERRED, conditional** — cold now at parity
    (3977.8 vs v4 3978.8); re-open only on real-traffic cold/TTFT pain.
    Plan warm: docs/plans/prefill_sp-report-plan.md §3.

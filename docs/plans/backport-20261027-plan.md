@@ -90,6 +90,14 @@ Steps (per `dsv41-sglang-source-backport` skill, 4× proven):
 |---|---|---|---|
 | 4 | `65f19fce` **#45794** | BF16 prefill indexer score width: pad per-request K to 64-multiple (lc≥1024), chunk rows against padded width, slice `[:, :lc]` | **Pre-check first** (read-only, live image, CUDA-visible per §7.12): confirm prefill scoring actually runs the torch `prefill_requests`/`_score_chunks` path on SM120 (DeepGEMM `flat_index_logits_tiles` path → DROP, no path for us). Then A/B measurement window (mig_window.sh, arm = bp1+patch vs bp1), bar ≥2% cold 600k or conc6 with decode ±noise (prefill-path causality). Miss bar → negative result under docs/results/, patch script stays dormant |
 
+**W2 PRE-CHECK RESULT — #45794 DROPPED (2026-10-28)**: in-image probe on
+canary-mig-bp1 (CUDA-visible): capability (12,1) ≥ SM100 and deep_gemm
+0.2.3.post2 exposes `fp8_fp4_mqa_logits` → `_use_deep_gemm_prefill()` True →
+`dense_blocks.publish_prefill`/`consume_prefill` hard-branch to the DeepGEMM
+`score_tiles` path. The torch `prefill_requests`/`_score_chunks` functions the
+PR optimizes never execute on this fleet. Negative result recorded; no patch
+script derived. Re-evaluate only at the next pin/deep-gemm cycle.
+
 ### Deferred / out of scope (recorded, no action)
 - `46530`/`46516`/`46399`/`46718(dea05ca1)` prefill-graph buffer refactors,
   `43449` aux hidden capture, `46290`/`46330` spec placement — **next pin
