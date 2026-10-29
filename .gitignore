@@ -1,14 +1,20 @@
 # Local configuration and secrets (copy .env.example to .env)
 .env
 .env.tp4
+.env.tp4-switchless
+state-tp4-switchless/
+logs-tp4-switchless/
+.env.tp8
 state/
 state-tp4/
+state-tp8/
 *.pem
 *.key
 
 # Runtime output (engine logs, profiler traces, benchmark results)
 logs/
 logs-tp4/
+logs-tp8/
 *.log
 *.trace.json.gz
 

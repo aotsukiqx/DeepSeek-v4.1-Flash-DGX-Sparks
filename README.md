@@ -7,7 +7,7 @@
   <a href="https://x.com/MiaAI_lab" target="_blank" rel="noopener noreferrer" style="display:inline-block;margin:0 8px;vertical-align:middle;"><img src="https://img.shields.io/badge/Follow%20me%20on%20X-000000?style=for-the-badge&logo=x&logoColor=white" alt="Follow Mia on X" height="28" style="height:28px;width:auto;vertical-align:middle;border:0;" /></a>
 </p>
 
-Serve [deepseek-ai/DeepSeek-V4.1-Flash](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash)
+Serve [deepseek-ai/DeepSeek-V4.1-Flash-1017](https://huggingface.co/deepseek-ai/DeepSeek-V4.1-Flash-1017)
 with SGLang on three DGX Spark boxes (GB10, SM121, 121.7 GiB unified memory each) over a
 ConnectX-7 RoCE triangle: **native MXFP4 experts, FP8 dense weights, NVMe-resident Engram
 tables, DSpark speculative decoding, tool calling and vision**, behind one OpenAI-compatible
@@ -67,6 +67,7 @@ spark3  10.0.0.3  rank 2   mounts spark1's checkpoint over ConnectX (10.0.23.1)
 cd ~/NewModels/DS4.1
 cp -n .env.example .env        # IPs, users and knobs; already set for spark1/2/3
 ./start.sh doctor              # ssh, docker, IB, checkpoint shards, image arch, busy GPU
+./start.sh download            # download the pinned checkpoint (once; shared with the workers by `share`)
 ./start.sh build               # base image + this repo's overlay, on all three nodes
 ./start.sh share               # NFSv4 export + docker volumes on the workers
 ./start.sh pack                # Engram shards onto each node's NVMe (once; ~10 min)
@@ -111,7 +112,7 @@ defaults:
 | TP4 setting | Value | Why |
 |---|---|---|
 | `CONTEXT_LENGTH` | 1,048,576 | model maximum; a 1M-context needle test passed at these settings |
-| `MAX_TOTAL_TOKENS` | 8,000,000 | 13.4 GB of KV per rank: 8 requests at ~1M tokens each; see below |
+| `MAX_TOTAL_TOKENS` | 8,000,000 | 13.4 GB of KV per rank: 8 requests at ~1M tokens each; see below. This bounds KV storage for concurrent requests, not how many sessions keep a reusable prefix (see *Memory*) |
 | `MAX_RUNNING_REQUESTS` | 16 | also `--cuda-graph-max-bs-decode`: capture covers batch 1-16. Needs `--min-free-slots-delay 1` to be reachable; see below |
 | `CHUNKED_PREFILL_SIZE` | 4096 | with `DSV41_INDEXER_CHUNKED=1` (sglang#39187 backport), which bounds the indexer transient; without the backport 1024 is the safe size (~15 GB peak at 1M context, 4096 would need ~60 GB) |
 | `MEM_FRACTION_STATIC` | 0.80 | keeps ~24 GiB per rank outside the static pool for that transient |
@@ -234,7 +235,8 @@ runtime/sources.manifest pinned commits + sha256 of everything the TP4 images fe
 adapter/
   sitecustomize.py       import hooks that install the pieces below at process start
   encoding_compat.py     enable_thinking alias, publisher effort table, max_tokens cap
-  loop_abort.py          n-gram / identical-token / same-line stop on a live decode loop
+  loop_abort.py          n-gram / identical-token / same-line stop on a live decode loop (named error exit)
+  history_repair.py      keep a broken assistant tool call in the history instead of HTTP 400
   tp3_pad.py             TP=3 padding of heads / groups / vocab / draft experts
   engram_backend.py      EngramEmbedding replacement: exact rows from NVMe via a host callback
   row_store.cpp          the row store: O_DIRECT reads, 96-thread miss servicing, packed shards
@@ -274,13 +276,15 @@ benchmarks/, tests/      upstream benchmark, row-store, thinking-alias, encoder-
 | `DSV41_ENGRAM_PREFETCH` | 1 | Engram row lookups on a side stream, -2.3 to -2.9 ms/step; needs packed shards. `DSV41_ENGRAM_PREFETCH_CHECK=1` compares against the synchronous path (validation only) |
 | `DSV41_AUTOTUNE_KEEP` | 1 | keep FlashInfer autotune caches across boots of one launch: same tactics, reproducible greedy output and tok/s |
 | `DSV41_DRAFT_TAU` / `DSV41_FOLDED_FENCE` | 1 / 0 | off: draft temperature 0.8 measured +1.2 % on sampled chat, inside noise |
-| `DSPARK_SPS_TABLE` | /state/dspark_sps.json | profiled cost table; enables compact ragged verify when present |
+| `DSPARK_SPS_TABLE` | /state/dspark_sps.json | profiled cost table; would enable compact ragged verify, but `boot.py` ignores it on the Engram model unless `DSPARK_SPS_ALLOW_ENGRAM=1` (see Still on the table) |
 | `EXTRA_SGLANG_ARGS` | `--fp8-gemm-backend flashinfer_cutlass --watchdog-timeout 1800` | required for the MXFP8 route (below) |
 | `DSV41_MXFP8_BACKEND` | b12x | FlashInfer kernel for the FP8 dense projections: `b12x`, `cudnn`, `cutlass` |
 | `SGLANG_FLASHINFER_MOE_FUSED_FINALIZE` | 0 | keep 0: the fused (atomic) finalize is nondeterministic |
 | `SGLANG_DSV41_REASONING_EFFORT` | 75 | default budget for thinking-mode requests without a `reasoning_effort`. SGLang's V4.1 encoder maps `low`/`high`/`xhigh`/`max` to 25/50/75/100 and defaults to `high` = 50; the publisher's `encoding.py` says 50/75/100, default 75. The adapter remaps the tiers; this pins the default. Integer 1-100; see *Correctness notes* |
 | `DSV41_MAX_NEW_TOKENS` | 32768 | fill-in and hard cap when a chat request omits `max_tokens` / `max_completion_tokens`, or asks for more. 0 leaves SGLang's remaining-context default (how VIS-04 ran to 714k tokens). |
-| `DSV41_LOOP_ABORT` | 1 | stop a request whose output is an n-gram cycle, a same-token run, or the same decoded line repeated. `finish_reason=stop` / `matched=repetition`. 0 disables. The 2× EXL3 recipe has no equivalent; `--watchdog-timeout` does not fire on a live stream. |
+| `DSV41_LOOP_ABORT` | 1 | end a request whose output is an n-gram cycle, a same-token run, or the same decoded line repeated. With the named exit (default) the request ends as an error whose message starts with `loop_abort:` (stream: an error event; nonstream: HTTP 500). 0 disables. The 2× EXL3 recipe has no equivalent; `--watchdog-timeout` does not fire on a live stream. |
+| `DSV41_LOOP_NAMED_EXIT` | 1 | 0 restores the previous exit, `finish_reason=stop` / `matched=repetition`, which a client cannot tell apart from a normal end (and which cut tool-call arguments mid-string). |
+| `DSV41_HISTORY_REPAIR` | 1 | an assistant tool call in the request history whose `arguments` are not a JSON object is passed to the template as `{"_unparseable_arguments": <raw text>}` instead of failing the request with HTTP 400. 0 restores the 400. |
 | `DSV41_LOOP_NGRAM` / `DSV41_LOOP_REPEATS` | 32 / 4 | minimum cycle length in tokens, and consecutive copies required (keeps one copy). |
 | `DSV41_LOOP_LINE_REPEATS` | 8 | identical decoded lines of at least 16 characters. 0 disables the line detector. |
 | `NCCL_BUFFSIZE` / `NCCL_LL128_BUFFSIZE` / `NCCL_PROTO` / `NCCL_MAX_NCHANNELS` | 1 MiB / 256 KiB / `^LL128` / 8 | NCCL connection buffers: 4.7 GiB → 0.14 GiB pinned per node |
@@ -336,8 +340,13 @@ Where the 118 → 82 ms came from, in order of size:
   and use the LL protocol; prefill uses Simple. The `NCCL_*` knobs above cut it to 139 MB and
   turned the head's 0.2-0.8 GB of free memory into ~6 GB, which is why the boot-time "KV
   lottery" and the reclaim stalls went away. NCCL logs 2 communicators × 8 channels now.
-- Hierarchical cache, CPU offload and `swa_full_tokens_ratio` do not apply: host RAM is GPU
-  RAM, KV is small, and the SWA pool is cap-sized.
+- Hierarchical cache and CPU offload do not apply: host RAM is GPU RAM and KV is small. The SWA
+  pool is cap-sized by default (`prefix_tails = 4 x max_running_requests`), which is enough for
+  one long session but **not** for several 1M-context sessions kept warm in the radix cache:
+  field reports on the TP4 line (#27, #43) show a second long session evicting the first one's
+  prefix (`cached_tokens=0`, a full re-prefill) while most of the full pool is free. For that
+  workload set `--swa-full-tokens-ratio 0.065` in `EXTRA_SGLANG_ARGS` (see `.env.tp4.example`).
+  It is not the shipped default because it has been measured by users, not by us.
 - **Long prompts and the allocator.** Each 2048-token prefill chunk allocates an indexer-logits
   buffer proportional to the prefix so far. With PyTorch's native caching allocator a freed
   smaller block cannot serve the next larger request, so reserved memory grows with the
@@ -386,9 +395,16 @@ Where the 118 → 82 ms came from, in order of size:
 - **Loop abort.** VIS-04 was a semantic loop, not a hung GPU: 714k tokens over ~2.6 h while
   `--watchdog-timeout 1800` stayed quiet. `adapter/loop_abort.py` finishes the request after
   four consecutive copies of a ≥32-token n-gram, 64 identical tokens, or eight identical
-  decoded lines, with OpenAI `finish_reason=stop` (`matched=repetition`). The 2× EXL3 recipe
-  has no decode-side detector. `python3 tests/test_loop_abort.py` covers the detector; set
-  `DSV41_LOOP_ABORT=0` to turn it off.
+  decoded lines. The request ends with a named error (`loop_abort: DSV41 repetition (art=…,
+  period=…)`), not with `finish_reason=stop`: a stop in the middle of a tool call handed the
+  client truncated JSON arguments that looked like a finished call (`DSV41_LOOP_NAMED_EXIT=0`
+  restores the stop). The 2× EXL3 recipe has no decode-side detector.
+  `python3 tests/test_loop_abort.py` covers the detector; set `DSV41_LOOP_ABORT=0` to turn it off.
+- **Broken tool calls in the history.** Agent clients keep a truncated tool call in the
+  history next to their own "invalid JSON, try again" tool result. Stock SGLang rejects that
+  history with HTTP 400, which agent clients do not retry. `adapter/history_repair.py` passes
+  such arguments to the template as `{"_unparseable_arguments": <raw>}` and logs
+  `DSV41 history repair: len=… reason=…`; `tests/test_history_repair.py`.
 - `runtime/flash_mla_sm120.py` sends prefills of more than 64 query tokens to FlashInfer's
   sparse-prefill specialisation and everything else through the decode kernel with a
   256→64-token page split; both paths were verified deterministic.
@@ -433,8 +449,12 @@ fails), and the head has little RAM to spare.
 - After the 2026-09-24 changes the bs=1 step is ~59 ms (docs/overnight-results.md): MoE ~21 ms,
   b12x dense FP8 ~17 ms, NCCL ~5.6 ms, `wo_a` twin 3.5 ms, the draft's bf16 `wo_a` 2.4 ms.
 - The MoE cost scales with the 6-token verify window. A profiled SPS table
-  (`python -m sglang.benchmark.dspark_sps_profiler all --base-url ...`, pushed to every rank
-  by `start.sh`) turns on compact ragged verify, which mainly pays at concurrency ≥2.
+  (`python -m sglang.benchmark.dspark_sps_profiler all --base-url ...`) would turn on compact
+  ragged verify, but **it cannot be used on this model**: the Engram hasher asserts one equal
+  verify block per request (`srt/layers/engram.py`, "got 42 tokens for 8 requests of 6", issues
+  #6 and #12, upstream sgl-project/sglang#39173), so the engine dies during CUDA-graph capture.
+  `boot.py` therefore ignores `DSPARK_SPS_TABLE` with a log line unless
+  `DSPARK_SPS_ALLOW_ENGRAM=1` is set in the container environment (for a fixed engine).
 - Fewer, fused small kernels (~2000 per step) and the 13-16 ms of cross-node latency are the
   remaining floor at TP=3.
 
@@ -484,7 +504,7 @@ fails), and the head has little RAM to spare.
 - Serving engine: [SGLang](https://github.com/sgl-project/sglang) dev build with
   [FlashInfer](https://github.com/flashinfer-ai/flashinfer) kernels.
 - Model weights stay on Hugging Face / local NVMe and are not redistributed. Pinned checkpoint:
-  `deepseek-ai/DeepSeek-V4.1-Flash` @ `fb2764a5cf321eaa5070ca8f9e892818f477c16d`.
+  `deepseek-ai/DeepSeek-V4.1-Flash-1017` @ `1bae0e1088993b9b82de08f59de5be5a34e42170`.
 
 ## License
 

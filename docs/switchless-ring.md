@@ -163,6 +163,10 @@ NCCL_P2P_LEVEL=SYS
 DSV41_SERIAL_WEIGHT_LOAD=1
 ```
 
+`./start-tp4-switchless.sh` does this for you: on first run it writes a separate `.env.tp4-switchless`
+(from `.env.tp4` if present) with this block appended, and uses `state-tp4-switchless/` and
+`logs-tp4-switchless/`, so a switched `.env.tp4` is left alone.
+
 The ring-only lines are commented in the shipped example. A copied profile
 uses switched transport settings until explicitly enabled; those settings
 cannot boot the tested switchless ring. Four channels are the tested ring
@@ -482,6 +486,19 @@ NCCL_DEBUG_SUBSYS=INIT,ENV,NET    # add NET while validating; drop it afterwards
 * **A wrong GID index is the usual failure.** All ports listed in `IB_HCA` must
   share one nonzero IPv4-mapped RoCE v2 GID; the preflight finds it or validates
   your `NCCL_IB_GID_INDEX` override. Management IPs need not appear in the GID table.
+* **The RoCE v2 GID index can move.** Index 3 is what the tested fleet used, but repeated
+  `netplan apply` runs or a physical cable re-seat have moved the IPv4-mapped GID to index 4
+  with index 3 left empty (two independent reports, #40 and #41). The preflight then stops with
+  "no common IPv4 RoCE v2 GID", or `plan.py` refuses its index-3 check. A link bounce does not
+  restore index 3; reloading the driver does (`modprobe -r mlx5_ib && modprobe mlx5_ib` with the
+  engine stopped). Otherwise let the preflight pick the index, or set `NCCL_IB_GID_INDEX` to the
+  index that carries the ring address.
+* **After a cable or power event, check `carrier`, not only the IB port state.** A link can read
+  `4 (ACTIVE)` on the IB port while the netdev carrier drops every few seconds (`cat
+  /sys/class/net/<if>/carrier` sampled repeatedly); the symptoms are `Got non-fatal async event`
+  warnings, `ibv_modify_qp` timeouts and boots that die in collective setup. Also address every
+  ring link in the same scheme (a single legacy subnet among 10.0.x links broke plan.py in #40),
+  and check a weight mount by shard count behind a `timeout`, not with `mountpoint`.
 * **Do not also set `NCCL_SWITCHLESS_RING_ONLY=1` with a switched fabric.** The ring
   skips the tree, which is a performance loss when the tree is reachable.
 * **A ring is not a non-blocking fabric.** Opposite ranks talk through a transit
@@ -637,6 +654,19 @@ paths first, forwarded paths after, from 128 KB) only costs once nothing drops:
   Opposite-node traffic stops, and a re-init drops every RDMA queue pair on that function; the RoCE
   health check then fails the step. `hairpin.sh` skips functions already at the value, so re-running
   it with the same value is safe.
+- **A TX collapse that survives restarts.** One report (#40) saw two nodes fall to ~13-14 Gb/s
+  TX on every fabric function (RX and the other nodes full speed, error counters zero) after
+  experimenting with the mesh; it persisted through `systemctl stop dsv41-mesh`, `pkill` of the
+  markers and link bounces, and cleared only with a reboot or `modprobe -r mlx5_core && modprobe
+  mlx5_core`. It did not recur after reboots and the cause was never isolated (a marker killed
+  with `pkill` instead of `systemctl stop` is a suspect, not a finding). Stop markers only with
+  `systemctl stop dsv41-mesh-marker@...` / `disable --now dsv41-mesh` with the engine down, and
+  re-measure every link with `ib_write_bw -x <gid>` after any mesh change; a single hop near
+  14 Gb/s shows up as cold prefill near 1,100-1,400 tok/s instead of ~2,000 (4,000+ at chunk 4096).
+- `DSV41_MOE_B12X_NEXT=1` needs `EP_SIZE=1` (per-rank N=576). At EP_SIZE=4 (N=2304) both
+  fast paths in `adapter/moe_b12x_next.py` (`N % 128 == 64`) are skipped and b12x's own planner
+  fails at boot with "planned dynamic direct routing is unsupported for this launch shape"
+  (#40); EP_SIZE=2 is an A/B setup only.
 - The marker rewrites every RDMA packet with UDP source port 65535 on its device, whatever the
   destination: keep that port reserved on the fabric.
 - Without the mesh neither package has a path to the opposite node (`DSV41_ROCE_RING=1` or not): a
@@ -651,6 +681,54 @@ paths first, forwarded paths after, from 128 KB) only costs once nothing drops:
 
 Rollback: `DSV41_ROCE_RING=0 SGLANG_ROCE_ALLREDUCE=0` without `DSV41_ROCE_GATHER` in `.env.tp4`, then
 `sudo systemctl disable --now dsv41-mesh` on every node (removes the markers, rules and routes).
+
+## A second ring: four HCAs, NFS weights and the mesh (reproduction, 2026-10-10)
+
+The production line above, reproduced from a clone on another four-Spark ring (DGX OS 7.x, one node on kernel
+7.0 / driver 580.178, the rest 6.17 / 580.173), with three differences from the tested ring setup. Full recipe, raw
+logs and scripts: [colonel-otto/4x-dgx-spark-ring `dsv41-flash/`](https://github.com/colonel-otto/4x-dgx-spark-ring/tree/main/dsv41-flash).
+
+**NCCL on all four functions without the dual-PCI-domain flags.** Instead of sparkring's
+`nccl-2.30.7-dual-pci-domain.patch`, the ring runs alexellis/switchless-nccl v0.0.1 plus
+[ondigo-winder/SWITCHLESS-NCCL-RING-4-GB10](https://github.com/ondigo-winder/SWITCHLESS-NCCL-RING-4-GB10)'s
+`nccl-2.30.7-switchless-4hca.patch`: it packs up to four IPv4-mapped listener GIDs into the handle and spreads
+connections over the matching functions whenever `NCCL_SWITCHLESS_RING_ONLY=1`, so `IB_HCA` lists all four devices and
+no `NCCL_IB_EXTENDED_IPV4_GIDS` / `NCCL_IB_PRESERVE_PCI_DOMAIN` flags are needed. It carries the `SWITCHLESS_RING_ONLY`
+marker, so `doctor`'s preflight accepts it via `NCCL_HOST_DIR`. Host-native np=4 all-reduce at 1 GiB: 105 Gb/s on
+two functions, 186 Gb/s on four (4 channels; 8 channels lost ~40 % at 1 MiB, `NCCL_BUFFSIZE=16M` ~30 Gb/s at 1 GiB).
+Every rank must load the same build.
+
+**Checkpoint over NFS on a ring (no local copies).** `NFS_SHARE=0` with each worker's `NFS_VOLUME` created by hand as a
+`type=nfs` docker volume pointing at the head's checkpoint over the cable it shares with the head. The opposite node
+has no such cable, so it reaches the head through a neighbour with two `/32` routes (worker → head's fabric address via
+the neighbour, and back); the neighbour forwards in the kernel (`ip_forward=1`, fabric ports accepted in `DOCKER-USER`).
+Measured 889 MB/s on the opposite node (vs ~110 MB/s on a 1 GbE management LAN); the fast loader then reads its slice
+in ~120 s per rank. The Engram shards were packed once on the head for all four ranks (`pack_engram.py --rank r --tp 4`,
+~47 GiB each, ~4 min in parallel) and copied to each worker's local NVMe, never read over NFS. Note: the mesh's
+`mesh-down.sh` deletes the same `/32` routes the planner adds, so re-add the NFS routes after it.
+
+**The mesh at the default hairpin queue.** `hairpin_queue_size` stayed at 1024 (no devlink re-init); `plan.py` then
+emits the 81,920-byte cap. `ib_write_lat` 61 KB to the opposite node: 10.0 us, with the neighbour's tc rule forwarding
+every packet in hardware. Units were installed under `/run/systemd/system` (runtime only) instead of enabling
+`dsv41-mesh.service`.
+
+Results, same image and EXTRA_CONTAINER_ENV as the production line (DSpark k=5, EP 1), thinking off, 128-token
+completions, sampled (temp 0.6), two passes each, own harness so per-cell numbers are not sparkDash-comparable; qeval as
+in [tp4.md](tp4.md):
+
+| | NCCL only (`SGLANG_ROCE_ALLREDUCE=0`) | + mesh (`DSV41_ROCE_RING=1`, 80 KB cap) |
+|---|---:|---:|
+| qeval (75 tasks) | 72/75, median 73.0 / 76.9 tok/s | 72/75, median 79.8 tok/s |
+| c1 decode | 114.8 / 115.7 tok/s | 126.7 / 132.0 tok/s |
+| c16 aggregate | 409.7 / 390.9 | 405.1 / 423.6 |
+| TTFT c8 / c16 | 630 / 1168 ms | 790 / 1335 ms |
+| cold prefill 131k (repetitive filler) | 25.1 s | 24.3 s |
+| cold prefill, natural text ~28k / ~110k | | 4.4-4.8k / 4.2-4.7k tok/s |
+| KV pool | 6.65 M | 6.40-6.50 M |
+
+The three qeval misses are the same three as in [tp4.md](tp4.md). `DSV41_CACHE_GIB=0` on the mesh line: KV +3.6 %,
+natural-text prefill and c1 unchanged, c16 aggregate -6 %, repetitive-filler prefill -10-14 %; the profile's 4 GiB was
+kept.
 
 ## Measured on the TP4 profile
 

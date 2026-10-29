@@ -222,6 +222,17 @@ def test_install_respects_already_finished():
     assert req.finished_reason.matched == 'length'
 
 
+def test_detail_reports_art_and_period():
+    # (Upstream MiaAI-Lab bdf657c also ships DSV41_LOOP_NAMED_EXIT tests; the named
+    # exit re-adds the unconditional post-hoc finished_len that hard-crashed this
+    # fleet's scheduler (2026-10-15; audit in docs/upstream/loop-abort-finished-len-bug.md),
+    # so the stop-exit semantics stay and those tests are not carried.)
+    from loop_abort import detect_repetition_detail
+    cfg = load_config()
+    assert detect_repetition_detail(list(range(40, 72)) * 4, cfg=cfg) == ('ngram', 32, 32)
+    assert detect_repetition_detail([7] * DEFAULT_IDENTICAL, cfg=cfg) == ('identical', 1, 1)
+
+
 if __name__ == '__main__':
     tests = [v for k, v in list(globals().items()) if k.startswith('test_')]
     failed = 0
