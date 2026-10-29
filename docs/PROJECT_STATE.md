@@ -293,6 +293,37 @@ hidden — always run checks CUDA-visible.
    (keep `canary-mig-pre-bp1` one more cycle), update `docs/tp4.md` +
    `.env.tp4.example` if env semantics changed (bp1: none).
 
+### Upstream audit 2026-10-29 (MiaAI-Lab merged; sglang 10-27 20:19→10-29 swept)
+6. **MiaAI-Lab main MERGED (a1bbbf4, live on head)**: 31 upstream commits
+   (10-17 ported-PR batch). Most value was already ported in-tree (annotated
+   "Ported from MiaAI-Lab …"); conflicts resolved as OURS (sitecustomize =
+   strict superset; loop_abort named-exit REJECTED — re-adds post-hoc
+   finished_len, its 2 tests dropped with rationale). Incoming: model default
+   → V4.1-Flash-1017 @1bae0e1 (matches live), start-tp4-switchless.sh + docs,
+   TP8/EP1+b12x_next guard, SPS knobs, base-Dockerfile placeholder row.
+   Git-tree only — no image/boot change; next build picks it up.
+7. **sglang sweep (179 new commits)**: perf payload is PIN-MIGRATION-ONLY —
+   **Engram decode-lookup wave** #46917/#46925/#46955 (all-to-all lookup for
+   decode+graphs, Triton reorder) + #47033 (in-place row reads) + #46893
+   (--engram-config); all rebuild layers/engram.py post-pin → apply fails.
+   #47148 MegaGate-in-prefill applies clean but is a NO-OP here
+   (SGLANG_OPT_DEEPGEMM_MEGA_GATE default False; consumer = MegaMoE; our MoE
+   is b12x_next). dspark host-lengths family: #46891 clean BUT #46897/#46777
+   are its required follow-ups (dsv4 backend needs host lengths) → ride pin.
+   #46840 sim-accept fix (bp1 #46404 follow-up): calibration knob only → pin.
+8. **bp2 bundle candidates (apply-clean + executing path, NO window opened)**:
+   #47116 reasoning-token clamp after stop truncation (DSpark verified blocks
+   extend past stop → usage over-report; 4 lines), #46835 page-index pad
+   skip-copy (2 lines, micro), #46994 int all-reduce off custom AR
+   (defensive, attn-dp=1 here). None justifies a solo outage; stage as bp2
+   when a window opens anyway. #46737 breakable-graph storage release: skip
+   (decode graphs run the full backend).
+9. **Next pin-migration trigger UPDATED**: Engram decode wave + dspark
+   host-lengths family + mem-cache/kv-cache refactor wave (#46973-#46991) +
+   spec ragged-verify rework (#34031) all stack on post-pin refactors; wait
+   for upstream settle (wave still landing 10-28/29), then one migration
+   captures everything.
+
 ### Retired shortcuts (all evidence-backed)
 - Native prefill-CP: V4.1 vision model rejects CP.
 - Prefill CUDA graphs: dsv4 backend not in the BCG whitelist.
