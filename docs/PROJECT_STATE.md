@@ -16,40 +16,38 @@
 
 ## 2. Two Code Lines (running simultaneously)
 
-### Production line (LIVE since 21:55 2026-10-27 — mig v4 + bp1 backports)
-- **Image**: `dsv41-4x-spark:canary-mig-bp1` (sglang **7d996300** + bp1 source
-  patches #46706/py + #46404 + #41275, Dockerfile.canary-mig patch chain)
-- **Config**: unchanged from v4 (EP1, TP4, b12x_next ON, six adapters,
-  DSV41_PIN7=1, prefill_sp OFF, hc_fused absorbed; env identical to pre-bp1)
-- **bp1 evidence (2026-10-27 window)**: qeval paired BROKE=0 (55 tasks,
-  p=1.000, median 73.7→75.3 tok/s); smoke 4/4 + trailing-toolcall-turn,
-  assistant-null-content+tool_calls, numeric-effort-0.5, sampled request all
-  PASS; decode600k **45.6** (gate ≥42); cold 600k seed5 **3977.8** (v4
-  baseline 3978.8, -0.03%); conc6 contaminated by live traffic (4828, batching
-  inversion — re-measure quiet during soak)
-- **Known capacity change (#41275, expected)**: `max_total_num_tokens`
-  6336256 → **6169856** (-166400 = 2600 pages): explicit cap re-validated
-  through the patched auto path — the reserved-page overcommit upstream
-  removes. NOT the predicted no-op; mechanism understood, accepted
+### Production line (LIVE since 2026-10-30 ~15:05 — mig v4 + bp1 + bp2 backports)
+- **Image**: `dsv41-4x-spark:canary-mig-bp2` (running tag `canary-mig`; head
+  ID 4d94d8c19894) = sglang **7d996300** + bp1 (#46706/py+#46404+#41275) +
+  bp2 (#47116+#46835+#46994+#47149+#46024), Dockerfile.canary-mig patch
+  chain, prep commit `792e9a6d`, git tag `bp2`
+- **Config**: unchanged (EP1, TP4, b12x_next ON, six adapters, DSV41_PIN7=1,
+  prefill_sp OFF; env identical to bp1 — /tmp/env.pre-bp2 == live .env.tp4)
+- **bp2 evidence (2026-10-30 window)**: in-image pre-verify BP2-PROBE-PASS
+  (amax8 JIT compiled+ran correct on GB10 incl. the newest-block +inf
+  semantics; hc Triton ran finite; patched imports); build 8/8 patch
+  self-tests; boot gamma=5 / chunked 4096 / 0 traceback; smoke 4/4; wire
+  probe sampled request PASS (#47116 clamp not wire-visible — the openai
+  surface hides reasoning_tokens; synthetic test covers); qeval vs the
+  pre-bp1 baseline (10-26 head copy, 55 tasks): **BROKE=0 every category** —
+  1 prose guard flip (96 words vs 100 floor) rechecked 5/5 = sampling noise,
+  guard cleared; decode600k seed4 **44.0** (gate ≥42; bp1 45.6/43.7);
+  cold seed5 **3995.9** (bp1 3977.8, parity — #47149's CC10.7-class win is
+  not resolvable on 48 SMs); conc6 **4825.6** quiet-window (≥ all priors).
+  Median tok/s 78.2→74.6 vs a 10-26 baseline is cross-day, not gated.
+- **Deviation accepted**: DSV4 pool full 6169856→**6221312** (+51456 tok,
+  +0.8% capacity). No bp2 patch sizes pools; boot-time allocation jitter;
+  capacity UP = harmless for the 600k line. Watch whether it tracks
+  per-boot variance at the next boot.
 - **Cutover procedure (proven)**: stop → clean workers → **drain ≥45s MANDATORY** →
   serve → 200 (env unchanged; no env copy needed for image-only flips)
 
-### Rollback line (pre-bp1, one step back) — the ONLY staged rollback
-- **Image**: `dsv41-4x-spark:canary-mig-pre-bp1` on all 4 nodes (v4 FINAL
-  without bp1); git tag `pre-bp1`; env unchanged (`/tmp/env.pre-bp1` backup ==
-  live .env.tp4)
-- **Procedure (image-only flip)**: stop → drain ≥45s →
-  `docker tag dsv41-4x-spark:canary-mig-pre-bp1 dsv41-4x-spark:canary-mig` on
-  all 4 nodes → serve.
-- **bp1 soak CLEARED 2026-10-28 20:20 (23h, user-authorized early)**: smoke
-  4/4, decode spot 43.7 (≥42), RestartCount 0, 0 crash/OOM/traceback in 23h
-  logs, no quality complaints. conc6 clean measurement NOT obtainable under
-  live traffic (4789 @ ~57 prefill/3m — window-conditioned, both runs
-  consistent, direction up = no regression signal; treat conc6 on this fleet
-  as window-conditioned going forward). Pre-adoption rollback set RETIRED
-  (canary-roce image ×4 deleted, /tmp/env.pre-adoption-620c removed; git tag
-  pre-adoption-v4 kept as history; old canary-roce-pre-* tags left for disk
-  history).
+### Rollback ladder (bp2 live)
+- **One step back**: `canary-mig-bp1` ×4 (image-only flip: stop → drain ≥45s →
+  retag canary-mig → serve) + git tag `pre-bp2` + /tmp/env.pre-bp2.
+- **Two steps back**: `canary-mig-pre-bp1` ×4 retained until bp2 soaks clean
+  (grandfather; git tag `pre-bp1`). bp1 soak had cleared 23h (smoke 4/4,
+  decode 43.7, 0 crash/restart) before bp2 replaced it.
 
 ## 3. Latest Measurements (2026-10-26 13:20, four-way)
 
@@ -311,13 +309,10 @@ hidden — always run checks CUDA-visible.
    is b12x_next). dspark host-lengths family: #46891 clean BUT #46897/#46777
    are its required follow-ups (dsv4 backend needs host lengths) → ride pin.
    #46840 sim-accept fix (bp1 #46404 follow-up): calibration knob only → pin.
-8. **bp2 bundle candidates (apply-clean + executing path, NO window opened)**:
-   #47116 reasoning-token clamp after stop truncation (DSpark verified blocks
-   extend past stop → usage over-report; 4 lines), #46835 page-index pad
-   skip-copy (2 lines, micro), #46994 int all-reduce off custom AR
-   (defensive, attn-dp=1 here). None justifies a solo outage; stage as bp2
-   when a window opens anyway. #46737 breakable-graph storage release: skip
-   (decode graphs run the full backend).
+8. **bp2 bundle ADOPTED 2026-10-30 (see §2)**: #47116 reasoning clamp +
+   #46835 page-index pad skip + #46994 int-AR guard + #47149 amax8 grid +
+   #46024 hc_combine splits, one window. #46737 breakable-graph release:
+   skipped (decode graphs run the full backend).
 9. **Next pin-migration trigger UPDATED**: Engram decode wave + dspark
    host-lengths family + mem-cache/kv-cache refactor wave (#46973-#46991) +
    spec ragged-verify rework (#34031) all stack on post-pin refactors; wait
@@ -325,19 +320,16 @@ hidden — always run checks CUDA-visible.
    captures everything.
 
 ### sglang sweep 2026-10-30 (86 new commits; MiaAI-Lab: 0 new)
-10. **bp2 bundle EXPANDED — two executing kernel fixes found (apply-clean at pin)**:
-    - **#47149** dsv4 `block_amax.cuh` amax8_varlen grid fix (grid-stride +
-      kWaves=2 cap; upstream measured 56-84% faster on CC 10.7). Called at
-      `v41_indexer/sparse_table.py:519` — OUR indexer hot path (prefill/cold).
-      GB10 = 48 SMs CC 12.1 → expect smaller-than-10.7 win; A/B-gate on cold.
-      (mega MoE pre-dispatch half of the PR = no-op, b12x_next.)
-    - **#46024** `hc_combine_norm_mxfp8` batch-aware row splits + zeroed padding
-      scales. Called at `deepseek_v4_mhc.py:509` — per-layer, decode+prefill.
-      The OLD heuristic was tuned for 148-SM parts; 48-SM GB10 likely mistuned
-      → A/B-gate on decode600k.
-    Both are JIT/Triton sources (compile at boot, no wheel rebuild). Full bp2
-    set now: #47116 + #46835 + #46994 + #47149 + #46024; window still required
-    (boot ~25 min) — open only in a scheduled slot; cold+decode probes paired.
+10. **bp2 bundle EXPANDED then ADOPTED same day (2026-10-30, user-opened
+    window; see §2)**: #47149 amax8_varlen grid fix
+    (`v41_indexer/sparse_table.py:519` — our prefill path; CC10.7-class win
+    not resolvable on 48 SMs, cold parity 3995.9) and #46024
+    hc_combine_norm_mxfp8 batch-aware splits (`deepseek_v4_mhc.py:509`,
+    decode-shaped batches; decode 44.0 = in-band) joined #47116/#46835/#46994.
+    In-image pre-verify BEFORE the boot proved the JIT csrc compiles + runs
+    on GB10 (once.h is vendored in-tree at kernels/jit/include — #41147).
+    Lesson: qeval's default URL is worker-local :8888 — engine-only workers
+    score all-0; from a worker always pass --url http://192.168.2.23:8000.
 11. **No-ops / skips this window**: #46676 (dp prefill coordination guard —
     attn_dp=1), #47304 (EPLB sim routing), #44457 (triton MLA backend — we run
     dsv4), #47415/#47178 (apply-fail → pin; detokenizer flat-IPC + scheduler
