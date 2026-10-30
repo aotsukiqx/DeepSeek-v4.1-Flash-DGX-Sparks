@@ -324,6 +324,28 @@ hidden — always run checks CUDA-visible.
    for upstream settle (wave still landing 10-28/29), then one migration
    captures everything.
 
+### sglang sweep 2026-10-30 (86 new commits; MiaAI-Lab: 0 new)
+10. **bp2 bundle EXPANDED — two executing kernel fixes found (apply-clean at pin)**:
+    - **#47149** dsv4 `block_amax.cuh` amax8_varlen grid fix (grid-stride +
+      kWaves=2 cap; upstream measured 56-84% faster on CC 10.7). Called at
+      `v41_indexer/sparse_table.py:519` — OUR indexer hot path (prefill/cold).
+      GB10 = 48 SMs CC 12.1 → expect smaller-than-10.7 win; A/B-gate on cold.
+      (mega MoE pre-dispatch half of the PR = no-op, b12x_next.)
+    - **#46024** `hc_combine_norm_mxfp8` batch-aware row splits + zeroed padding
+      scales. Called at `deepseek_v4_mhc.py:509` — per-layer, decode+prefill.
+      The OLD heuristic was tuned for 148-SM parts; 48-SM GB10 likely mistuned
+      → A/B-gate on decode600k.
+    Both are JIT/Triton sources (compile at boot, no wheel rebuild). Full bp2
+    set now: #47116 + #46835 + #46994 + #47149 + #46024; window still required
+    (boot ~25 min) — open only in a scheduled slot; cold+decode probes paired.
+11. **No-ops / skips this window**: #46676 (dp prefill coordination guard —
+    attn_dp=1), #47304 (EPLB sim routing), #44457 (triton MLA backend — we run
+    dsv4), #47415/#47178 (apply-fail → pin; detokenizer flat-IPC + scheduler
+    stats are host-overhead wins for the NEXT PIN). #47328 deep_select 3-CTA
+    tier (needs batch>48 SMs; decode never, prefill maybe — optional A/B if a
+    window opens anyway). #47115 fill_padded_rows (≥2048 narrow rows; b12x
+    likely bypasses stock topk fill).
+
 ### Retired shortcuts (all evidence-backed)
 - Native prefill-CP: V4.1 vision model rejects CP.
 - Prefill CUDA graphs: dsv4 backend not in the BCG whitelist.
