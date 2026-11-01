@@ -364,6 +364,31 @@ hidden — always run checks CUDA-visible.
     decision + stack replay on a candidate tarball) — zero cluster cost.
     Skipped: #47387 (default-off SM90-targeted opt-in decode indexer).
 
+### Pin-migration prep (route decision DONE 2026-11-01, candidate 8817f63c)
+- Tarball sha256 `85a03032…`; **8/8 bp1+bp2 backports absorbed** (patch chain
+  drops); #38565 (bp3) also absorbed — no patcher needed.
+- Overlay replay: rocenante 20/21 hunks clean (1 reject = PyNcclCommunicator
+  `__init__` `roce_enabled` kwarg, upstream signature moved — mechanical
+  re-derive); `roce_tp4_adapt.py` 4/4 probes PASS on the patched tree;
+  22/23 sitecustomize-hooked modules exist (encoding_dsv41 gone = expected,
+  dormant hook); flash_mla_sm120 target exists.
+- Wheel stack: candidate pins torch==2.14.1 (same generation) + CUDA 13 line
+  → pip-layer path per skill (no base rebuild unless >2 blockers appear).
+- REMAINING (critical path): (1) rocenante hunk re-derive; (2) adapter
+  re-derivation — engram_backend/engram_prefetch vs the wave-rewritten
+  engram.py (1388→1540 lines, 54→60 defs), prefill_sp tables, b12x_next
+  needles, dspark-family adapters vs spec rework; in-image test replay;
+  (3) new Dockerfile (drop patch chain); (4) flashinfer top-k
+  is_deterministic probe (0.7.2 may predate #4831 — #38565 self-falls-back);
+  (5) rust rebuild expected (rust tree moved).
+- **Timeline**: settle gate = mem_cache quiet ≥2 days from 10-31 13:41 -0700
+  → gate passes 11-03 ~05:00 +0800. Adapter work 11-01/02. **Earliest
+  window 11-03 (CN daytime)** if adapters finish + waves stay quiet; else
+  11-04. Window ≈ 2.5-3h (rust rebuild + JIT-cold boot + full gates +
+  qeval; auto-rollback staged). Re-sweep + re-verify absorption the evening
+  before the window (candidate may move; re-derive is cheap now that the
+  overlay anchors cleanly).
+
 ### Retired shortcuts (all evidence-backed)
 - Native prefill-CP: V4.1 vision model rejects CP.
 - Prefill CUDA graphs: dsv4 backend not in the BCG whitelist.
