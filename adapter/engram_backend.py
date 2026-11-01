@@ -196,7 +196,7 @@ def install(module):
         from sglang.kernels.ops.embeddings.engram_gather import engram_gather
         count = indices.numel()
         if not count:
-            return self._empty(indices)
+            return self.new_rows(indices)
         capacity = 1 << (count - 1).bit_length()
         key = (indices.device.index, capacity)
         if key not in self._staging:
@@ -220,7 +220,7 @@ def install(module):
             raise RuntimeError(f'CUDA Engram host callback failed: {error}')
         dw[:count].copy_(w[:count], non_blocking=True)
         ds[:count].copy_(s[:count], non_blocking=True)
-        out = self._empty(indices)
+        out = self.new_rows(indices)
         engram_gather(dw.data_ptr(), ds.data_ptr(), sequential[:count], out.view(-1, 256), 256, 32)
         return out
     cls.__init__ = init

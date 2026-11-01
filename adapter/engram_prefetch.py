@@ -128,7 +128,7 @@ def install(module):
 
         _, _, count, dw, ds, sequential = p
         torch.cuda.current_stream(indices.device).wait_stream(self._side)  # join
-        out = self._empty(indices)
+        out = self.new_rows(indices)
         engram_gather(dw.data_ptr(), ds.data_ptr(), sequential[:count], out.view(-1, 256), 256, 32)
         if check:
             reference = orig_owned(self, indices)
