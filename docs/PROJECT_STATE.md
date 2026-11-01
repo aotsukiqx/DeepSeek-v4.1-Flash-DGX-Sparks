@@ -340,6 +340,30 @@ hidden — always run checks CUDA-visible.
     window opens anyway). #47115 fill_padded_rows (≥2048 narrow rows; b12x
     likely bypasses stock topk fill).
 
+### sglang sweep 2026-11-01 (115 new commits; MiaAI-Lab: 0 new; 0 reverts)
+12. **bp3 candidate (STAGED, no solo window)**: #38565 deterministic top-p/top-k
+    renorm at tp_size>1 (new `layers/sampling_renorm.py` + sampler import swap;
+    flashinfer is_deterministic variants, self-guarded vs flashinfer version,
+    author claims no measurable cost; closes the rare TP-rank-wedge failure
+    mode — we have never observed one). Apply-clean. Fold into the next window
+    (pin migration or any flip), gate with decode A/B.
+13. **Pin-migration list grew**: #47333 (ragged-verify eager fallback when the
+    tier exceeds the captured grid), #47521 (abort retracted requests whose KV
+    recompute cannot rebuild), #46827 (joint_lru Full+SWA eviction — revisit
+    the --swa-full-tokens-ratio 0.065 decision AFTER migration). All
+    apply-fail on the post-pin refactors, as expected.
+14. **Pin-readiness**: Engram wave quiet since 10-28 (settled); mem-cache/
+    memory-pool buffer-info wave STILL landing (10-30/31 trio #44990/#45019/
+    #45020) and spec ragged-verify rework active (#34038/#47333) → NOT
+    settled. Bonus verified: ALL 8 bp1+bp2 backports are absorbed by any pin
+    ≥ 2026-10-31 (0 reverts) — at migration the whole Dockerfile patch chain
+    DROPS; the work moves to adapter re-derivation instead (engram_backend/
+    engram_prefetch wrap the upstream-REWRITTEN layers/engram.py; prefill_sp
+    hash tables; b12x_next needles; 3 patch scripts carry re-derivation
+    headers). Prep OFFLINE per dsv41-sglang-pin-migration skill (route
+    decision + stack replay on a candidate tarball) — zero cluster cost.
+    Skipped: #47387 (default-off SM90-targeted opt-in decode indexer).
+
 ### Retired shortcuts (all evidence-backed)
 - Native prefill-CP: V4.1 vision model rejects CP.
 - Prefill CUDA graphs: dsv4 backend not in the BCG whitelist.
