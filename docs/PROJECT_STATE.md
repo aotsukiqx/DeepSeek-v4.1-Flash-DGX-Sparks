@@ -16,40 +16,38 @@
 
 ## 2. Two Code Lines (running simultaneously)
 
-### Production line (LIVE since 2026-10-30 ~15:05 — mig v4 + bp1 + bp2 backports)
-- **Image**: `dsv41-4x-spark:canary-mig-bp2` (running tag `canary-mig`; head
-  ID 4d94d8c19894) = sglang **7d996300** + bp1 (#46706/py+#46404+#41275) +
-  bp2 (#47116+#46835+#46994+#47149+#46024), Dockerfile.canary-mig patch
-  chain, prep commit `792e9a6d`, git tag `bp2`
-- **Config**: unchanged (EP1, TP4, b12x_next ON, six adapters, DSV41_PIN7=1,
-  prefill_sp OFF; env identical to bp1 — /tmp/env.pre-bp2 == live .env.tp4)
-- **bp2 evidence (2026-10-30 window)**: in-image pre-verify BP2-PROBE-PASS
-  (amax8 JIT compiled+ran correct on GB10 incl. the newest-block +inf
-  semantics; hc Triton ran finite; patched imports); build 8/8 patch
-  self-tests; boot gamma=5 / chunked 4096 / 0 traceback; smoke 4/4; wire
-  probe sampled request PASS (#47116 clamp not wire-visible — the openai
-  surface hides reasoning_tokens; synthetic test covers); qeval vs the
-  pre-bp1 baseline (10-26 head copy, 55 tasks): **BROKE=0 every category** —
-  1 prose guard flip (96 words vs 100 floor) rechecked 5/5 = sampling noise,
-  guard cleared; decode600k seed4 **44.0** (gate ≥42; bp1 45.6/43.7);
-  cold seed5 **3995.9** (bp1 3977.8, parity — #47149's CC10.7-class win is
-  not resolvable on 48 SMs); conc6 **4825.6** quiet-window (≥ all priors).
-  Median tok/s 78.2→74.6 vs a 10-26 baseline is cross-day, not gated.
-- **Deviation accepted**: DSV4 pool full 6169856→**6221312** (+51456 tok,
-  +0.8% capacity). No bp2 patch sizes pools; boot-time allocation jitter;
-  capacity UP = harmless for the 600k line. Watch whether it tracks
-  per-boot variance at the next boot.
-- **Cutover procedure (proven)**: stop → clean workers → **drain ≥45s MANDATORY** →
-  serve → 200 (env unchanged; no env copy needed for image-only flips)
+### Production line (LIVE since 2026-11-01 ~12:05 — PIN MIGRATION to 8817f63c)
+- **Image**: `dsv41-4x-spark:canary-mig-pin` (running tag `canary-mig`; head
+  ae5c6672a835) = sglang main @ **8817f63c** (2026-11-01) + rocenante overlay
+  (regenerated: roce_enabled kwarg past cta_policy) + flash_mla_sm120
+  re-derived (extra-source 64-page split / dispatch-envelope fallback /
+  buffer_tag scratch) + b12x_next e4084d2e + six-adapter stack.
+  **ZERO runtime patch scripts** — bp1/bp2/#38565 all absorbed upstream.
+- **Window incidents**: first boot CRASHED at first Engram lookup —
+  `EngramEmbedding._empty` renamed to `new_rows` upstream; fixed 3 call
+  sites (engram_backend ×2, engram_prefetch ×1, commit 16a8e0d), rebuilt
+  (4.5 min), second boot healthy. Total outage ≈ 50 min (11:15→12:05).
+  Lesson: import audits do not catch CALL-time renamed methods — next
+  migration, grep adapters for `self\._[a-z_]+\(` against the new class
+  surface before booting.
+- **Gates**: build self-tests ✓; boot gamma=5 / chunked 4096 / 0 errors;
+  smoke 4/4 + sampled ✓; qeval vs bp2 baseline: primary p=1.000, **2
+  DETERMINISTIC json flips** (json_count 11≠10, json_escape 27≠28 — model
+  self-counting off-by-one under changed numerics; 3/3 runs stable, primary
+  magnitude 53→51/55 inside the harness noise floor; per bp1 precedent,
+  judged by magnitude); median single-stream 71.3→**74.75 tok/s (+4.9%)**;
+  decode600k **43.1** (≥42; bp2 44.0); cold **3970.9** (parity); conc6
+  **4795** (parity).
+- **Deviation accepted**: DSV4 pool full 6221312→**5704448** (-8.3%) — the
+  mem-cache/memory-pool refactor wave's new capacity pricing. 600k line has
+  8.5× headroom; MAX_TOTAL_TOKENS=6700000 cap now clamps via auto-fit.
+- **Config**: env unchanged (/tmp/env.pre-pinmig == live). Stable across
+  2026-11-02/03 per user's stability-window plan (watchdog ACTIVE).
 
-### Rollback ladder (bp2 soak CLEARED 2026-11-01, 2 days user-confirmed)
-- **One step back**: `canary-mig-bp1` ×4 (image-only flip: stop → drain ≥45s →
-  retag canary-mig → serve) + git tag `pre-bp2` + /tmp/env.pre-bp2.
-- Soak evidence (11-01 check): container up since the 10-30 14:43Z bp2 boot,
-  RestartCount 0, no system reboot since 10-25, 48h logs 0 traceback/CUDA/
-  OOM, 0 loop-abort hits, health 200; two days stable per user report.
-  `canary-mig-pre-bp1` ×4 RETIRED (deleted on all nodes; local git tag
-  pre-bp1 deleted, history in git log).
+### Rollback ladder (pin-migration live)
+- **One step back**: `canary-mig-bp2` ×4 (image-only flip) + git tag
+  `pre-pinmig` + /tmp/env.pre-pinmig. (`canary-mig-bp1` ×4 kept as
+  grandfather; `canary-mig-pin` ×4 = adoption tag.)
 
 ## 3. Latest Measurements (2026-10-26 13:20, four-way)
 
