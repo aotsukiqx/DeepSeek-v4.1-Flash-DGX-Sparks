@@ -42,12 +42,14 @@
 - **Cutover procedure (proven)**: stop → clean workers → **drain ≥45s MANDATORY** →
   serve → 200 (env unchanged; no env copy needed for image-only flips)
 
-### Rollback ladder (bp2 live)
+### Rollback ladder (bp2 soak CLEARED 2026-11-01, 2 days user-confirmed)
 - **One step back**: `canary-mig-bp1` ×4 (image-only flip: stop → drain ≥45s →
   retag canary-mig → serve) + git tag `pre-bp2` + /tmp/env.pre-bp2.
-- **Two steps back**: `canary-mig-pre-bp1` ×4 retained until bp2 soaks clean
-  (grandfather; git tag `pre-bp1`). bp1 soak had cleared 23h (smoke 4/4,
-  decode 43.7, 0 crash/restart) before bp2 replaced it.
+- Soak evidence (11-01 check): container up since the 10-30 14:43Z bp2 boot,
+  RestartCount 0, no system reboot since 10-25, 48h logs 0 traceback/CUDA/
+  OOM, 0 loop-abort hits, health 200; two days stable per user report.
+  `canary-mig-pre-bp1` ×4 RETIRED (deleted on all nodes; local git tag
+  pre-bp1 deleted, history in git log).
 
 ## 3. Latest Measurements (2026-10-26 13:20, four-way)
 
