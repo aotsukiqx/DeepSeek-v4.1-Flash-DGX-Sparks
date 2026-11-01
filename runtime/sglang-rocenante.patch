@@ -38,15 +38,15 @@
  class PyNcclCommunicator:
      def __init__(
          self,
-@@ -34,6 +56,7 @@
-         device: Union[int, str, torch.device],
+@@ -35,6 +57,7 @@
          library_path: Optional[str] = None,
          is_symmetric_memory_enabled: bool = False,
+         cta_policy: Optional[int] = None,
 +        roce_enabled: bool = False,
      ):
          """
          Args:
-@@ -60,6 +83,8 @@
+@@ -64,6 +87,8 @@
              self.world_size = group.world_size
  
          self.group = group
@@ -55,7 +55,7 @@
  
          # if world_size == 1, no need to create communicator
          if self.world_size == 1:
-@@ -131,11 +156,45 @@
+@@ -138,11 +163,45 @@
              warmup_stream.synchronize()
              del data
  
@@ -101,7 +101,7 @@
      def _resolve_stream(self) -> torch.cuda.Stream:
          """Return the current device stream used for NCCL calls."""
          return get_current_device_stream_fast()
-@@ -151,6 +210,9 @@
+@@ -158,6 +217,9 @@
              f"but the input tensor is on {tensor.device}"
          )
          stream = self._resolve_stream()
@@ -111,7 +111,7 @@
          self.nccl.ncclAllReduce(
              buffer_type(tensor.data_ptr()),
              buffer_type(tensor.data_ptr()),
-@@ -178,6 +240,8 @@
+@@ -185,6 +247,8 @@
              out_tensor = torch.empty_like(in_tensor)
  
          stream = self._resolve_stream()
@@ -122,7 +122,7 @@
              buffer_type(out_tensor.data_ptr()),  # recvbuff - DIFFERENT pointer
 --- a/python/sglang/srt/distributed/parallel_state.py
 +++ b/python/sglang/srt/distributed/parallel_state.py
-@@ -458,6 +458,7 @@
+@@ -465,6 +465,7 @@
                  group=self.cpu_group,
                  device=self.device,
                  is_symmetric_memory_enabled=self.is_symmetric_memory_enabled(),
@@ -130,7 +130,7 @@
              )
  
          self.pymscclpp_comm: Optional[PyMscclppCommunicator] = None
-@@ -644,7 +645,10 @@
+@@ -683,7 +684,10 @@
                  maybe_pymscclpp_context = nullcontext()
              else:
                  maybe_pymscclpp_context = pymscclpp_comm.change_state(enable=True)
@@ -142,7 +142,7 @@
                  yield graph_capture_context
  
      def all_reduce(self, input_: torch.Tensor) -> torch.Tensor:
-@@ -1850,6 +1854,8 @@
+@@ -2114,6 +2118,8 @@
              torch.distributed.destroy_process_group(self.cpu_group)
              self.cpu_group = None
          if self.pynccl_comm is not None:
@@ -153,16 +153,16 @@
              self.pymscclpp_comm.destroy()
 --- a/python/sglang/srt/managers/scheduler_components/batch_result_processor.py
 +++ b/python/sglang/srt/managers/scheduler_components/batch_result_processor.py
-@@ -12,6 +12,8 @@
- )
- 
+@@ -16,6 +16,8 @@
+ import numpy as np
  import torch
-+
-+from sglang.srt.distributed.device_communicators.pynccl import synchronize_and_check_roce
  
++from sglang.srt.distributed.device_communicators.pynccl import synchronize_and_check_roce
++
  from sglang.srt.disaggregation.utils import DisaggregationMode
  from sglang.srt.environ import envs
-@@ -259,8 +261,7 @@
+ from sglang.srt.layers.logits_processor import (
+@@ -318,8 +320,7 @@
          self.token_to_kv_pool_allocator.free_group_begin()
  
          if self.is_generation:
@@ -172,7 +172,7 @@
              auxiliary_output_starts = self.snapshot_auxiliary_output_starts(
                  batch, result
              )
-@@ -412,8 +413,7 @@
+@@ -512,8 +513,7 @@
                  )
  
          else:  # embedding or reward model
@@ -180,9 +180,9 @@
 -                result.copy_done.synchronize()
 +            synchronize_and_check_roce(result.copy_done)
  
-             embeddings = self._convert_embeddings(result=result)
+             embeddings = self._convert_embeddings(result=result, batch=batch)
              phs = result.pooled_hidden_states
-@@ -836,8 +836,7 @@
+@@ -986,8 +986,7 @@
          is_decode = batch.forward_mode.is_decode()
          if not (is_decode or batch.forward_mode.is_extend()):
              return
@@ -192,7 +192,7 @@
          next_token_ids = result.next_token_ids.tolist()
  
          if not is_decode:
-@@ -879,8 +878,7 @@
+@@ -1029,8 +1028,7 @@
          batch: ScheduleBatch,
          result: GenerationBatchResult,
      ):
@@ -202,7 +202,7 @@
  
          self.output_streamer._stream_output_generation(
              batch.reqs, batch.return_logprob, is_idle_batch=True
-@@ -891,8 +889,7 @@
+@@ -1041,8 +1039,7 @@
          batch: ScheduleBatch,
          result: GenerationBatchResult,
      ):

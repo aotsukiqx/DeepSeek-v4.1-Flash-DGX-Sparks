@@ -20,7 +20,7 @@ sglang-canary  620c76f25db14f1599aa7c7ccb141a91e4944b63  eb86c5481c476ce0cc3f08f
 # (2026-10-24, settled point after the MegaGate merge+revert churn; carries the
 # DSV4.1 host-overhead wave + prefill-graph maturation + the deepseek-recipe
 # migration that replaces encoding_dsv41). python/+rust trees; Apache-2.0.
-sglang-mig  7d996300b98e3f74a7e79adefbac4d95de0da508  5d648297c35a869ee9b27c961d6ce6ed1b8f8b41c6cc605d2d7e9222967d77ed  https://github.com/sgl-project/sglang/archive/7d996300b98e3f74a7e79adefbac4d95de0da508.tar.gz
+sglang-mig  8817f63c2cf9acb0fe8c8750863b17bbb1c6ab1b  85a03032f706d88640428646593379cb382c52f120728a0bd7f83a1e32f7ab36  https://github.com/sgl-project/sglang/archive/8817f63c2cf9acb0fe8c8750863b17bbb1c6ab1b.tar.gz
 
 # b12x as frozen for rhys101's SG17 RoCEnante overlay (b12x.comm.roce); published as a source
 # archive in rhys101/DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8, provenance in
@@ -49,7 +49,7 @@ b12x-main  e4084d2eef4932e0fa06db3f7a94deb83ad132d7  3b97cb4b0c6d9c9fe24df936e69
 #   runtime/sglang-rocenante.patch     = rhys101 @ 66aa6bd  sglang/experiments/sg17-rocenante/sglang-rocenante.patch
 #   runtime/flash_mla_sm120.canary.py  = rhys101 @ 22d65f5  sglang/patches/source/python/sglang/kernels/ops/attention/flash_mla_sm120.py
 #                                        (runtime/flash_mla_sm120.py re-applied to the dsv4.1 branch kernel file)
-local  runtime/sglang-rocenante.patch  e813f97a87539681a5951f055b4d0b78f14630437f7c0adaa7e012f7adc5c704  -
-local  runtime/flash_mla_sm120.canary.py  931ce8651b9d247e4979a3b9d7af4f75644d493a52458e8031d015835df26855  -
+local  runtime/sglang-rocenante.patch  9ed918d1b6b512fc83dd17ad455600002337dc20c6013765d23ec517fb9e66ed  -
+local  runtime/flash_mla_sm120.canary.py  8850ba6cd54bfac35e861553ef4e2a7d8205c7c17ea3d4c8ce506a47b0242a52  -
 local  scripts/b12x_next-compact-n64-m64.patch  1fb1f1eca87206618115f57f9303860bf7a3be8700356bca91ca87a2ba57b701  -
 local  scripts/roce_ring-sparkring-f16b5f4.patch  4479d3d0fc847c787234ebd043890d1f4fd53fcee689f1cbfd14217215a7b6bf  -

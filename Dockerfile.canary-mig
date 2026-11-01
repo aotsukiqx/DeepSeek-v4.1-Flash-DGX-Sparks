@@ -1,13 +1,16 @@
-# MIGRATION ARM IMAGE (experimental): sglang main @ 7d996300 (2026-10-24) on the
-# proven nightly-dev-cu13-20261011 base + 3 pip wheel bumps. Same shape as
-# Dockerfile.canary-roce but: manifest row `sglang-mig`; the four 620c76f2-era
-# serving patch scripts are DROPPED (encoding_dsv41.py is gone upstream — the
-# deepseek-recipe migration replaced it; #43006 and #43941 are absorbed
-# upstream; the placeholder fix is now the placeholder_sanitize ADAPTER; #44751
-# semantics move with the recipe and are wire-probed at boot instead).
-# Expected adapter posture on this line (serve-time env decides): prefill_sp /
-# hc_fused / block_verify / verify_cap / autotune_keep / folded_fence OFF
-# (drift guards raise); b12x_next is the boot-or-die question.
+# PRODUCTION IMAGE: sglang main @ 8817f63c (2026-11-01) on the proven
+# nightly-dev-cu13-20261011 base + the 4 pip wheel bumps. Carries upstream:
+# the DSV4.1 host-overhead + Engram decode-lookup waves, deepseek-recipe,
+# mem-cache/kv-cache refactor wave, spec ragged-verify rework, and ALL prior
+# backports absorbed (bp1 #46706/#46404/#41275, bp2 #47116/#46835/#46994/
+# #47149/#46024, #38565 deterministic TP renorm) — no runtime patch scripts.
+# flash_mla_sm120.canary.py re-derived onto this pin (V4.1 extra-source
+# 64-page split + dispatch-envelope fallback + buffer_tag scratch isolation);
+# rocenante overlay regenerated for this pin (roce_enabled init kwarg moved
+# past upstream's cta_policy).
+# Expected adapter posture (serve-time env decides): same as the 7d996300
+# line; engram_backend/engram_prefetch re-derived against the rewritten
+# layers/engram.py.
 FROM lmsysorg/sglang:nightly-dev-cu13-20261011-d32d8fa0@sha256:4793eb4075b33cec16c8de140c0e6eeaa439a1986eaac1085f270e52bd50e52d AS fetch
 COPY runtime/sources.manifest runtime/sglang-rocenante.patch runtime/flash_mla_sm120.canary.py /src/runtime/
 COPY scripts/fetch_runtime.sh scripts/b12x_next-compact-n64-m64.patch scripts/roce_ring-sparkring-f16b5f4.patch /src/scripts/
@@ -40,22 +43,10 @@ RUN python3 -c "import sglang, sglang.srt.models.deepseek_v4, sglang.srt.layers.
 # RoCEnante overlay (applies clean with -F3 on 7d996300; probes verified 2026-10-24)
 COPY runtime/sglang-rocenante.patch runtime/roce_tp4_adapt.py /tmp/
 RUN cd /sgl-workspace/sglang && patch -p1 -F3 < /tmp/sglang-rocenante.patch && python3 /tmp/roce_tp4_adapt.py && rm /tmp/sglang-rocenante.patch /tmp/roce_tp4_adapt.py
-# Upstream backports bp1 (2026-10-27): sglang#46706 deepseek-recipe render fixes
-# (py half), sglang#46404 dspark simulated-bonus row, sglang#41275 DSV4.1 pool
-# capacity accounting. Fidelity-gated: patched output byte-identical to
-# `git apply` on the pristine 7d996300 tree (verified 2026-10-27).
-COPY runtime/patch_recipe_46706.py runtime/patch_dspark_sim_46404.py runtime/patch_poolcap_41275.py /opt/dsv41/runtime/
-RUN python3 /opt/dsv41/runtime/patch_recipe_46706.py \
- && python3 /opt/dsv41/runtime/patch_dspark_sim_46404.py \
- && python3 /opt/dsv41/runtime/patch_poolcap_41275.py \
- && python3 -c "import sglang.srt.entrypoints.openai.serving_deepseek_recipe, sglang.srt.model_executor.pool_configurator, sglang.kernels.ops.speculative.dspark.static_accept_tail, sglang.srt.speculative.dspark_components.dspark_sampling_accept_graph, sglang.srt.speculative.dspark_components.dspark_verify, sglang.srt.speculative.dspark_components.dspark_worker_v2; print('bp1 patched imports ok')"
-COPY runtime/patch_usage_clamp_47116.py runtime/patch_pageidx_pad_46835.py runtime/patch_int_ar_guard_46994.py runtime/patch_amax8_grid_47149.py runtime/patch_hc_combine_46024.py /opt/dsv41/runtime/
-RUN python3 /opt/dsv41/runtime/patch_usage_clamp_47116.py \
- && python3 /opt/dsv41/runtime/patch_pageidx_pad_46835.py \
- && python3 /opt/dsv41/runtime/patch_int_ar_guard_46994.py \
- && python3 /opt/dsv41/runtime/patch_amax8_grid_47149.py \
- && python3 /opt/dsv41/runtime/patch_hc_combine_46024.py \
- && python3 -c "import sglang.srt.managers.scheduler_components.output_streamer, sglang.srt.layers.attention.deepseek_v4_backend, sglang.srt.distributed.device_communicators.custom_all_reduce, sglang.srt.distributed.device_communicators.custom_all_reduce_v2, sglang.srt.layers.dp_attention, sglang.kernels.ops.layernorm.hc_combine_norm; ba=open('/sgl-workspace/sglang/python/sglang/kernels/jit/csrc/deepseek_v4/block_amax.cuh').read(); md=open('/sgl-workspace/sglang/python/sglang/kernels/jit/csrc/deepseek_v4/mega_moe_pre_dispatch.cuh').read(); assert '#include <sgl_kernel/once.h>' in ba and 'kWaves = 2' in ba and 'kChunksPerThread' in md; print('bp2 patched imports ok')"
+# Upstream backports: NONE needed at 8817f63c — bp1 (#46706/#46404/#41275),
+# bp2 (#47116/#46835/#46994/#47149/#46024) and #38565 (deterministic TP
+# renorm) are all absorbed upstream. The runtime/ patch_* scripts and their
+# tests are retired with the 7d996300 pin (history in git).
 COPY --from=rustbuild /build/_multimodal.so /sgl-workspace/sglang/python/sglang/srt/rust_extensions/_multimodal.so
 RUN python3 -c "import sglang.srt.rust_extensions._multimodal as m; assert hasattr(m, 'dsv41'); print('bundled rust mm ok, inkling:', hasattr(m, 'inkling'))" \
  && rm -rf /root/.cargo/bin /root/.rustup
@@ -83,15 +74,7 @@ RUN PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_thinking_alias.p
  && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_fast_load_tp_slice.py \
  && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_fast_load_slab.py \
  && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_moe_b12x_next_cpu.py \
- && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_roce_ring.py \
- && python3 /opt/dsv41/tests/test_patch_recipe_46706.py \
- && python3 /opt/dsv41/tests/test_patch_dspark_sim_46404.py \
- && python3 /opt/dsv41/tests/test_patch_poolcap_41275.py \
- && python3 /opt/dsv41/tests/test_patch_usage_clamp_47116.py \
- && python3 /opt/dsv41/tests/test_patch_pageidx_pad_46835.py \
- && python3 /opt/dsv41/tests/test_patch_int_ar_guard_46994.py \
- && python3 /opt/dsv41/tests/test_patch_amax8_grid_47149.py \
- && python3 /opt/dsv41/tests/test_patch_hc_combine_46024.py
+ && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_roce_ring.py
 ENV PYTHONPATH=/opt/dsv41/adapter:/opt/b12x:/opt/b12x_next \
     MODEL_PATH=/models/DeepSeek-V4.1-Flash \
     STATE_PATH=/state OFFLOAD_MODE=nvme DSV41_CACHE_GIB=16
