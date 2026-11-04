@@ -43,10 +43,17 @@ RUN python3 -c "import sglang, sglang.srt.models.deepseek_v4, sglang.srt.layers.
 # RoCEnante overlay (applies clean with -F3 on 7d996300; probes verified 2026-10-24)
 COPY runtime/sglang-rocenante.patch runtime/roce_tp4_adapt.py /tmp/
 RUN cd /sgl-workspace/sglang && patch -p1 -F3 < /tmp/sglang-rocenante.patch && python3 /tmp/roce_tp4_adapt.py && rm /tmp/sglang-rocenante.patch /tmp/roce_tp4_adapt.py
-# Upstream backports: NONE needed at 8817f63c — bp1 (#46706/#46404/#41275),
-# bp2 (#47116/#46835/#46994/#47149/#46024) and #38565 (deterministic TP
-# renorm) are all absorbed upstream. The runtime/ patch_* scripts and their
-# tests are retired with the 7d996300 pin (history in git).
+# Upstream backports bp4 (2026-11-04): #46088 mHC post+combine+RMSNorm fused
+# decode kernel + #47949 CTA-cluster row split (stacks on 46088, same files) +
+# #47684 indexer logits wave rounding. Exact commit diffs (git show --format=),
+# applied with git apply (no fuzz: any drift fails the build). The test/ hunks
+# land harmlessly in the base image's stale test tree; our gates are smoke+qeval.
+# PIN-MIGRATION NOTE: drop this whole chain at any pin >= fd19cfb6 (absorbed).
+COPY runtime/bp4-pr46088.patch runtime/bp4-pr47949.patch runtime/bp4-pr47684.patch /tmp/
+RUN cd /sgl-workspace/sglang && git apply /tmp/bp4-pr46088.patch && git apply /tmp/bp4-pr47949.patch \
+ && git apply /tmp/bp4-pr47684.patch \
+ && python3 -c "from sglang.kernels.ops.layernorm.mhc_post_combine_norm_decode import mhc_post_combine_norm_decode as f; assert callable(f); print('bp4 import ok')" \
+ && rm -f /tmp/bp4-pr*.patch
 COPY --from=rustbuild /build/_multimodal.so /sgl-workspace/sglang/python/sglang/srt/rust_extensions/_multimodal.so
 RUN python3 -c "import sglang.srt.rust_extensions._multimodal as m; assert hasattr(m, 'dsv41'); print('bundled rust mm ok, inkling:', hasattr(m, 'inkling'))" \
  && rm -rf /root/.cargo/bin /root/.rustup
