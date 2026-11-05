@@ -1,9 +1,7 @@
 # PROJECT STATE — DeepSeek-V4.1-Flash DGX Spark TP4 Fleet
 
 > **Single source of truth.** This document must survive context compaction and enable
-> any future session to resume exactly where we left off. Last updated: 2026-11-03 17:30.
-> **Single source of truth.** This document must survive context compaction and enable
-> any future session to resume exactly where we left off. Last updated: 2026-11-05 01:40.
+> any future session to resume exactly where we left off. Last updated: 2026-11-05 19:10.
 
 ## 1. Fleet & Repository
 
@@ -468,6 +466,37 @@ hidden — always run checks CUDA-visible.
 20. **旧头寸仍有效**: gamma=8 code +12.3%（10-04 实测，需 dual-graph W2
    或 compact 模式救 prose）；conf:0.1 阈值 refit 已证伪（凸成本曲线，
    0.1 即最优）；KV pool 非瓶颈（0 evict，8.5× headroom）；
+
+### sglang sweep 2026-11-05 evening (79 commits, fd19cfb6..732d34b9; MiaAI-Lab: 0 new; 0 reverts)
+21. **bp5 裁决（全部证据在手）**:
+    - **ADOPT 候选**: **#47728** dspark bs=1 SWA ring slot staging
+      correctness fix（生产面仅 stage_commit `.contiguous()` +1 行 +
+      dspark_verify assert; apply-clean on pin; bs=1 单流是我们主力形态
+      — 低风险高价值）。**#47935** Engram MXFP4 packed tables + gather
+      E2M1（表内存减半: row_bytes dim→dim/2; apply-clean; engram.py
+      hunks 在 _PeerShards/shard_range/EngramEmbedding.__init__ 区,
+      adapter hook 面 init/new_rows/_owned_rows 未变 → 兼容, 但同文件
+      大改 → bp5 预验时 boot log 必查 staged/peer 属性面）。
+    - **NO-OP on our line**: #43786 wo_a inverse-RoPE FP8 融合 — live
+      probe `wo_a_fp8=False`（引擎 dequant wo_a 到 bf16, fp8 twin 是我们
+      adapter 的 Triton 路径; 上游 CUDA 融合路径 dormant）。#48467
+      trtllm_gen sparse MLA multi-CTA counter — 我们跑 flash_mla_sm120,
+      非 trtllm backend。#47201 kernel-plugin 绑定基建 — 非插件路径。
+    - **Pin 迁移级（不 bp）**: #48424 deep-gemm 0.2.6 bump + MQA logits
+      API 变化 + mxfp8_input scale layout — 栈升级型, 随下次 pin 走。
+    - #41294 Hopper low-ratio compressor — Hopper-only。#47494 mamba
+      tracking refresh — NPU 路径。#48001/#48283/#48327/#48003-#48005
+      spec/mem_cache/scheduler 重构族 — settle 未到, 全部 pin-only。
+22. **Settle 门**: 上次 scheduler/mem_cache 活动 11-04 21:54 (-0800) =
+      11-05 13:54 +0800 → 若今晚起静默, 最早 11-07 判定。pin 候选 tip
+      732d34b9 (11-05 18:07 +0800)。下次 sweep 直接从 732d34b9 起。
+23. **bp5 窗口建议**: #47728 + #47935 一窗（apply-clean 双 patch 链,
+      照 bp4 手册: exact-commit diff → runtime/bp5-pr*.patch →
+      Dockerfile 链 → in-image pre-verify（重点: engram boot 属性面 +
+      #47935 后 packed 表内存对账）→ retag ×4 → qeval before/after +
+      smoke + Engram hit_rate/内存对比）。Engram 表内存减半对 128GB
+      UMA 是实际红利（每层 ~1-2GiB host cache → 同预算 rows 翻倍或
+      cache ways 提升）。
 
 ### Retired shortcuts (all evidence-backed)
 - Native prefill-CP: V4.1 vision model rejects CP.
