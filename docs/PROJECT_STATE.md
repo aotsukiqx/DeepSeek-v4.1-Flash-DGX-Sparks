@@ -1,7 +1,9 @@
 # PROJECT STATE — DeepSeek-V4.1-Flash DGX Spark TP4 Fleet
 
 > **Single source of truth.** This document must survive context compaction and enable
-> any future session to resume exactly where we left off. Last updated: 2026-10-28 20:35.
+> any future session to resume exactly where we left off. Last updated: 2026-11-03 17:30.
+> **Single source of truth.** This document must survive context compaction and enable
+> any future session to resume exactly where we left off. Last updated: 2026-11-05 01:40.
 
 ## 1. Fleet & Repository
 
@@ -16,13 +18,35 @@
 
 ## 2. Two Code Lines (running simultaneously)
 
-### Production line (LIVE since 2026-11-01 ~12:05 — PIN MIGRATION to 8817f63c)
-- **Image**: `dsv41-4x-spark:canary-mig-pin` (running tag `canary-mig`; head
-  ae5c6672a835) = sglang main @ **8817f63c** (2026-11-01) + rocenante overlay
-  (regenerated: roce_enabled kwarg past cta_policy) + flash_mla_sm120
-  re-derived (extra-source 64-page split / dispatch-envelope fallback /
-  buffer_tag scratch) + b12x_next e4084d2e + six-adapter stack.
-  **ZERO runtime patch scripts** — bp1/bp2/#38565 all absorbed upstream.
+### Production line (LIVE since 2026-11-05 ~00:45 — BP4 ON TOP OF PIN MIGRATION)
+- **Image**: `dsv41-4x-spark:canary-mig` head = pin 8817f63c base (as adopted
+  2026-11-01, all prior backports absorbed) **+ bp4 chain (2026-11-04, commit cb7b13e)**:
+  `runtime/bp4-pr46088/47949/47684.patch` = exact-commit diffs applied with
+  `git apply` (no fuzz) after the rocenante overlay in `Dockerfile.canary-mig`;
+  #46088 decode mHC post+combine+RMSNorm fused kernel + #47949 CTA-cluster row
+  split (stacked, same files) + #47684 indexer logits whole-wave rounding.
+  Rollback: tag `pre-bp4` @ c641050 + image `canary-mig-pre-bp4` ×4.
+  Next pin ≥ fd19cfb6 absorbs all three (drop the patch chain then).
+- **Also live (env-only, same image)**: `SGLANG_SPEC_TP_SYNC=init` appended to
+  EXTRA_CONTAINER_ENV (§21) — spec-decision broadcast narrowed from all→init.
+- **Gates (2026-11-04/05)**: boot gamma=5/verify 6 unchanged; smoke 4/4 +
+  sampled ✓ (arith + zh); qeval paired vs pre-bp4: **BROKE=0 FIXED=0, 71/75
+  identical set** (same 4 fails as before: code_interval_intersect,
+  json_escape, json_count, math_m9); fused-kernel JIT cubin verified in triton
+  cache (`_mhc_post_combine`); c1 interleaved A/B under live traffic:
+  pre-bp4 49.55/106.62 vs bp4 48.61/102.91 (round-1 bp4 32.41/69.12 =
+  traffic-contaminated, discarded per skill tell); clean-window final:
+  **prose 49.55 / code 111.32 (+4.4% code vs pre-bp4)**; tiers window-conditioned.
+- **SPS table (2026-11-05)**: `state-tp4/dspark_sps.json` INSTALLED (7 probes,
+  bs 1-32, steps/s 22.70→3.79, self-check ✓) — first table ever on this fleet.
+  Profiler path: `SGLANG_DSPARK_ENABLE_SPS_RECORD=1 SGLANG_RAGGED_VERIFY_MODE=static
+  SGLANG_SIMULATE_ACC_LEN=1.0 --max-batch-size 32`; importer crashes AFTER all
+  rounds are written when run under traffic (bs=16 33% steady) AND in a clean
+  window (bs=8 0/5517 "common steps" — dp_rank-0-only records vs multi-rank
+  assumption on pure-TP dp_size=1); rounds.jsonl was complete both times —
+  fit directly via `fit_profile()`. boot.py still REFUSES compact mode
+  (#39173, log line present), so the planner stays verify-all; flip
+  `DSPARK_SPS_ALLOW_ENGRAM=1` only after #39173 lands.
 - **Window incidents**: first boot CRASHED at first Engram lookup —
   `EngramEmbedding._empty` renamed to `new_rows` upstream; fixed 3 call
   sites (engram_backend ×2, engram_prefetch ×1, commit 16a8e0d), rebuilt
@@ -386,6 +410,64 @@ hidden — always run checks CUDA-visible.
   qeval; auto-rollback staged). Re-sweep + re-verify absorption the evening
   before the window (candidate may move; re-derive is cheap now that the
   overlay anchors cleanly).
+
+### Stability window 11-02/03 CLEARED (audit 2026-11-03 17:16 +0800)
+- **2.5 天零事件**: 4/4 节点 Up 2 days healthy、RestartCount=0、节点零重启
+  (up 9d, last reboot 10-25)；head+3 workers 自 11-02 00:00 起日志 0 条
+  fatal pattern (traceback/CUDA error/OOM/SIGKILL)、0 次 evict/retract、
+  HTTP 4xx/5xx = 0、watchdog (pid 2115579) 0 恢复动作。1518 请求已服务。
+- 今日 smoke 4/4 PASS + temperature=0 json 抽检正常。KV pool full=5704448
+  与迁移时一致（零漂移）。swap 1.7-2.1G/16G 静态占用, si≈0 — boot 期
+  fast_load slab 冷页外推, 非 thrash; 可观察项。
+- **回滚梯子可以退役一档**: `canary-mig-bp2` ×4 已稳 2 天, 按惯例
+  pre-adoption 一档 (bp1) 之前已删; 下次构建前可清理孤儿 tag/镜像。
+
+### sglang sweep 2026-11-03 (180 commits, 8817f63c..fbe54087; MiaAI-Lab: 0 new)
+15. **Tier-1 bp 候选（已全部离线验证）**: **#46088 decode mHC post+combine+
+   RMSNorm 融合内核**（+**#47949** CTA-cluster 小 batch split, 依赖 46088
+   文件 + `srt.utils.get_device_core_count` — **在 pin 镜像内 import 实测
+   OK, 48 SMs**）+ **#47684** dense indexer logits 整 SM wave 取整
+   (self-contained `_num_sms`) + **#42968** indexer TP shard（默认 OFF,
+   `SGLANG_OPT_DSV4_INDEXER_TP_SHARD`, opt-in A/B 型; scoring.py 大改需
+   独立验证）。四者对 pin 8817f63c **apply-clean, 堆叠 46088→47949 与
+   42968→47684 均通过**。#46088 门控全命中: live 探针 is_blackwell=True
+   (property, SM120 通行), mult=4, hidden=5120, pre_from_prev ✓; 六 adapter
+   无一 hash-gate 这些文件 → 无 drift-guard 耦合。
+16. **Skip with evidence**: #47512 sampler JIT (softmax 半边 capability
+   `max_sm=(10,10)` **排除 SM120**; argmax 半边 CUDA-only 可用但单独价值
+   减半 — pin 迁移时随新基线重新评估) ; #38719 router FP32 精度 fix 只改
+   bailing/ernie/kimi_linear/mimo 模型文件, 不碰 deepseek — no path。
+   #46478 DSpark FA drafts query-width fix: apply-clean, touch
+   flashattention_backend.py; spec 路径, 需窗口内 wire probe 验证, 单独
+   价值中等。#45129 anthropic thinking.display=updates (apply-clean;
+   我们跑 anthropic 协议, 客户端兼容性 fix, 零 perf)。
+17. **Pin 迁移 settle 门未过**: scheduler request-lists 族 #43900-#43909
+   **今天还在落** (最后一个 11-03 00:53 -0800), memory-pool 侧车族
+   (#47714/#47675/#40914/#40916) + imports 移除 re-export shims
+   (#47990/#47992) 11-02 仍在落 → mem_cache/scheduler 重构 wave 未静默。
+   维持原判: settle 观察重启, 最早 ~11-05; bp 包先行, pin 迁移等 quiet ≥2 天。
+18. **下个窗口的 bp 包建议 (bp4)**: #46088+#47949 (同文件捆绑) +
+   #47684 (self-contained) 为核心; #42968 默认 OFF 可同 image 预埋
+   (flag off 不执行); 可选 #46478/#45129 (spec/兼容 fix, 零 perf)。
+   窗口流程照 bp2 手册: retag 回滚点 ×4 → in-image pre-verify (JIT 触发
+   mhc_post_combine_norm_decode 编译) → qeval before (worker URL) →
+   build → boot → gates + decode A/B (46088 主刀 decode 路径)。
+   **DONE 2026-11-04/05 — see §2 production line. bp4 ADOPTED.**
+
+### Perf headroom audit 2026-11-03 (post-window)
+19. **SPS verify-budget 调度**: 表已于 2026-11-05 profile 并安装
+   (`state-tp4/dspark_sps.json`, 7 探针 bs 1-32, self-check ✓ — 首张表)。
+   boot.py 仍因 **sgl#39173** 拒绝 compact 模式（boot log 有明确拒绝行），
+   planner 维持 verify-all。启用条件: #39173 落地后 `DSPARK_SPS_ALLOW_ENGRAM=1`
+   越权 + 验证 graph capture 不再断言。profiler 全流程与两个坑见 §2
+   （traffic 污染 + dp_rank-0-only 记录 vs 多 rank 校验假设）。
+   `--speculative-dspark-align-verify-tokens-to-graph-tier` 语义 =
+   "把 verify 窗口填满到 forward 本就 pad 到的 graph tier"（免费验证）。
+   **verify_cap 重移植仍被取代**: 上游 planner 是它的官方版。
+   `#47512 softmax SM120 排除（pin 迁移时只评 argmax 半边）` — 归属 §16 skip 清单。
+20. **旧头寸仍有效**: gamma=8 code +12.3%（10-04 实测，需 dual-graph W2
+   或 compact 模式救 prose）；conf:0.1 阈值 refit 已证伪（凸成本曲线，
+   0.1 即最优）；KV pool 非瓶颈（0 evict，8.5× headroom）；
 
 ### Retired shortcuts (all evidence-backed)
 - Native prefill-CP: V4.1 vision model rejects CP.
