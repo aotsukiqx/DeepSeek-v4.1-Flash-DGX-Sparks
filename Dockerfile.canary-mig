@@ -54,6 +54,20 @@ RUN cd /sgl-workspace/sglang && git apply /tmp/bp4-pr46088.patch && git apply /t
  && git apply /tmp/bp4-pr47684.patch \
  && python3 -c "from sglang.kernels.ops.layernorm.mhc_post_combine_norm_decode import mhc_post_combine_norm_decode as f; assert callable(f); print('bp4 import ok')" \
  && rm -f /tmp/bp4-pr*.patch
+# Upstream backport bp5 (2026-11-05): #47728 dspark bs=1 SWA ring-slot
+# staging fix (correctness; production face = stage_commit .contiguous() +
+# dspark_verify assert). Python-only diff (test hunk stripped: image tree
+# has no test/registered/unit/spec/).
+# #47935 engram mxfp4 tables DELIBERATELY EXCLUDED after adjudication:
+# mxfp4 enablement requires checkpoint quantization_config.engram_embed_quant
+# == mxfp4 (ours is fp8; configs/deepseek_v4.py marks it converted-FP8) AND
+# our adapter replaces EngramEmbedding.__init__ entirely (own C row_store) -
+# zero runtime effect on this line. Ride the next pin migration instead.
+# PIN-MIGRATION NOTE: drop this chain at any pin absorbing #47728.
+COPY runtime/bp5/bp5-pr47728-dspark-bs1-swa-slot.patch /tmp/
+RUN cd /sgl-workspace/sglang && git apply /tmp/bp5-pr47728-dspark-bs1-swa-slot.patch \
+ && python3 -c "from sglang.kernels.ops.speculative.dspark.stage_commit import stage_commit; print('bp5 import ok')" \
+ && rm -f /tmp/bp5-pr*.patch
 COPY --from=rustbuild /build/_multimodal.so /sgl-workspace/sglang/python/sglang/srt/rust_extensions/_multimodal.so
 RUN python3 -c "import sglang.srt.rust_extensions._multimodal as m; assert hasattr(m, 'dsv41'); print('bundled rust mm ok, inkling:', hasattr(m, 'inkling'))" \
  && rm -rf /root/.cargo/bin /root/.rustup

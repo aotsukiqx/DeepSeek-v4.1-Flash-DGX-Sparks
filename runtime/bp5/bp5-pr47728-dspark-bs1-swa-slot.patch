@@ -1,0 +1,28 @@
+diff --git a/python/sglang/kernels/ops/speculative/dspark/stage_commit.py b/python/sglang/kernels/ops/speculative/dspark/stage_commit.py
+index cf470847..ced818a8 100644
+--- a/python/sglang/kernels/ops/speculative/dspark/stage_commit.py
++++ b/python/sglang/kernels/ops/speculative/dspark/stage_commit.py
+@@ -53,6 +53,7 @@ def stage_commit(
+     ``commit_lens_dst[:bs] = commit_lens`` and ``commit_lens_dst[bs:] = 0``."""
+     assert cache_loc.is_contiguous() and positions.is_contiguous()
+     assert commit_lens.is_contiguous()
++    assert state_slot is None or state_slot.is_contiguous()
+     assert (state_slot is None) == (state_slot_dst is None)
+     bs, max_bs = commit_lens.shape[0], commit_lens_dst.shape[0]
+     _stage_commit_kernel[(1,)](
+diff --git a/python/sglang/srt/speculative/dspark_components/dspark_verify.py b/python/sglang/srt/speculative/dspark_components/dspark_verify.py
+index 4e8f24fe..2ae47dc5 100644
+--- a/python/sglang/srt/speculative/dspark_components/dspark_verify.py
++++ b/python/sglang/srt/speculative/dspark_components/dspark_verify.py
+@@ -772,7 +772,10 @@ class DsparkVerifyEpilogue:
+         state_slot = None
+         if self.commit_ctx.kv_injector.swa_ring_size is not None:
+             state_slot = (
+-                io.req_pool_indices.view(-1, 1).expand(bs, self.stride).reshape(-1)
++                io.req_pool_indices.view(-1, 1)
++                .expand(bs, self.stride)
++                .reshape(-1)
++                .contiguous()
+             )
+         commit = self.deferred_commit
+         if commit is not None and (kv_projected or commit.join_projection()):
