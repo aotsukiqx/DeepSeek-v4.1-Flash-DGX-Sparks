@@ -1,7 +1,7 @@
 # PROJECT STATE — DeepSeek-V4.1-Flash DGX Spark TP4 Fleet
 
 > **Single source of truth.** This document must survive context compaction and enable
-> any future session to resume exactly where we left off. Last updated: 2026-11-05 19:10.
+> any future session to resume exactly where we left off. Last updated: 2026-11-05 20:30.
 
 ## 1. Fleet & Repository
 
@@ -16,25 +16,27 @@
 
 ## 2. Two Code Lines (running simultaneously)
 
-### Production line (LIVE since 2026-11-05 ~00:45 — BP4 ON TOP OF PIN MIGRATION)
-- **Image**: `dsv41-4x-spark:canary-mig` head = pin 8817f63c base (as adopted
-  2026-11-01, all prior backports absorbed) **+ bp4 chain (2026-11-04, commit cb7b13e)**:
-  `runtime/bp4-pr46088/47949/47684.patch` = exact-commit diffs applied with
-  `git apply` (no fuzz) after the rocenante overlay in `Dockerfile.canary-mig`;
-  #46088 decode mHC post+combine+RMSNorm fused kernel + #47949 CTA-cluster row
-  split (stacked, same files) + #47684 indexer logits whole-wave rounding.
-  Rollback: tag `pre-bp4` @ c641050 + image `canary-mig-pre-bp4` ×4.
-  Next pin ≥ fd19cfb6 absorbs all three (drop the patch chain then).
-- **Also live (env-only, same image)**: `SGLANG_SPEC_TP_SYNC=init` appended to
-  EXTRA_CONTAINER_ENV (§21) — spec-decision broadcast narrowed from all→init.
-- **Gates (2026-11-04/05)**: boot gamma=5/verify 6 unchanged; smoke 4/4 +
-  sampled ✓ (arith + zh); qeval paired vs pre-bp4: **BROKE=0 FIXED=0, 71/75
-  identical set** (same 4 fails as before: code_interval_intersect,
-  json_escape, json_count, math_m9); fused-kernel JIT cubin verified in triton
-  cache (`_mhc_post_combine`); c1 interleaved A/B under live traffic:
-  pre-bp4 49.55/106.62 vs bp4 48.61/102.91 (round-1 bp4 32.41/69.12 =
-  traffic-contaminated, discarded per skill tell); clean-window final:
-  **prose 49.55 / code 111.32 (+4.4% code vs pre-bp4)**; tiers window-conditioned.
+### Production line (LIVE since 2026-11-05 20:05 — BP5 ON TOP OF BP4/PIN MIGRATION)
+- **Image**: `dsv41-4x-spark:canary-mig` = pin 8817f63c base + bp4 chain
+  (#46088/#47949/#47684, commit cb7b13e) **+ bp5 (#47728, commit 5277b193)**:
+  `runtime/bp5/bp5-pr47728-dspark-bs1-swa-slot.patch` (python-only, test hunk
+  stripped) = dspark bs=1 SWA ring-slot staging fix (correctness:
+  stage_commit `.contiguous()` + dspark_verify assert). **#47935 was EXCLUDED
+  at pre-verify**: mxfp4 tables need ckpt `engram_embed_quant=mxfp4` (ours is
+  fp8) AND our adapter replaces EngramEmbedding.__init__ with its own C
+  row_store → zero runtime effect here; rides next pin.
+- **Gates (2026-11-05 window, ~35 min outage)**: boot 11 min healthy, gamma=5
+  /verify 6 unchanged; pool full 5836800→**6260992 (+7.3%, boot jitter, up)**;
+  smoke 4/4; patch presence verified in running container; qeval vs
+  pinmig-adopt baseline (before-bp5 run was wasted on a 405 — qeval --url
+  needs the FULL `/v1/chat/completions` path, bare host = 405 all-fail):
+  **PRIMARY 53/55 BROKE=0 FIXED=0 p=1.000**, prose 5/5, json +1 fixed
+  (json_escape recovered), median single-stream **74.75→76.88 tok/s (+2.8%)**.
+- **c1 (ab_bench, moderate traffic, 5 reps, gen-tp order clean)**:
+  **prose 49.87 / code 114.65** vs bp4 clean-window 49.55/111.32 → code
+  **+3.0%**, prose parity. SPEC_TP_SYNC=init quantification folded into this
+  same-line measurement (a clean-window re-run may separate it; +3.0% here is
+  the bp4+SYNC+bp5 composite vs bp4-alone baseline).
 - **SPS table (2026-11-05)**: `state-tp4/dspark_sps.json` INSTALLED (7 probes,
   bs 1-32, steps/s 22.70→3.79, self-check ✓) — first table ever on this fleet.
   Profiler path: `SGLANG_DSPARK_ENABLE_SPS_RECORD=1 SGLANG_RAGGED_VERIFY_MODE=static
@@ -66,10 +68,11 @@
 - **Config**: env unchanged (/tmp/env.pre-pinmig == live). Stable across
   2026-11-02/03 per user's stability-window plan (watchdog ACTIVE).
 
-### Rollback ladder (pin-migration live)
-- **One step back**: `canary-mig-bp2` ×4 (image-only flip) + git tag
-  `pre-pinmig` + /tmp/env.pre-pinmig. (`canary-mig-bp1` ×4 kept as
-  grandfather; `canary-mig-pin` ×4 = adoption tag.)
+### Rollback ladder (bp5 live)
+- **One step back**: `canary-mig-pre-bp5` ×4 (image-only flip) + git tag
+  `pre-bp5` + /tmp/env.pre-bp5 (= bp4 image, SPEC_TP_SYNC env unchanged).
+  Two steps: `canary-mig-pre-bp4` ×4 + `pre-bp4`. Grandfather:
+  `canary-mig-bp2` ×4 + `pre-pinmig`.
 
 ## 3. Latest Measurements (2026-10-26 13:20, four-way)
 
