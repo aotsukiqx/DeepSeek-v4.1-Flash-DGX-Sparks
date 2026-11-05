@@ -47,6 +47,12 @@
   fit directly via `fit_profile()`. boot.py still REFUSES compact mode
   (#39173, log line present), so the planner stays verify-all; flip
   `DSPARK_SPS_ALLOW_ENGRAM=1` only after #39173 lands.
+- **P2 compact 实验 CLOSED (2026-11-05 21:00, 代码级证据)**: 未做实测 boot
+  （省 25min 停机）。#39173 断言在 pin `engram.py:394` **仍在**: target-verify
+  分支 `num_tokens == bs*block` 矩形校验, compact 模式的 ragged verify batch
+  必然违反。adapter 只接管 `_owned_rows`/`__init__`, **不覆盖 EngramHasher.forward**
+  → 断言路径无旁路。上游 main 无修复 commit。重启条件: 上游修复落地后
+  `DSPARK_SPS_ALLOW_ENGRAM=1` boot 实验（boot.py 会自动放行 flags）。
 - **Window incidents**: first boot CRASHED at first Engram lookup —
   `EngramEmbedding._empty` renamed to `new_rows` upstream; fixed 3 call
   sites (engram_backend ×2, engram_prefetch ×1, commit 16a8e0d), rebuilt
