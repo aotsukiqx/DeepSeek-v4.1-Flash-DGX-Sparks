@@ -507,6 +507,38 @@ hidden — always run checks CUDA-visible.
       UMA 是实际红利（每层 ~1-2GiB host cache → 同预算 rows 翻倍或
       cache ways 提升）。
 
+### sglang sweep 2026-11-07 (150 commits, 732d34b9..b165323c; MiaAI-Lab: 0 new; network-degraded)
+24. **Settle 判定（对 item 22 的问题）: 未达标**。六轴最后触碰全部在
+    11-06（mem_cache 11-06 22:26 -0800 = 11-07 14:26 +0800，spec
+    11-06 20:37，dsv4_backend/models 11-06 17-18 时段）→ 静默 <24h。
+    **下次判定最早 11-09 下午（+0800）**，且需 11-08/09 无新 DSV4 轴提交。
+25. **新窗口分类（标题级；apply-check 因 GitHub 双端断连搁置——Mac 与
+    集群 codeload 均不通，blobs 无法按需拉取；网络恢复后从
+    b165323c 补验）**:
+    - **下次 pin 迁移主力（decode 热路径）**: #48833 compact verify
+      window 单 launch 构建 + #48832 ratio-1/2 压缩器走融合 kernel +
+      #48831 draft attention metadata 走 glue graph（dspark verify 三连，
+      必然 stack 在 post-pin 重构上）+ #48733 Index-Q RoPE+fp4 pack
+      prefill 单线程/块 + #48993 DSV4 prefill shared-read 行计数重构 +
+      #48761 mHC DeepGEMM prenorm slice 减半。
+    - **跟随项**: #45886 InstantTensor 载入显存归还 KV（pool 又有
+      +空间，虽然 bp5 后已回 6260992）、#48496/#48450 mem_cache 页写
+      者排序、#48424 deep-gemm 0.2.6（11-05 已判 pin-only）。
+    - **NO-OP/非我们**: #48971（CC 10.7 gate，我们 12.1）、#48487
+      （单 rank TP sync，我们 TP4）、#46200（PP-only）、kimi/mamba/
+      megakernel/eplb/disagg 全族。
+26. **bp6 单窗候选: 无**——本窗口没有 #47728 级别的"小 patch 大生产面"
+    项；全部价值集中在 pin 迁移 #2。**不为此开窗**。
+27. **运维记录**: 稳定性 de facto 确认（7 天生产 + bp4/bp5 两轮采纳叠加
+    验证）。canary-mig-bp1 ×4 已退役（两代之前）；tag pre-bp1/pre-bp2
+    已清（回滚梯 = pre-bp5 bp4 镜像 ×4 + tag pre-bp5）。
+28. **待办重排**: (a) 网络恢复后补 apply-check + 提交 loop-abort
+    finished_len issue（docs/upstream/ 草稿仍在）; (b) 11-09 settle
+    判定 → 若过 → pin 迁移 #2 离线 prep（playbook 已验证两次:
+    route-decision → 栈重放 → 适配器 self._*() 调用面静态核对 →
+    in-image import 审计 → bp4/bp5 patch 链吸收核对 → 窗口）;
+    (c) SPS planner 解锁仍卡 sgl#39173（P2 已关，重开条件=上游修复）。
+
 ### Retired shortcuts (all evidence-backed)
 - Native prefill-CP: V4.1 vision model rejects CP.
 - Prefill CUDA graphs: dsv4 backend not in the BCG whitelist.
