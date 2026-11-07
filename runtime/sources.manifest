@@ -20,7 +20,7 @@ sglang-canary  620c76f25db14f1599aa7c7ccb141a91e4944b63  eb86c5481c476ce0cc3f08f
 # (2026-10-24, settled point after the MegaGate merge+revert churn; carries the
 # DSV4.1 host-overhead wave + prefill-graph maturation + the deepseek-recipe
 # migration that replaces encoding_dsv41). python/+rust trees; Apache-2.0.
-sglang-mig  8817f63c2cf9acb0fe8c8750863b17bbb1c6ab1b  85a03032f706d88640428646593379cb382c52f120728a0bd7f83a1e32f7ab36  https://github.com/sgl-project/sglang/archive/8817f63c2cf9acb0fe8c8750863b17bbb1c6ab1b.tar.gz
+sglang-mig  9d547e19ff519f0d1b964b0b1c014d98dc65caf4  b8f01b127d8d29b6326e3c08ce368b0aef26e1c56cb105fb02f130a10c0a72df  https://github.com/sgl-project/sglang/archive/9d547e19ff519f0d1b964b0b1c014d98dc65caf4.tar.gz
 
 # b12x as frozen for rhys101's SG17 RoCEnante overlay (b12x.comm.roce); published as a source
 # archive in rhys101/DeepSeek-V4.1-Flash-vLLM-DGX-Spark-8, provenance in

@@ -1,4 +1,4 @@
-# PRODUCTION IMAGE: sglang main @ 8817f63c (2026-11-01) on the proven
+# PRODUCTION IMAGE: sglang main @ 9d547e19 (2026-11-08) on the proven
 # nightly-dev-cu13-20261011 base + the 4 pip wheel bumps. Carries upstream:
 # the DSV4.1 host-overhead + Engram decode-lookup waves, deepseek-recipe,
 # mem-cache/kv-cache refactor wave, spec ragged-verify rework, and ALL prior
@@ -38,36 +38,17 @@ ARG PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
 RUN rm -rf /sgl-workspace/sglang/python
 COPY --from=fetch /fetched/sglang-mig/python /sgl-workspace/sglang/python
 RUN pip install --no-cache-dir -i ${PIP_INDEX} \
-      "flashinfer_python[cu13]==0.7.2" "sgl-deep-gemm==0.2.3.post2" "sglang-kernel==0.4.10" "sgl-flash-mla==1.0.0" "deepseek-recipe"
+      "flashinfer_python[cu13]==0.7.3" "sgl-deep-gemm==0.2.6" "sglang-kernel==0.4.10" "sgl-flash-mla==1.0.2" "deepseek-recipe"
 RUN python3 -c "import sglang, sglang.srt.models.deepseek_v4, sglang.srt.layers.attention.deepseek_v4_backend, sglang.srt.models.deepseek_v4_dspark; print('import ok')"
-# RoCEnante overlay (applies clean with -F3 on 7d996300; probes verified 2026-10-24)
+# RoCEnante overlay (applies at 9d547e19 with -F3, offset 31 lines, 0 rejects;
+# roce_tp4_adapt probes PASS 2026-11-08)
 COPY runtime/sglang-rocenante.patch runtime/roce_tp4_adapt.py /tmp/
 RUN cd /sgl-workspace/sglang && patch -p1 -F3 < /tmp/sglang-rocenante.patch && python3 /tmp/roce_tp4_adapt.py && rm /tmp/sglang-rocenante.patch /tmp/roce_tp4_adapt.py
-# Upstream backports bp4 (2026-11-04): #46088 mHC post+combine+RMSNorm fused
-# decode kernel + #47949 CTA-cluster row split (stacks on 46088, same files) +
-# #47684 indexer logits wave rounding. Exact commit diffs (git show --format=),
-# applied with git apply (no fuzz: any drift fails the build). The test/ hunks
-# land harmlessly in the base image's stale test tree; our gates are smoke+qeval.
-# PIN-MIGRATION NOTE: drop this whole chain at any pin >= fd19cfb6 (absorbed).
-COPY runtime/bp4-pr46088.patch runtime/bp4-pr47949.patch runtime/bp4-pr47684.patch /tmp/
-RUN cd /sgl-workspace/sglang && git apply /tmp/bp4-pr46088.patch && git apply /tmp/bp4-pr47949.patch \
- && git apply /tmp/bp4-pr47684.patch \
- && python3 -c "from sglang.kernels.ops.layernorm.mhc_post_combine_norm_decode import mhc_post_combine_norm_decode as f; assert callable(f); print('bp4 import ok')" \
- && rm -f /tmp/bp4-pr*.patch
-# Upstream backport bp5 (2026-11-05): #47728 dspark bs=1 SWA ring-slot
-# staging fix (correctness; production face = stage_commit .contiguous() +
-# dspark_verify assert). Python-only diff (test hunk stripped: image tree
-# has no test/registered/unit/spec/).
-# #47935 engram mxfp4 tables DELIBERATELY EXCLUDED after adjudication:
-# mxfp4 enablement requires checkpoint quantization_config.engram_embed_quant
-# == mxfp4 (ours is fp8; configs/deepseek_v4.py marks it converted-FP8) AND
-# our adapter replaces EngramEmbedding.__init__ entirely (own C row_store) -
-# zero runtime effect on this line. Ride the next pin migration instead.
-# PIN-MIGRATION NOTE: drop this chain at any pin absorbing #47728.
-COPY runtime/bp5/bp5-pr47728-dspark-bs1-swa-slot.patch /tmp/
-RUN cd /sgl-workspace/sglang && git apply /tmp/bp5-pr47728-dspark-bs1-swa-slot.patch \
- && python3 -c "from sglang.kernels.ops.speculative.dspark.stage_commit import stage_commit; print('bp5 import ok')" \
- && rm -f /tmp/bp5-pr*.patch
+# Upstream backports: NONE at 9d547e19 — bp4 (#46088/#47949/#47684), bp5
+# (#47728), #47935 (engram mxfp4 tables), the dspark compact-verify fusion
+# trio (#48831/#48832/#48833), #48733, #45886 and the #48424 wheel stack
+# (deep-gemm 0.2.6 + flashinfer 0.7.3) are all absorbed upstream. The
+# runtime/bp4-*.patch and bp5 chains are retired (history in git).
 COPY --from=rustbuild /build/_multimodal.so /sgl-workspace/sglang/python/sglang/srt/rust_extensions/_multimodal.so
 RUN python3 -c "import sglang.srt.rust_extensions._multimodal as m; assert hasattr(m, 'dsv41'); print('bundled rust mm ok, inkling:', hasattr(m, 'inkling'))" \
  && rm -rf /root/.cargo/bin /root/.rustup
