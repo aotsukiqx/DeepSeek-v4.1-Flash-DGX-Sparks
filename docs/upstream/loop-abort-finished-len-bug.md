@@ -1,6 +1,6 @@
 # Upstream issue draft: post-hoc `Req.finished_len` mutation desyncs pool accounting (invariant checker fires with negative residue)
 
-**Target repo:** sgl-project/sglang (verified on main @ 5cc9c933, 2026-10-27;
+**Target repo:** sgl-project/sglang (re-verified on main @ 9d547e19, 2026-11-08; originally 5cc9c933 2026-10-27;
 first observed on 620c76f2 in production)
 **Type:** robustness / undocumented contract
 **Not yet filed** — draft prepared 2026-10-28 from a production incident
@@ -17,7 +17,7 @@ row drops "past finished_len, as output_ids is trimmed there"). But nothing
 prevents an extension from shrinking `finished_len` **after** the step's
 bookkeeping has run on the longer length. When that happens, pool accounting
 desyncs and the invariant checker
-(`scheduler_components/invariant_checker.py::_check_pool_invariant`,
+(`managers/scheduler_components/invariant_checker.py::_check_pool_invariant`,
 `available + evictable + protected + session_held + uncached == total`) fires
 with **negative residue** (`total_accounted < total`) — i.e. over-released
 tokens — and, where the checker is in hard-error mode, takes the scheduler
