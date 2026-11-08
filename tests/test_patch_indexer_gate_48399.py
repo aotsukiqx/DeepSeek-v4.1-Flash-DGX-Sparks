@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""runtime/patch_indexer_gate_48399.py against synthetic stand-ins.
+"""runtime/patch_indexer_gate_48399.py against a synthetic stand-in.
 
-Reproduces the two gate definitions of sglang main@9d547e19 (v41_indexer
+Reproduces the gate definition of sglang main@9d547e19 (v41_indexer
 is_sm100 and index_logits _is_sm100) with a stub current_arch; NOT SGLang's
 files. After patching, an SM120-family arch flips the gates True (SM121 runs
 the DeepGEMM indexer paths, the weeks-proven bp5 behavior), Hopper stays
@@ -42,29 +42,6 @@ def is_sm100() -> bool:
     return current_arch().is_sm(10)
 '''
 
-FIX_LOGITS = '''import functools
-
-
-class _Arch:
-    def __init__(self, major):
-        self._major = major
-
-    def is_sm(self, major):
-        return self._major == major
-
-
-_CURRENT = [None]
-
-
-def current_arch():
-    return _Arch(_CURRENT[0])
-
-
-def _is_sm100() -> bool:
-    return current_arch().is_sm(10)
-'''
-
-
 def run(base):
     return subprocess.run([sys.executable, '-I', str(PATCHER), str(base)],
                           capture_output=True, text=True)
@@ -87,8 +64,7 @@ def main():
         base = Path(d)
         files = {
             'sglang/srt/layers/attention/dsv4/v41_indexer/__init__.py': FIX_INIT,
-            'sglang/kernels/ops/attention/dsv4/index_logits.py': FIX_LOGITS,
-        }
+                    }
         for rel, text in files.items():
             p = base / rel
             p.parent.mkdir(parents=True)
@@ -114,14 +90,6 @@ def main():
         patched._CURRENT[0] = 9
         patched.is_sm100.cache_clear()
         assert patched.is_sm100() is False, 'Hopper stays on torch'
-
-        logits_path = base / 'sglang/kernels/ops/attention/dsv4/index_logits.py'
-        spec = importlib.util.spec_from_file_location('logits_patched', logits_path)
-        lm = importlib.util.module_from_spec(spec)
-        sys.modules['logits_patched'] = lm
-        spec.loader.exec_module(lm)
-        lm._CURRENT[0] = 12
-        assert lm._is_sm100() is True
 
         init_path.write_text(FIX_INIT.replace(
             'return current_arch().is_sm(10)',

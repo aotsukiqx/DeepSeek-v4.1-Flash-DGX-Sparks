@@ -16,7 +16,12 @@ dual-container kernel bench proved the 0.2.6 kernels equal to 0.2.3 on GB10
 (fp8_fp4_paged_mqa_logits 18.96 vs 18.90 ms at indexer scale). The SM120
 exclusion is upstream conservatism, not a known defect.
 
-Patch: include the SM120 family (arch major 12) in the two gate definitions.
+Patch: include the SM120 family (arch major 12) in the PATH gate only
+(v41_indexer.is_sm100). The dtype gates (index_logits._is_sm100) stay STRICT:
+deep-gemm 0.2.6 asserts fp32 logits/weights outside arch 10 (attention.hpp:50,
+learned from the first bp6 boot: bf16 weights on SM121 crash the kernel), so
+SM121 must take the DeepGEMM path with the fp32 dtype contract — which the
+strict dtype gates produce automatically.
 Call sites untouched (line-101 candidate gate also flips, but our
 sm120_candidates adapter already forces the dense full-topk path there).
 Applies clean on pristine 9d547e19 (verified). Idempotent. Exits non-zero on
@@ -44,19 +49,6 @@ FILES = [
              '''def is_sm100() -> bool:
     # The DeepGEMM fp8_fp4 mqa-logits paths are SM100-family only; other devices
     # (Hopper, SM120, non-CUDA) take the torch / Triton indexer.
-''' + GATE_COMMENT + '''    return current_arch().is_sm(10) or current_arch().is_sm(12)
-'''),
-        ],
-    ),
-    (
-        '''sglang/kernels/ops/attention/dsv4/index_logits.py''',
-        '''    return current_arch().is_sm(10) or current_arch().is_sm(12)
-''',
-        [
-            ('''def _is_sm100() -> bool:
-    return current_arch().is_sm(10)
-''',
-             '''def _is_sm100() -> bool:
 ''' + GATE_COMMENT + '''    return current_arch().is_sm(10) or current_arch().is_sm(12)
 '''),
         ],
