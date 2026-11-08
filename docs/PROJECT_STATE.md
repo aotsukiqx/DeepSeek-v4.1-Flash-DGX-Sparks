@@ -610,7 +610,28 @@ hidden — always run checks CUDA-visible.
 +    Upstream interaction: file an issue/PR — SM120 exclusion is unproven
 +    conservatism; our fleet has weeks of SM121 DeepGEMM evidence + kernel
 +    parity bench.
-+36. **Profiler-window ops note**: the window's rollback serve crashed once
++36a. **bp6 window verdict (2026-11-08, final: ROLLED BACK to bp5)**:
++    - bp6v2 (prefill+decode gates extended): prefill FIXED (cold 3206/3881
++      ✓), pool 6543104 (+4.5% ✓), smoke 4/4 — but **decode 36.7 < 42**
++      (0.2.6's arch-12 fp32-weights contract on the DeepGEMM decode path).
++      qeval compare invalid (baseline captured during an outage window).
++    - bp6v3 (prefill-only, torch decode): **decode 22.6** — torch decode on
++      SM121 is far worse; the decode matrix is now complete:
++      bp5 DeepGEMM+bf16-weights(0.2.3) 43-45 / v2 DeepGEMM+fp32(0.2.6) 36.7
++      / v3 torch 22.6. **The winning combo is DeepGEMM+bf16, blocked by
++      deep-gemm 0.2.6 attention.hpp:50's arch-conditional weights assert.**
++    - Rolled back to bp5 (decode gate discipline). Window closed with bp6
++      NOT adopted; fix v3 of the patch script + full evidence chain in git.
++    - **bp6 round 2 path (offline prep)**: (i) profile the v2 decode (trace
++      recipe proven) to confirm the fp32-weights hypothesis vs the dspark
++      verify rework; (ii) if weights-dtype: try deep-gemm 0.2.7 (same
++      assert?) / patch the assert via a wheel rebuild / pin 0.2.3.post2 +
++      shim for tf32_hc_prenorm_gemm_dual; (iii) if dspark: cherry-pick.
++    - Upstream issue draft (docs/upstream/indexer-arch-gate-48399-bug.md)
++      should ALSO carry the decode findings — the arch-12 fp32 weights
++      contract + torch-decode cost make SM120 effectively broken on the
++      indexer across ALL paths upstream.
+36. **Profiler-window ops note**: the window's rollback serve crashed once
 +    (child sigquit 06:06) and needed a manual recovery serve; trace was
 +    captured BEFORE the crash (docker cp race won). Recovery serve healthy
 +    thereafter.
