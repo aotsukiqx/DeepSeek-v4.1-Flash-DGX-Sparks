@@ -38,7 +38,7 @@ ARG PIP_INDEX=https://pypi.tuna.tsinghua.edu.cn/simple
 RUN rm -rf /sgl-workspace/sglang/python
 COPY --from=fetch /fetched/sglang-mig/python /sgl-workspace/sglang/python
 RUN pip install --no-cache-dir -i ${PIP_INDEX} \
-      "flashinfer_python[cu13]==0.7.3" "sgl-deep-gemm==0.2.6" "sglang-kernel==0.4.10" "sgl-flash-mla==1.0.2" "deepseek-recipe"
+      "flashinfer_python[cu13]==0.7.3" "sgl-deep-gemm==0.2.6" "sglang-kernel==0.4.10" "sgl-flash-mla==1.0.0" "deepseek-recipe"
 RUN pip install --no-cache-dir flashinfer-cubin==0.7.3 --index-url https://flashinfer.ai/whl \
  && pip install --no-cache-dir flashinfer-jit-cache==0.7.3 --index-url https://flashinfer.ai/whl/cu130 \
  && python3 -c "import flashinfer_cubin, flashinfer_jit_cache; print('flashinfer companions 0.7.3 ok')"
