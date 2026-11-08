@@ -1,23 +1,23 @@
 #!/usr/bin/env python3
-"""runtime/patch_indexer_gate_48399.py against a synthetic stand-in.
+"""runtime/patch_indexer_gate_48399.py (v3, prefill-only) against a synthetic stand-in.
 
-Reproduces the gate definition of sglang main@9d547e19 (v41_indexer
-is_sm100 and index_logits _is_sm100) with a stub current_arch; NOT SGLang's
-files. After patching, an SM120-family arch flips the gates True (SM121 runs
-the DeepGEMM indexer paths, the weeks-proven bp5 behavior), Hopper stays
-False, and the patch is idempotent with loud anchor-drift failure.
+Reproduces sglang main@9d547e19's v41_indexer __init__ gate trio
+(is_sm100 / has_dense_fp4_indexer / _use_deep_gemm_prefill) with a stub
+current_arch; NOT SGLang's file. After patching: SM121 flips
+_use_deep_gemm_prefill True (DeepGEMM prefill restored) while is_sm100 and
+the decode gate stay strict; Hopper stays False everywhere; idempotent;
+anchor drift fails loudly.
 """
 import importlib.util
 import subprocess
 import sys
 import tempfile
-import types
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 PATCHER = ROOT / 'runtime' / 'patch_indexer_gate_48399.py'
 
-FIX_INIT = '''import functools
+FIXTURE = '''import functools
 
 
 class _Arch:
@@ -37,10 +37,18 @@ def current_arch():
 
 @functools.cache
 def is_sm100() -> bool:
-    # The DeepGEMM fp8_fp4 mqa-logits paths are SM100-family only; other devices
-    # (Hopper, SM120, non-CUDA) take the torch / Triton indexer.
     return current_arch().is_sm(10)
+
+
+def has_dense_fp4_indexer() -> bool:
+    return True
+
+
+@functools.cache
+def _use_deep_gemm_prefill() -> bool:
+    return is_sm100() and has_dense_fp4_indexer()
 '''
+
 
 def run(base):
     return subprocess.run([sys.executable, '-I', str(PATCHER), str(base)],
@@ -48,53 +56,45 @@ def run(base):
 
 
 def load(path, name, major):
-    import functools
-    functools.cache.clear_key = None  # noqa: keep caches per-module instance
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
     spec.loader.exec_module(mod)
     mod._CURRENT[0] = major
+    mod._use_deep_gemm_prefill.cache_clear()
     mod.is_sm100.cache_clear()
     return mod
 
 
 def main():
     with tempfile.TemporaryDirectory() as d:
-        base = Path(d)
-        files = {
-            'sglang/srt/layers/attention/dsv4/v41_indexer/__init__.py': FIX_INIT,
-                    }
-        for rel, text in files.items():
-            p = base / rel
-            p.parent.mkdir(parents=True)
-            p.write_text(text)
+        path = Path(d) / 'sglang/srt/layers/attention/dsv4/v41_indexer/__init__.py'
+        path.parent.mkdir(parents=True)
+        path.write_text(FIXTURE)
 
-        init_path = base / 'sglang/srt/layers/attention/dsv4/v41_indexer/__init__.py'
-        stock = load(init_path, 'gate_stock', 12)
-        assert stock.is_sm100() is False, \
-            'fixture: stock gate excludes SM121 (the regression)'
+        stock = load(path, 'g_stock', 12)
+        assert stock._use_deep_gemm_prefill() is False, \
+            'fixture: stock prefill gate excludes SM121 (the regression)'
 
-        first = run(base)
+        first = run(Path(d))
         assert first.returncode == 0, first.stderr
-        text_after = init_path.read_text()
-        second = run(base)
+        text_after = path.read_text()
+        second = run(Path(d))
         assert second.returncode == 0 and 'already patched' in second.stdout, second.stdout
-        assert init_path.read_text() == text_after
+        assert path.read_text() == text_after
 
-        patched = load(init_path, 'gate_patched', 12)
-        assert patched.is_sm100() is True, 'patched: SM121 back on DeepGEMM'
-        patched._CURRENT[0] = 10
-        patched.is_sm100.cache_clear()
-        assert patched.is_sm100() is True
-        patched._CURRENT[0] = 9
-        patched.is_sm100.cache_clear()
-        assert patched.is_sm100() is False, 'Hopper stays on torch'
+        p121 = load(path, 'g_121', 12)
+        assert p121._use_deep_gemm_prefill() is True, 'patched: SM121 prefill on DeepGEMM'
+        assert p121.is_sm100() is False, 'is_sm100 stays strict (decode gate)'
+        p100 = load(path, 'g_100', 10)
+        assert p100._use_deep_gemm_prefill() is True and p100.is_sm100() is True
+        p90 = load(path, 'g_90', 9)
+        assert p90._use_deep_gemm_prefill() is False, 'Hopper stays on torch'
 
-        init_path.write_text(FIX_INIT.replace(
-            'return current_arch().is_sm(10)',
-            'return current_arch().is_sm(10)  # d'))
-        drifted = run(base)
+        path.write_text(FIXTURE.replace(
+            '    return is_sm100() and has_dense_fp4_indexer()',
+            '    return is_sm100() and has_dense_fp4_indexer()  # d'))
+        drifted = run(Path(d))
         assert drifted.returncode == 1 and 're-derive from sglang#48399' in drifted.stderr, \
             drifted.stderr
 

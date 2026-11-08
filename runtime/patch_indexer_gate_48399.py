@@ -1,30 +1,24 @@
 #!/usr/bin/env python3
-"""Backport bp6: restore SM121 (GB10, CC 12.x) to the DeepGEMM indexer paths.
+"""Backport bp6v3: SM121 (GB10, CC 12.x) on the DeepGEMM indexer PREFILL path only.
 
-sglang#48399 (27bc1a06, 2026-11-06) replaced ``is_sm100_or_newer()``
-(capability major >= 10, which included our SM121) with strict
-``current_arch().is_sm(10)`` in the v41 indexer gates. GB10 fell out of the
-DeepGEMM fp8_fp4 mqa-logits path onto the torch fallback, whose
-``scoring.prefill_requests`` calls ``Tensor.tolist()`` once per layer (a
-synchronous D2H): ~125 ms/layer fixed cost, 8x prefill regression, measured
-2026-11-08 (torch-profiler trace /tmp/prof-traces, cudaMemcpyAsync 9.9 s of an
-18.4 s window under `aten::to` from full_topk._torch_prefill).
+History:
+- sglang#48399 (27bc1a06) replaced ``is_sm100_or_newer()`` (capability>=10)
+  with strict ``is_sm(10)`` in the v41 indexer gates. GB10 fell to the torch
+  prefill fallback whose ``scoring.prefill_requests`` calls ``Tensor.tolist()``
+  once per layer (synchronous D2H): ~125 ms/layer, 8x prefill regression
+  (torch-profiler evidence 2026-11-08, /tmp/prof-traces).
+- bp6 v1/v2 also restored the DECODE gate; v2 measured decode 36.7 tok/s vs
+  the >=42 gate (bp5 ran decode under deep-gemm 0.2.3 with bf16 weights;
+  0.2.6's arch-12 contract forces fp32 weights, and the measured decode cost
+  regressed ~17%). v3 therefore extends ONLY the prefill gate; decode stays
+  strict (torch decode path = the upstream default for every non-SM100
+  device). SGLANG_DSV41_DG_DECODE=1 env can re-enable DeepGEMM decode on
+  SM120 for a later measured A/B if wanted.
 
-Our fleet ran the DeepGEMM path on SM121 for weeks on the 7d996300/8817f63c
-lines (qeval BROKE=0 repeatedly, decode 44-77 tok/s), and the 2026-11-08
-dual-container kernel bench proved the 0.2.6 kernels equal to 0.2.3 on GB10
-(fp8_fp4_paged_mqa_logits 18.96 vs 18.90 ms at indexer scale). The SM120
-exclusion is upstream conservatism, not a known defect.
-
-Patch: include the SM120 family (arch major 12) in the PATH gate only
-(v41_indexer.is_sm100). The dtype gates (index_logits._is_sm100) stay STRICT:
-deep-gemm 0.2.6 asserts fp32 logits/weights outside arch 10 (attention.hpp:50,
-learned from the first bp6 boot: bf16 weights on SM121 crash the kernel), so
-SM121 must take the DeepGEMM path with the fp32 dtype contract — which the
-strict dtype gates produce automatically.
-Call sites untouched (line-101 candidate gate also flips, but our
-sm120_candidates adapter already forces the dense full-topk path there).
-Applies clean on pristine 9d547e19 (verified). Idempotent. Exits non-zero on
+Patch: ``_use_deep_gemm_prefill`` includes arch 12. The dtype gates in
+index_logits.py stay STRICT (deep-gemm 0.2.6 attention.hpp:50 asserts fp32
+weights outside arch 10), so SM121 runs DeepGEMM prefill under the fp32
+contract. ``is_sm100()`` itself is untouched. Idempotent. Exits non-zero on
 anchor drift. Optional argv[1] overrides the sglang python tree root.
 """
 import pathlib
@@ -33,23 +27,22 @@ import sys
 DEFAULT_BASE = "/sgl-workspace/sglang/python"
 PR = "48399"
 
-GATE_COMMENT = "# DSV41 bp6: SM120 family (GB10, CC 12.1) runs the DeepGEMM\n# indexer paths (weeks-proven on this fleet; see patch script header).\n"
-
 FILES = [
     (
         '''sglang/srt/layers/attention/dsv4/v41_indexer/__init__.py''',
-        '''    return current_arch().is_sm(10) or current_arch().is_sm(12)
+        '''    return (is_sm100() or current_arch().is_sm(12)) and has_dense_fp4_indexer()
 ''',
         [
-            ('''def is_sm100() -> bool:
-    # The DeepGEMM fp8_fp4 mqa-logits paths are SM100-family only; other devices
-    # (Hopper, SM120, non-CUDA) take the torch / Triton indexer.
-    return current_arch().is_sm(10)
+            ('''def _use_deep_gemm_prefill() -> bool:
+    return is_sm100() and has_dense_fp4_indexer()
 ''',
-             '''def is_sm100() -> bool:
-    # The DeepGEMM fp8_fp4 mqa-logits paths are SM100-family only; other devices
-    # (Hopper, SM120, non-CUDA) take the torch / Triton indexer.
-''' + GATE_COMMENT + '''    return current_arch().is_sm(10) or current_arch().is_sm(12)
+             '''def _use_deep_gemm_prefill() -> bool:
+    # DSV41 bp6v3: include the SM120 family (GB10, CC 12.1) on the DeepGEMM
+    # PREFILL path only (weeks-proven on this fleet pre-#48399; the torch
+    # fallback's per-layer tolist() D2H cost 8x prefill). The decode gate at
+    # the construction site stays strict is_sm100(): 0.2.6's fp32-weights
+    # contract measured -17% decode on SM121 (bp6v2, 2026-11-08).
+    return (is_sm100() or current_arch().is_sm(12)) and has_dense_fp4_indexer()
 '''),
         ],
     ),
