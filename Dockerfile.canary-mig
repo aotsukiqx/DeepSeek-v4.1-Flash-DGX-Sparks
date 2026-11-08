@@ -89,7 +89,8 @@ RUN PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_thinking_alias.p
  && python3 /opt/dsv41/tests/test_patch_indexer_gate_48399.py
 ENV PYTHONPATH=/opt/dsv41/adapter:/opt/b12x:/opt/b12x_next \
     MODEL_PATH=/models/DeepSeek-V4.1-Flash \
-    STATE_PATH=/state OFFLOAD_MODE=nvme DSV41_CACHE_GIB=16
+    STATE_PATH=/state OFFLOAD_MODE=nvme DSV41_CACHE_GIB=16 \
+    DG_JIT_CACHE_DIR=/state/deep_gemm_jit
 EXPOSE 8888
 HEALTHCHECK --interval=30s --timeout=30s --start-period=90m --retries=3 \
     CMD ["python3", "-S", "/opt/dsv41/boot.py", "health"]

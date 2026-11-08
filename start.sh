@@ -719,6 +719,20 @@ cmd_build() {
   else
     docker build -t "$IMAGE" "$ROOT"
   fi
+  # DSV41_BUILD_HEAD_ONLY=1 (2026-11-08): build on the head and distribute the
+  # finished image instead of building on every worker — multi-node builds
+  # wedged twice (buildkit stall on streamed progress); the fabric copy is ~9 min.
+  # Uses ~/nvmodels/spark-vllm-docker/build-and-copy.sh (proven) when present;
+  # refuses rather than silently falling back to worker builds.
+  if [[ "${DSV41_LAUNCHER:-}" == tp4 && "${DSV41_BUILD_HEAD_ONLY:-0}" == "1" ]]; then
+    local copy_script="$HOME/nvmodels/spark-vllm-docker/build-and-copy.sh"
+    [[ -f "$copy_script" ]] || die "DSV41_BUILD_HEAD_ONLY=1 needs $copy_script"
+    info "head-only mode: distributing $IMAGE via build-and-copy.sh (no worker builds)"
+    (cd "$(dirname "$copy_script")" && bash "$copy_script" -c --copy-parallel --no-build -t "$IMAGE") \
+      || die "image copy failed; NOT falling back to worker builds (they wedge)"
+    info "head-only build+copy complete"
+    return 0
+  fi
   local img_arch
   img_arch=$(docker image inspect -f '{{.Architecture}}' "$IMAGE")
   [[ "$img_arch" == "arm64" ]] || die "expected arm64 image, got $img_arch"
