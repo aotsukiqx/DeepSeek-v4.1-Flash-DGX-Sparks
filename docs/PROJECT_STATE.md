@@ -631,7 +631,28 @@ hidden — always run checks CUDA-visible.
 +      should ALSO carry the decode findings — the arch-12 fp32 weights
 +      contract + torch-decode cost make SM120 effectively broken on the
 +      indexer across ALL paths upstream.
-36b. **bp6r2 verdict (2026-11-08 evening; ROLLED BACK, decode gate)**:
+36a-pre. **Team decision record (2026-11-08 night; committee infra failed
++    with model-channel 503s — synthesis by the operator, both positions
++    argued explicitly)**:
++    - FOR immediate r3 bisect: prefill fix proven 3x and parked; bisect
++      variants READY (clean reverts, runtime/bp6r3/); decode gap is bounded
++      (~10%) and freshly attributed (host-sync pattern); window cost known
++      (~35 min/variant with head-only builds now); landing now banks
++      +4.5% pool + prefill parity + removes bp6 patch-carry overhead risk.
++    - FOR waiting: production needs nothing; trio is 2 days old upstream —
++      follow-up fixes likely; our issue filing (blocked on gh auth) could
++      get the SM120 gate fixed upstream making the whole patch chain moot;
++      each window carries residual process risk (today: 7 infra failures,
++      0 logic failures).
++    - **DECISION: staged.** (1) Offline-only until gh auth lands: file both
++      issues, then watch upstream 48-72h for reaction/fixes. (2) In
++      parallel prep (done): bisect variants + head-only build path ready.
++      (3) r3 window triggers when EITHER upstream signals a fix (test
++      first, likely adopt) OR 72h pass with no signal (run V1 = revert
++      #48833, the 6-file prime suspect; only escalate to V2/V3 on signal).
++      Rationale: the marginal cost of 3 days' wait is zero (production
++      stable) while the marginal information from upstream is high.
++36b. **bp6r2 verdict (2026-11-08 evening; ROLLED BACK, decode gate)**:
 +    - Image flow per user directive: build on eb1a ONLY, distribute via
 +      ~/nvmodels/spark-vllm-docker/build-and-copy.sh -c --copy-parallel
 +      --no-build -t <tag> (9 min for 3 workers on the 200G fabric) —
