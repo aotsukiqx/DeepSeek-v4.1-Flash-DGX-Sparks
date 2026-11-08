@@ -569,7 +569,26 @@ hidden — always run checks CUDA-visible.
     a cold probe ≥2500 tok/s BEFORE declaring success; instant rollback
     otherwise). Pool on the failed pin boot was 6551552 (+4.6% vs bp5 —
     #45886 InstantTensor effect; will re-check on attempt 4).
-    **Lesson for the skill**: wheel bumps on this base REQUIRE companion
+33. **Attempt 4 (companions build decd782): SAME 8x regression.** Build OK
++    on all 4 nodes (2fe7 wedged once — dead-ssh pipe blocked buildkit,
++    killed + rebuilt to a log FILE), boot healthy, autotune cache path
++    proves companions ACTIVE (0.7.3/sm121) — yet prefill still 25-711
++    tok/s. Auto-rollback gate fired; manual rollback completed (the
++    flip script's rollback died with its ssh — SIGHUP). bp5 verified:
++    healthy, prefill 4294 tok/s. **VERDICT: the regression is the NEW
++    WHEEL STACK ITSELF on SM121 prefill (flashinfer 0.7.3 / deep-gemm
++    0.2.6 / sgl-flash-mla 1.0.2 — one or more), NOT the missing
++    companions.** Per the pin-migration skill's >2-blockers rule: STOP
++    the pip-layer path. Migration #2 next moves (offline, no window):
++    (a) wheel bisection — build variants pinning flashinfer back to
++    0.7.2 / deep-gemm to 0.2.3.post2 individually (needs a pyproject
++    override patch; code may require 0.7.3 APIs) OR (b) file upstream
++    with our A/B (bp5 3475-4294 vs 9d547e19-stack 480-711 tok/s,
++    SM121/GB10, TP4) OR (c) base rebuild from 9d547e19's own cu134
++    Dockerfile (CUDA 13.0.3 line, upstream-tested stack). The +4.6%
++    pool (6551552) and the dspark-fusion payload stay locked behind
++    this. Window closed on bp5 (image-only ladder intact).
++    **Lesson for the skill**: wheel bumps on this base REQUIRE companion
     packages (cubin + jit-cache) from flashinfer.ai/whl at build time — a
     version-matched flashinfer alone is NOT sufficient when the base image
     carries older companions.
