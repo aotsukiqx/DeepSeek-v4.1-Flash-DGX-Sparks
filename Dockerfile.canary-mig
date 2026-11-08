@@ -47,6 +47,12 @@ RUN python3 -c "import sglang, sglang.srt.models.deepseek_v4, sglang.srt.layers.
 # roce_tp4_adapt probes PASS 2026-11-08)
 COPY runtime/sglang-rocenante.patch runtime/roce_tp4_adapt.py /tmp/
 RUN cd /sgl-workspace/sglang && patch -p1 -F3 < /tmp/sglang-rocenante.patch && python3 /tmp/roce_tp4_adapt.py && rm /tmp/sglang-rocenante.patch /tmp/roce_tp4_adapt.py
+# bp6 (2026-11-08): sglang#48399 dropped SM121 (GB10) from the DeepGEMM indexer
+# gates -> torch fallback with a per-layer tolist() D2H = 8x prefill regression
+# (profiler-proven). Restore the SM120 family. See patch script header.
+COPY runtime/patch_indexer_gate_48399.py /opt/dsv41/runtime/
+RUN python3 /opt/dsv41/runtime/patch_indexer_gate_48399.py \
+ && python3 -c "t=open('/sgl-workspace/sglang/python/sglang/srt/layers/attention/dsv4/v41_indexer/__init__.py').read(); assert 'is_sm(10) or current_arch().is_sm(12)' in t; print('bp6 indexer gates ok')"
 # Upstream backports: NONE at 9d547e19 — bp4 (#46088/#47949/#47684), bp5
 # (#47728), #47935 (engram mxfp4 tables), the dspark compact-verify fusion
 # trio (#48831/#48832/#48833), #48733, #45886 and the #48424 wheel stack
@@ -79,7 +85,8 @@ RUN PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_thinking_alias.p
  && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_fast_load_tp_slice.py \
  && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_fast_load_slab.py \
  && CUDA_VISIBLE_DEVICES= PYTHONPATH=/opt/dsv41/adapter python3 /opt/dsv41/tests/test_moe_b12x_next_cpu.py \
- && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_roce_ring.py
+ && CUDA_VISIBLE_DEVICES= python3 /opt/dsv41/tests/test_roce_ring.py \
+ && python3 /opt/dsv41/tests/test_patch_indexer_gate_48399.py
 ENV PYTHONPATH=/opt/dsv41/adapter:/opt/b12x:/opt/b12x_next \
     MODEL_PATH=/models/DeepSeek-V4.1-Flash \
     STATE_PATH=/state OFFLOAD_MODE=nvme DSV41_CACHE_GIB=16
