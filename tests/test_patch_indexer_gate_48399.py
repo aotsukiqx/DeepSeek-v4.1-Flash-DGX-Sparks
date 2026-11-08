@@ -51,6 +51,13 @@ def _use_deep_gemm_prefill() -> bool:
 
 def make_indexer():
     return (_use_deep_gemm_prefill(), is_sm100())
+
+
+def make_full_topk_indexer():
+    return dict(
+        use_deep_gemm_prefill=_use_deep_gemm_prefill(),
+        use_deep_gemm_decode=is_sm100(),
+    )
 '''
 
 
