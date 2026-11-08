@@ -539,6 +539,41 @@ hidden — always run checks CUDA-visible.
     in-image import 审计 → bp4/bp5 patch 链吸收核对 → 窗口）;
     (c) SPS planner 解锁仍卡 sgl#39173（P2 已关，重开条件=上游修复）。
 
+### Pin-migration #2 window 2026-11-08 (candidate 9d547e19; 3 failed attempts, rolled back, root cause closed)
+29. **Attempt 1**: build died at pip — Tsinghua mirror全站 403 (mirror-side
+    outage). Script flaw: `build | tail` swallowed rc (`set -e` never fired)
+    and the script STOPPED+re-served the OLD bp5 image (an unnecessary
+    ~25-min same-line reboot). Fix: `set -o pipefail` + rc-checked branch in
+    all window scripts.
+30. **Attempt 2** (aliyun pip): pip OK, rust stage died — direct
+    static.rust-lang.org TLS-reset (same network-outage family as GitHub
+    11-07). **Attempt 3** (aliyun + rsproxy): BUILD OK, boot healthy…
+31. **…but the pin was 8x SLOW**: every 4096-token prefill chunk ~8s
+    (480-530 tok/s vs bp5's 3475+; health_generate requests timed out;
+    user observed). "cuda graph: False" in the Prefill-batch lines is the
+    NORMAL no-prefill-graph flag — red herring. **Root cause**: flashinfer
+    0.7.3 wheel WITHOUT its companion packages — the base image carries
+    flashinfer-cubin/jit-cache 0.7.0.post1; version mismatch disables both
+    ("cubins downloaded on demand"/"kernels JIT-compiled") and under the
+    current outbound-network outage the on-demand path is broken → kernels
+    ran a pathological fallback, persistently (45+ min, not warmup).
+    Upstream installs companions explicitly from its own index
+    (docker/Dockerfile.cu134: pip install flashinfer-cubin==$VER
+    --index-url https://flashinfer.ai/whl [+ /cu130 for jit-cache]).
+    Fix committed decd782 (companion wheels in Dockerfile).
+32. **Rolled back to bp5** (image-only flip; evidence saved
+    /tmp/pinmig2c-head-full.log 1481 lines): health 200, prefill 3475 tok/s
+    confirmed restored. verify_cap gate drift-traceback = known benign
+    (INERT adapter piece; hardened sitecustomize kept the module).
+    Window remains OPEN for attempt 4 (companions build, EARLY speed gate:
+    a cold probe ≥2500 tok/s BEFORE declaring success; instant rollback
+    otherwise). Pool on the failed pin boot was 6551552 (+4.6% vs bp5 —
+    #45886 InstantTensor effect; will re-check on attempt 4).
+    **Lesson for the skill**: wheel bumps on this base REQUIRE companion
+    packages (cubin + jit-cache) from flashinfer.ai/whl at build time — a
+    version-matched flashinfer alone is NOT sufficient when the base image
+    carries older companions.
+
 ### Retired shortcuts (all evidence-backed)
 - Native prefill-CP: V4.1 vision model rejects CP.
 - Prefill CUDA graphs: dsv4 backend not in the BCG whitelist.
