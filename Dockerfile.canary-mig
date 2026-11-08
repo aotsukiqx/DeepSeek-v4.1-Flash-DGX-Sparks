@@ -52,7 +52,7 @@ RUN cd /sgl-workspace/sglang && patch -p1 -F3 < /tmp/sglang-rocenante.patch && p
 # (profiler-proven). Restore the SM120 family. See patch script header.
 COPY runtime/patch_indexer_gate_48399.py /opt/dsv41/runtime/
 RUN python3 /opt/dsv41/runtime/patch_indexer_gate_48399.py \
- && python3 -c "t=open('/sgl-workspace/sglang/python/sglang/srt/layers/attention/dsv4/v41_indexer/__init__.py').read(); assert 'is_sm(10) or current_arch().is_sm(12)' in t; print('bp6 indexer gates ok')"
+ && python3 -c "t=open('/sgl-workspace/sglang/python/sglang/srt/layers/attention/dsv4/v41_indexer/__init__.py').read(); assert 'is_sm100() or current_arch().is_sm(12)' in t; print('bp6 indexer gates ok')"
 # Upstream backports: NONE at 9d547e19 — bp4 (#46088/#47949/#47684), bp5
 # (#47728), #47935 (engram mxfp4 tables), the dspark compact-verify fusion
 # trio (#48831/#48832/#48833), #48733, #45886 and the #48424 wheel stack
