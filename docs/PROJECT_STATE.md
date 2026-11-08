@@ -631,6 +631,26 @@ hidden — always run checks CUDA-visible.
 +      should ALSO carry the decode findings — the arch-12 fp32 weights
 +      contract + torch-decode cost make SM120 effectively broken on the
 +      indexer across ALL paths upstream.
+36b. **bp6r2 verdict (2026-11-08 evening; ROLLED BACK, decode gate)**:
++    - Image flow per user directive: build on eb1a ONLY, distribute via
++      ~/nvmodels/spark-vllm-docker/build-and-copy.sh -c --copy-parallel
++      --no-build -t <tag> (9 min for 3 workers on the 200G fabric) —
++      multi-node builds RETIRED (two buildkit wedges today).
++    - r2 = SM121 DeepGEMM prefill+decode gates + sgl-flash-mla pinned 1.0.0:
++      prefill 2729 ✓ (fixed), pool 6546688 ✓, decode **38.8 < 42** — fmla
++      1.0.0 recovered only +2.1 of the ~7 gap; **fmla hypothesis mostly
++      excluded**.
++    - Bounded decode trace (num_steps=40, 21M, NO OOM — recipe works):
++      kernels all at historical magnitudes (b12x phase1 16ms/step, dense
++      GEMMs 13ms/step, DG decode runs the legacy kernel and is fast);
++      dominant cost = host-side cudaEventSynchronize ~44ms/step = the
++      dspark verify rework's (#48831-33) per-step host sync pattern.
++      Diffuse ~10%, not single-kernel fixable. Next lever = cherry-pick /
++      bisect of the compact-verify trio, or wait for upstream follow-ups.
++    - Decode hypothesis table CLOSED: wheels/fmla/dtype all excluded or
++      minor; remaining = sglang tree dspark verify rework.
++    - bp6 parked at r2 (branch bp6r2-candidate; production rollback = bp5).
++      All artifacts ready for a focused follow-up session.
 36. **Profiler-window ops note**: the window's rollback serve crashed once
 +    (child sigquit 06:06) and needed a manual recovery serve; trace was
 +    captured BEFORE the crash (docker cp race won). Recovery serve healthy
