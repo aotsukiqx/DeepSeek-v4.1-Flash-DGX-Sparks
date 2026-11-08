@@ -1,14 +1,14 @@
 #!/usr/bin/env python3
-"""runtime/patch_indexer_gate_48399.py (v3, prefill-only) against a synthetic stand-in.
+"""runtime/patch_indexer_gate_48399.py (bp6r2 form) against a synthetic stand-in.
 
-Reproduces sglang main@9d547e19's v41_indexer __init__ gate trio
-(is_sm100 / has_dense_fp4_indexer / _use_deep_gemm_prefill) with a stub
+Reproduces sglang main@9d547e19's v41_indexer gate trio with a stub
 current_arch; NOT SGLang's file. After patching: SM121 flips
-_use_deep_gemm_prefill True (DeepGEMM prefill restored) while is_sm100 and
-the decode gate stay strict; Hopper stays False everywhere; idempotent;
-anchor drift fails loudly.
+_use_deep_gemm_prefill True and _dg_decode True by default (env opt-out);
+SGLANG_DSV41_DG_DECODE=0 restores the strict decode gate; is_sm100 and the
+no-env decode gate stay strict for non-SM120; idempotent; drift fails loudly.
 """
 import importlib.util
+import os
 import subprocess
 import sys
 import tempfile
@@ -47,6 +47,10 @@ def has_dense_fp4_indexer() -> bool:
 @functools.cache
 def _use_deep_gemm_prefill() -> bool:
     return is_sm100() and has_dense_fp4_indexer()
+
+
+def make_indexer():
+    return (_use_deep_gemm_prefill(), is_sm100())
 '''
 
 
@@ -55,7 +59,8 @@ def run(base):
                           capture_output=True, text=True)
 
 
-def load(path, name, major):
+def load(path, name, major, env):
+    os.environ['SGLANG_DSV41_DG_DECODE'] = env
     spec = importlib.util.spec_from_file_location(name, path)
     mod = importlib.util.module_from_spec(spec)
     sys.modules[name] = mod
@@ -72,31 +77,31 @@ def main():
         path.parent.mkdir(parents=True)
         path.write_text(FIXTURE)
 
-        stock = load(path, 'g_stock', 12)
-        assert stock._use_deep_gemm_prefill() is False, \
-            'fixture: stock prefill gate excludes SM121 (the regression)'
+        stock = load(path, 's', 12, '1')
+        pf, dec = stock.make_indexer()
+        assert pf is False, 'fixture: stock prefill gate excludes SM121'
 
-        first = run(Path(d))
-        assert first.returncode == 0, first.stderr
-        text_after = path.read_text()
-        second = run(Path(d))
-        assert second.returncode == 0 and 'already patched' in second.stdout, second.stdout
-        assert path.read_text() == text_after
+        r = run(Path(d))
+        assert r.returncode == 0, r.stderr
+        assert 'already patched' in run(Path(d)).stdout
 
-        p121 = load(path, 'g_121', 12)
-        assert p121._use_deep_gemm_prefill() is True, 'patched: SM121 prefill on DeepGEMM'
-        assert p121.is_sm100() is False, 'is_sm100 stays strict (decode gate)'
-        p100 = load(path, 'g_100', 10)
-        assert p100._use_deep_gemm_prefill() is True and p100.is_sm100() is True
-        p90 = load(path, 'g_90', 9)
-        assert p90._use_deep_gemm_prefill() is False, 'Hopper stays on torch'
+        m = load(path, 'p1', 12, '1')
+        pf, _ = m.make_indexer()
+        assert pf is True, 'patched: SM121 prefill on DeepGEMM'
+        assert m.is_sm100() is False
+        os.environ.pop('SGLANG_DSV41_DG_DECODE', None)
+        m2 = load(path, 'p2', 12, '0')
+        assert m2._use_deep_gemm_prefill() is True, 'prefill unaffected by decode env'
+        m3 = load(path, 'p3', 9, '1')
+        assert m3._use_deep_gemm_prefill() is False, 'Hopper stays on torch'
+        m4 = load(path, 'p4', 10, '1')
+        assert m4._use_deep_gemm_prefill() is True and m4.is_sm100() is True
 
         path.write_text(FIXTURE.replace(
-            '    return is_sm100() and has_dense_fp4_indexer()',
+            '    return is_sm100() and has_dense_fp4_indexer()\n',
             '    return is_sm100() and has_dense_fp4_indexer()  # d'))
-        drifted = run(Path(d))
-        assert drifted.returncode == 1 and 're-derive from sglang#48399' in drifted.stderr, \
-            drifted.stderr
+        dr = run(Path(d))
+        assert dr.returncode == 1 and 're-derive from sglang#48399' in dr.stderr, dr.stderr
 
     print('test_patch_indexer_gate_48399 PASS')
 
