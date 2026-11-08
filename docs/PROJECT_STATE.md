@@ -588,7 +588,33 @@ hidden — always run checks CUDA-visible.
 +    Dockerfile (CUDA 13.0.3 line, upstream-tested stack). The +4.6%
 +    pool (6551552) and the dspark-fusion payload stay locked behind
 +    this. Window closed on bp5 (image-only ladder intact).
-+    **Lesson for the skill**: wheel bumps on this base REQUIRE companion
++34. **ROOT CAUSE FOUND (2026-11-08 profiler window, route B)**: sglang#48399
++    (27bc1a06, 11-06) replaced `is_sm100_or_newer()` (capability>=10,
++    includes our SM121/GB10) with STRICT `current_arch().is_sm(10)` in the
++    v41 indexer gates — GB10 fell to the torch fallback whose
++    `scoring.prefill_requests` calls `Tensor.tolist()` ONCE PER LAYER
++    (synchronous D2H). Torch-profiler trace (193M, /tmp/prof-traces on head,
++    copy /tmp/prof): window 18.4s, cudaMemcpyAsync 9.9s (n=3117) under
++    aten::to/_to_copy from full_topk._torch_prefill; ~125ms/layer fixed
++    cost = the 8x prefill regression. NOT a wheel problem at all — every
++    benched kernel (sparse-mla, deep-gemm metadata, deep-gemm paged mqa
++    NEW-vs-LEGACY at 18.96/18.90ms) was equal across stacks; the DeepGEMM
++    path simply never ran.
++35. **bp6 FIX STAGED (feebf4c)**: patch_indexer_gate_48399 restores the SM120
++    family (`is_sm(10) or is_sm(12)`) in both gate definitions (v41_indexer
++    is_sm100 + index_logits _is_sm100); call sites untouched (candidate gate
++    also flips but sm120_candidates adapter already forces dense there).
++    Synthetic test green; Dockerfile bp6 row wired. **bp6 window = build +
++    flip + full gates: expected full recovery of prefill AND retention of
++    the whole migration-#2 payload** (dspark fusion, +4.6% pool, etc.).
++    Upstream interaction: file an issue/PR — SM120 exclusion is unproven
++    conservatism; our fleet has weeks of SM121 DeepGEMM evidence + kernel
++    parity bench.
++36. **Profiler-window ops note**: the window's rollback serve crashed once
++    (child sigquit 06:06) and needed a manual recovery serve; trace was
++    captured BEFORE the crash (docker cp race won). Recovery serve healthy
++    thereafter.
+    **Lesson for the skill**: wheel bumps on this base REQUIRE companion
     packages (cubin + jit-cache) from flashinfer.ai/whl at build time — a
     version-matched flashinfer alone is NOT sufficient when the base image
     carries older companions.
