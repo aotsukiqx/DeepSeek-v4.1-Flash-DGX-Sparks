@@ -41,7 +41,10 @@ axes=("engram.py","speculative/","mem_cache/","deepseek_v4_backend.py","deepseek
 n=0
 for c in data:
     msg=c["commit"]["message"].splitlines()[0]
-    if any(k in msg.lower() for k in ("dsv4","dspark","engram","indexer","verify","sm120")):
+    # keyword census: include the naming variants actually used upstream
+    keys = ("dsv4","dsv4.1","dsv-v4","dspark","engram","indexer","verify",
+            "sm120","sm121","deepseek-v4","dgx","spark")
+    if any(k in msg.lower() for k in keys):
         n+=1
 print(n)' 2>/dev/null || echo "?")
 echo "$(ts) sglang-main dsv41-relevant-since-watch=$newc" >> "$LOG"

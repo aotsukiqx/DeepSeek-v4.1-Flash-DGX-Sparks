@@ -1,6 +1,10 @@
 # Upstream watch status
 
-Dated entries are appended by the Orca automation "DSV41 upstream watch" (cron `17 */4 * * *` Asia/Shanghai). Script: `scripts/verify/upstream_watch.sh`.
+Dated entries are appended by the Orca automation "DSV41 upstream watch" (id `646fe624-5933-4130-b8d7-4d49f604d181`, cron `17 */4 * * *` Asia/Shanghai, runs in this worktree, agent **omp**, enabled). Script: `scripts/verify/upstream_watch.sh` (local execution only).
+
+Provider note: the same automation run under the `claude` agent blocks on Claude Code's interactive bypass-permissions consent dialog (run 1, 2026-11-09), so `omp` is an intentional choice; switching back to claude needs that consent accepted once in the Orca terminal.
+
+Keyword list widened 2026-11-09 after run 1 self-critique (adds `deepseek-v4`, `dsv-v4`, `dgx`, `spark`, `sm121`). Alert counts are triggers, not censuses — triage stays manual.
 
 ## 2026-11-09T05:58Z — watch run (first recorded entry)
 
