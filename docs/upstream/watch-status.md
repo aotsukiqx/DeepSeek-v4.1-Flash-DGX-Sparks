@@ -200,3 +200,100 @@ Notes:
    to file" header in `docs/upstream/indexer-arch-gate-48399-bug.md` (filed as #49173, fix merged).
 6. `gh` auth still invalid for the automation identity (3rd consecutive run). Unauthenticated REST
    works at the 4-hour poll cadence (~14 req/run of 60/h).
+
+## 2026-11-09T16:22Z (2026-11-10 00:22 +08) — watch run #4
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, no stdout; raised `/tmp/dsv41-upstream-alert`
+with 3 lines (`#49173` 2 comments + closed; `10 DSV4-relevant commits`). Log entries
+`16:17:34Z–16:17:45Z`. `gh auth status` → **token for `aotsukiqx` still invalid** (4th consecutive
+run): `gh issue view` / `gh pr view` return HTTP 401, so issues/PRs/commits were read with
+unauthenticated REST — payloads are equivalent for the fields used here.
+
+Fetch note: the `commits?per_page=100&since=…` body over plain HTTP/2 was truncated mid-JSON
+(`Unterminated string… char 336736`) through this proxy path. Re-fetched with `--http1.1
+--compressed` (and small `per_page` when paging the delta). No data lost; that is why the commit
+census below was regenerated from the full list rather than from the watcher log alone.
+
+### Issues / PR — no new activity
+
+- **#49173** — **closed** 2026-11-09T07:26:52Z. Resolution is the merge of **#49182**; comment count
+  still 2, last maintainer comment 2026-11-08T15:48:22Z — i.e. **no maintainer comment newer than
+  what the 05:58Z entry already absorbed**, and nothing new to read this run.
+- **#49174** — open, **0 comments**, untouched since 2026-11-08T14:34:50Z (now >24 h, still
+  unacknowledged). No upstream engagement on the post-hoc `finished_len` pool desync.
+- **#49182** — unchanged since the previous entry: `state=closed`, `merged=true`,
+  `merged_at=2026-11-09T07:26:50Z`, `merged_by=kpham-sgl`, merge commit
+  **`5e6995dd0953189b538bc35152954414335f4970`**, `headRefOid`
+  `a49ff4d7d3f7add55279e0af3c5208d630843413` (the approved head). **Next-pin candidate stands as
+  recorded**; this run adds no candidate of this class.
+
+### sglang main since 2026-11-08T14:00Z
+
+**76 commits** at 16:20Z (+5 vs the 71 recorded at 12:20Z). Two of the five are DSV4-axis; they are
+also the reason the watcher's census moved 8 → 10 keyword hits:
+
+| Commit | PR | Subject | Class |
+|---|---|---|---|
+| `704681229f1c` | #47627 | `[Perf] [NVIDIA] dspark: Stage DSv4.1 long-context target verify metadata beside the draft` | **NO-OP at bp5** (conditional pin-migration; see notes) |
+| `86ed6d9c63` | #47581 | `[Perf] [NPU] dspark: Integrate argmax and verify scheduler kernels` | **NO-OP** (NPU dispatch) |
+| `60d8d1f8e425` | #48786 | `[Feat] HiCache: add tma copy kernel for unified layout` | **NO-OP** (HiCache not enabled) |
+| `ab84df61dd40` | #46168 | `[Perf] mooncake: Cut the host time of direct linker layer-wise loads` | **NO-OP** (no mooncake/linker tier) |
+| `5c5fe25edffd` | #49318 | `[Test] npu/glm5.3: Add 2P2D 32P PD-separation perf case` | **NO-OP** (NPU CI + Ascend yaml) |
+
+Notes / evidence:
+
+- **#47627** is on the dspark verify area but **not applicable to this line and not a candidate for
+  the decode gap**. It adds `candidate_filtered` to `DSV41_EARLY_VERIFY_VARIANTS` (both DSpark verify
+  variants then stage target metadata on a side stream beside the draft graph instead of rebuilding
+  it in-graph for contexts >16K tokens). Dependencies are hard: `SGLANG_OPT_DSV41_TARGET_METADATA_EARLY`
+  (#45450) **and** the NVIDIA megakernel plugin
+  (`SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION=1`). This checkout has **zero references** to either
+  (`grep -r 'NV_MEGA\|mega_runtime\|SGLANG_OPT_DSV41_TARGET_METADATA_EARLY'` → no hits; no vendored
+  sglang tree at reset, so no apply check was attempted — per policy that is optional and not needed
+  given the config gate). Touched files: `environ.py`, `layers/attention/graph_variants.py`,
+  `runner/decode_cuda_graph_runner.py`, +17-line unit test.
+  Scale check against our open item: upstream measures **−20.8 µs/step p50 at bs=1 on GB300**
+  (verify head kernels 56 → 19.5 µs), versus our attributed **~44 ms/step** host-sync gap — three
+  orders of magnitude apart, different mechanism. It therefore neither explains nor closes the
+  verify-sync gap; if anything it bounds the generic in-graph metadata build at microseconds and so
+  **reinforces** that our millisecond-scale gap is the host-sync, not the metadata build.
+- **#47581** landed 2026-11-09T12:19:04Z — **one minute before the previous entry's snapshot**
+  (12:20Z), which is why it was missed rather than misclassified. +19 lines in
+  `kernels/ops/sampling/__init__.py` and `kernels/ops/speculative/dspark/dspark_schedule.py`:
+  NPU kernel dispatch for dspark argmax + verify scheduling. Ascend-only; nothing on the GB10 CUDA
+  path. Worth noting only as signal: upstream is actively fusing dspark verify scheduling on two
+  backends in parallel, so future edits to `dspark_schedule.py` should be expected at the next pin.
+- **#48786 / #46168**: HiCache TMA page-copy kernel (`kernels/ops/kvcache/`) and mooncake
+  direct-linker host-time cuts (`mem_cache/storage/mooncake_store/`, `hybrid_cache/linker_pool_assembler.py`).
+  This checkout is a single-node TP4 layout with no hierarchical host tier and no mooncake:
+  `grep -rn 'mooncake\|hicache\|hi_cache\|enable-hierarchical'` → **no hits**. NO-OP on the pin. Both
+  sit adjacent to the previously recorded mem_cache window-sub-pool train (#48009–#48014, #27267),
+  so they will ride along in the same pin-migration re-derive.
+- **#49318** touches only `.github/workflows/nightly-test-npu.yml`, Ascend e2e jinja/aisbench
+  harness and one NPU test file. No product code.
+- Watcher census: count is now literally consistent with a fresh full-list scan (10 hits / 76
+  commits) including both dspark commits. The residual defect I flagged earlier is still there: the
+  query window is a **fixed** `BASE_CUTOFF`, so the alert line stays "10 DSV4-relevant commits" on
+  every later run regardless of delta — a quiet run reads as a hit forever. Proposal (operator
+  decision, not applied): persist the last-seen head sha (committed stamp, not `/tmp`, which is
+  wiped by upgrades) and count only commits newer than it, or change the alert wording to
+  "cumulative". Until then treat the count as cumulative and confirm the delta by subject scan.
+
+### Action items
+
+1. **No maintenance window triggered; nothing to do for the fleet.** This automation does not
+   schedule or perform deploys, and did not contact the cluster.
+2. Next-pin candidate for migration #2 remains **`5e6995dd`** (#49182). No new candidate this run:
+   #47627 is config-gated off, the rest are NO-OP. bp6 prefill hunks still collapse at that pin;
+   decode decision (torch override vs DeepGEMM decode A/B in-window) unchanged.
+3. **Decode gap stays open** (dspark verify host-sync, diffuse, ~44 ms/step). #47627 isolates a
+   microsecond-class metadata build cost and does not touch the host-sync path — no reason to
+   re-open or re-order the dspark verify rework on account of this run.
+4. **#49174** unacknowledged >24 h. Holding action: anything unsafely aborting/resubmitting long
+   generations on this line (bd headstriking / `FINISH_ABORT` loops) still risks the negative-residue
+   pool desync; keep pool reasoning on such an experiment.
+5. Watch `dspark_schedule.py` / verify-variant edits at the next pin (#47581 and #47627 both move
+   inside that area); pin-migration conflict churn is now higher than the last entry assumed.
+6. `gh` auth dead for the automation identity (**4th** consecutive run) — re-auth `aotsukiqx` (or
+   another account) at the next opportunity, otherwise REST-only access continues. Budget this run:
+   22/60 core requests (extra fetch/retry due to the truncation noted above).
