@@ -21,7 +21,7 @@ for n in $ISSUES; do
   state=$(echo "$resp" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("state","?"))' 2>/dev/null)
   updated=$(echo "$resp" | python3 -c 'import json,sys; print(json.load(sys.stdin).get("updated_at","?"))' 2>/dev/null)
   echo "$(ts) issue#$n state=$state comments=$comments updated=$updated" >> "$LOG"
-  if [ "$comments" != "0" ] && [ "$comments" != "?" ] && [ "$comments" != "$CACHED_COMMENTS_$n" ]; then
+  if [ "$comments" != "0" ] && [ "$comments" != "?" ] && [ "$comments" != "0" ]; then
     echo "ISSUE #$n has $comments comments (updated $updated) — read maintainer response: https://github.com/sgl-project/sglang/issues/$n" >> "$ALERT.tmp"
     need_alert=1
   fi
