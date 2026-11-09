@@ -98,3 +98,105 @@ the next script touch (docs-only automation keeps commits to this file).
 5. `gh` login remains invalid for the automation identity; either re-auth or keep using
    unauthenticated REST (60 req/h limit, enough for this poll cadence).
 
+
+## 2026-11-09T12:20Z — watch run #3 (PR #49182 MERGED → bp6 gate chain collapses)
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 (log 12:17:43Z–12:17:47Z), alert raised
+(`#49173` closed, `8` keyword-hit commits). `gh auth status` → **still invalid token for
+`aotsukiqx`** (logged out); all reads below via unauthenticated GitHub REST (41/60 req left at run
+end). `gh issue view` / `gh pr view` unusable again — REST equivalents used.
+
+### Issues
+
+- **#49173 — CLOSED** (2026-11-09T07:26:52Z, two seconds after the fix PR squash-merged). Comment
+  count still 2, i.e. **no comment arrived between the 05:58Z run and closure**; the close is the
+  merge event itself. Our filed SM120 DeepGEMM indexer gate bug is therefore resolved upstream.
+- **#49174** — open, **0 comments**, untouched since 2026-11-08T14:34:50Z. Still no upstream
+  engagement on the post-hoc `finished_len` / loop-abort pool desync.
+
+### PR #49182 — MERGED (the delta that matters)
+
+- **Merged (squash) 2026-11-09T07:26:50Z** as **`5e6995dd0953189b538bc35152954414335f4970`**
+  (single parent `c394281b4f66`, base `main`).
+- **Head merged verbatim**: `headRefOid` still `a49ff4d7d3f7add55279e0af3c5208d630843413` — the
+  approved head, no re-push after approval.
+- Files (verified): `srt/layers/attention/dsv4/v41_indexer/__init__.py` +19/−4,
+  `.../v41_indexer/full_topk.py` +1/−1, new CPU test
+  `test/registered/unit/layers/test_dsv41_indexer_arch_gates.py` +184.
+- Content (verified from the patch): adds `is_sm100_or_newer()` =
+  `current_arch().is_sm_at_least(10)`; **both** `_use_deep_gemm_prefill()` and
+  `use_deep_gemm_decode` switch to it; `make_candidate_indexer()` deliberately stays strict
+  `is_sm100()` with an explanatory comment (sparse-table kernels assert `arch == 10`).
+  `_torch_prefill`'s per-layer `Tensor.tolist()` is **untouched** — Kylinny's second half of the
+  plan (proposed in #49173) did not land, so any prefill cost we still measure there is ours to
+  patch.
+
+**Conflict with our current bp6v3 — read before the next pin migrate:** our
+`runtime/patch_indexer_gate_48399.py` widens the **prefill gate only** and intentionally leaves
+decode strict, because bp6 v2 measured SM120 DeepGEMM decode at **36.7 tok/s, below the ≥42 gate**
+(~17% regression vs bp5's 0.2.3/bf16 route; 0.2.6's arch-12 contract forces fp32 weights). Upstream
+restores **decode too**. First pin after `5e6995dd` therefore re-lands the regression we withheld on
+purpose:
+
+- prefill gate hunks → drop from bp6 (now upstream), no behavior change;
+- decode → must stay on the torch path until an authorised window measures SM120 DeepGEMM decode
+  under 0.2.6 (paired qeval, dual gates cold ≥2500 / decode ≥42). The cheap shape is to shrink the
+  bp chain to a single one-line `use_deep_gemm_decode` override.
+
+### sglang main since 2026-11-08T14:00Z
+
+71 commits total (+27 vs the 44 recorded at 05:58Z); **27 new since the previous run**, 8
+keyword-hits on the widened census (re-checked against all 27 subjects by hand, so no commit is
+missed by keyword drift this run):
+
+| Commit | PR | Subject | Class |
+|---|---|---|---|
+| `5e6995dd0953` | #49182 | `[Fix] [NVIDIA] dsv4: Restore SM120/SM121 to the DeepGEMM indexer gates` | **pin-migration-class** (absorbs bp6 prefill gate; see conflict above) |
+| `4fc912142ffc` | #47658 | `[Perf] SM120: honour SGLANG_OPT_DEEPGEMM_HC_PRENORM for the DeepSeek-V4.1 compensated mhc projection` | **pin-migration-class** (not bp) |
+| `a1ae63265866` | #47493 | `[Fix] dp-attention: Trim MLP-sync pad rows from extend outputs before the draft extend` | **NO-OP** (pure-TP line, `dp_size=1`, no attention DP) |
+| `48da6bd19044` | #27267 | `[Feat] mem_cache: hugepage preflight + allocation modes for host pools` | **pin-migration-class** (mem_cache axis) |
+| `6ea644d6cec1` | #48011 | `[Refactor] mem_cache: layout planner + request demand for the unified chain` | **pin-migration-class** (major) |
+| `2cbb66f563db` | #48012 | `[Refactor] mem_cache: plan/admit/reclaim unified memory through one layout search` | **pin-migration-class** (major) |
+| `c89cedec2671` | #48013 | `[Refactor] mem_cache: per-window-sub-pool host pool, PD entry and metrics` | **pin-migration-class** (major) |
+| `388d03b7759a` | #48014 | `[Feat] attention: serve several window sub-pools per runner in the Triton backend` | **pin-migration-class** (major) |
+| `7455745a5a8d` | #48010 | `[Refactor] mem_cache: one lifecycle state + one reset for unified request rows` | **pin-migration-class** |
+| `72edb269c2d5` | #48009 | `[Refactor] disaggregation: per-row unified PD transfers, page reuse once quiescent` | **pin-migration-class** |
+
+NO-OP for this line (read, no DSV4 surface): `c69fb82a` #48871 NVFP4-MoE/Marlin, `e60f7e90`
+#43675 Kimi-K3 graph reload, `a4b88011` #48656 comfyui, `5325cfabd7` #45727 hisparse MLA swap,
+`ff762d62` #48942 jit FP32 activations, `2f42565f` #49260 docs/cookbook, `f01950a8` #49053 AMD CI,
+`397254e9` #46577 inkling graph padding, `4b2137e5` #46663 gemma4, `c81230bf` #46586 abort on client
+disconnect, `6ec54519` #48405 AMD fp8 KV, `50dcb7fc` #46050 diffusion docs, `c394281b` #48662 CLI
+cookbook export, `7b917c0e` #48812 weight_checker device, `e8017bc6` #48364 CPU Intern-S2,
+`d910efa0` #48583 XPU kernel, `fb359066` #49218 disaggregation staging unregister.
+
+Notes:
+
+- **#47658** is arch-gate broadening of the same family as #49182: adds `get_platform().is_sm120` to
+  the compensated mhc route in `models/deepseek_v4.py` and to `models/deepseek_v4_mhc.py`'s
+  `_mix_stats_impl`, routing SM120 to the pure-Triton `split_bf16_hc_weight` (the tf32 branch is
+  less accurate and rebuilds parts per row count). Gated by `SGLANG_OPT_DEEPGEMM_HC_PRENORM`, which
+  this line does not set → **no bp action**; it only matters if an hc-prenorm trial is wanted.
+  Anchor caveat: needs `get_platform().is_sm120` on the target tree (we cannot confirm it at pin
+  `8817f63c` without blobs) — check at apply time, don't assume.
+- **mem_cache "window sub-pool" train (#48009–#48014, #27267)** is a coherent multi-PR rewrite of
+  host-pool planning/admission plus Triton window sub-pools, landing within one hour. Our line is a
+  single-window DSV41 TP4 layout with hand-tuned pool (~6.47M) and `window_guard` floor; expect
+  real re-derive work and conflict churn at the next pin. Not bp-able chunk-by-chunk.
+
+### Action items
+
+1. **No maintenance window triggered; nothing to do for the fleet.** This automation does not
+   schedule or perform deploys — a window requires explicit human authorisation.
+2. **Next-pin candidate recorded: `5e6995dd`** (#49182 merge). At that pin: drop bp6v3's prefill-gate
+   hunks, keep decode on torch (override) or measure DeepGEMM decode in-window against the ≥42
+   gate. bp6 patch chain shrinks to that single decision.
+3. The pin's **dspark verify host-sync decode gap (~44 ms/step)** stays **open**; #49182 does not
+   address it (verify path untouched).
+4. **#49174** remains unacknowledged — keep watching; the underlying loop-abort `finished_len`
+   desync only matters for actions aborting/resubmitting long gens, i.e. any bd headstriking on
+   this line without pool reasoning.
+5. Doc debt (not fixed here, docs-only automation): this watch entry supersedes the "Status: ready
+   to file" header in `docs/upstream/indexer-arch-gate-48399-bug.md` (filed as #49173, fix merged).
+6. `gh` auth still invalid for the automation identity (3rd consecutive run). Unauthenticated REST
+   works at the 4-hour poll cadence (~14 req/run of 60/h).
