@@ -709,6 +709,16 @@ So mig decode 37.8 vs prod 44.0 (-14%) = prefill_sp OFF (~-8%) + hc_fused OFF (~
 adapters ARE production-proven. To audit env vars in future: `grep -o
 'DSV41_[A-Z_0-9]*=[^ "]*' .env.tp4 | sort -u` (never `^`-anchor).
 
+### Upstream watch — Orca automation (2026-11-09)
+
+Code and automation live in THIS repository (local Mac checkout). Processing rule:
+change locally → commit/push origin → operator relays → deploy only in an authorised window.
+Nothing that is not deploy traffic is installed onto the Spark fleet.
+
+- `scripts/verify/upstream_watch.sh` — polls sgl-project/sglang#49173 / #49174 (state+comments) and DSV4-relevant commits on main since 2026-11-08; writes `/tmp/upstream-watch.log` on the executing host and raises `/tmp/dsv41-upstream-alert` when action is needed.
+- **Orca automation "DSV41 upstream watch"** (id 646fe624…) — human-scheduled in Orca: cron `17 */4 * * *` Asia/Shanghai, enabled, runs in this worktree (`path:…/DeepSeek-v4.1-Flash-DGX-Sparks`) with the claude agent; prompt instructs: run the script locally, triage comments/PRs/commits, append `docs/upstream/watch-status.md`, commit+push docs only, never touch production, never schedule a deploy.
+- Previous implementation used a crontab on the head node and was REMOVED 2026-11-09 (automation must not live on production).
+
 ## 9. Historical Context (for reference)
 
 - `docs/pin-migration-plan-20261024.md` — Full migration evaluation (dry-run, hash drift, decision table)
