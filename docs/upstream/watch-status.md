@@ -297,3 +297,111 @@ Notes / evidence:
 6. `gh` auth dead for the automation identity (**4th** consecutive run) — re-auth `aotsukiqx` (or
    another account) at the next opportunity, otherwise REST-only access continues. Budget this run:
    22/60 core requests (extra fetch/retry due to the truncation noted above).
+
+## 2026-11-09T20:35Z (2026-11-10 04:35 +08) — watch run #5
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, no stdout; alert file raised with the same
+three cumulative trigger lines (#49173 "2 comments" + "CLOSED"; "11 DSV4-relevant commits"). Log
+entries `20:17:41Z–20:17:49Z`. `gh auth status` → **token for `aotsukiqx` still invalid** (**5th**
+consecutive run): `gh issue view` / `gh pr view` unusable, unauthenticated REST used throughout.
+Also read: `sgl-project/DeepGEMM` tags/raw files (for the wheel-bump diff) and PyPI metadata for
+`sgl-deep-gemm` (availability only, no install). Budget: 21/60 core requests.
+
+### Issues / PRs — no new maintainer activity
+
+- **#49173** — closed 2026-11-09T07:26:52Z by BBuf; **2 comments**, last still
+  2026-11-08T15:48:22Z. Resolution remains the #49182 merge; nothing new to read.
+- **#49174** — open, **0 comments**, untouched since 2026-11-08T14:34:50Z (>30 h, no maintainer
+  response). **But it now has a referencing fix PR: #49306** (see below) — the comment-count
+  trigger cannot see PR bodies, so "0 comments" here no longer means "no activity".
+- **#49182** — unchanged since run #4: `merged=true`, `merged_at=2026-11-09T07:26:50Z`,
+  `merged_by=BBuf`, merge commit **`5e6995dd`**, `head` still **`a49ff4d7`** = the approved head
+  → **merged verbatim, no post-approval content change**. Next-pin candidate record stands.
+
+### PR #49306 — community fix for #49174 (open, unmerged)
+
+- Title: `[Fix] scheduler: Prevent pool accounting desync on finished_len trim`; author
+  `devtyagi3909` (not a maintainer); created **2026-11-09T12:56:03Z**, last updated 12:56:58Z;
+  head **`4e154403`**, base `main`, `draft=false`, `mergeable_state=unknown`.
+- Body says `closes #49174` and matches our filed mechanism exactly: post-hoc `finished_len`
+  trim shrinks `owned_kv_len` below `cache_protected_len`, `_release_overallocated_kv_indices`
+  then frees tree-protected prefix pages, invariant checker reports negative residue.
+- Diff is small and on our core surface: `managers/schedule_batch.py` **+37/−4**
+  (`Req.finish_with_trim` API + floor `owned_kv_len` at `cache_protected_len` + contract doc) and
+  `scheduler_components/invariant_checker.py` **+8/−2** (signed residue in message), plus unit
+  tests. `bp-class` in shape, but it is **a fix for an invariant violation we did not trigger on
+  bp5** — no reason to backport it as a runtime patch.
+- CI in the PR body is **red on every job** (Base/Extra/AMD ROCm 10 `:x`). Not merged, not a
+  pin candidate. Watch only.
+
+### sglang main since 2026-11-08T14:00Z
+
+**84 commits** at 20:34Z (+8 vs the 76 recorded at 16:20Z). All 8 read by subject/file scope:
+
+| Commit | PR | Subject | Class |
+|---|---|---|---|
+| `dfaca5681ddc` | #46934 | `[Fix] hicache: Restore sub-window SWA L3 hits under a mid-tree anchor` | **NO-OP at bp5** (HiCache off; mem_cache pin-cluster rider) |
+| `4373137b6f80` | #49020 | `[CI] diffusion: Add H100 computable runner baselines…` | NO-OP (CI baseline JSON) |
+| `6a79760533e7` | #49227 | `[CI] [CPU] cpu-graph: Import STATE_PART from decl…` | NO-OP (test import) |
+| `0f989aa64022` | #49135 | `[Perf] kda: shorten the MTP verify phase-1 critical path…` | **NO-OP** (Kimi K3 KDA kernel; census false positive on "verify") |
+| `a478cd21e070` | #48984 | `[Perf] mhc: one-pass DeepGEMM prenorm GEMM; revert the sm107 decode MegaMoE SM reserve` | **pin-migration-class — DeepGEMM 0.2.6→0.2.7** |
+| `d959849938eb` | #49205 | `[Feat] [AMD] custom-all-reduce: DPX hierarchical 2shot_push on MI450 (gfx1250)` | NO-OP (AMD arch, carv2 off) |
+| `67ff3b3938b2` | #48418 | `[Fix] diffusion: Count reclaimable page cache as available inside a cgroup cap` | NO-OP (multimodal_gen runtime, not srt) |
+| `6d143e51b2a4` | #47750 | `[Fix] score: Validate logical item and MIS hidden-state row counts` | NO-OP (scoring mixin; not served here) |
+
+Notes / evidence:
+
+- **#48984 is the event of the run**: it bumps the tree's official kernel dependency from
+  `sgl-deep-gemm==0.2.6` to **`0.2.7`** in `python/pyproject.toml` **and** `docker/Dockerfile.cu134`
+  (`DEEPGEMM_REF=v0.2.7`; wheels build from `sgl-project/DeepGEMM`). Code side: +16 lines adding
+  `tf32_hc_prenorm_gemm_dual` to `srt/layers/deep_gemm_wrapper/entrypoint.py`, used by
+  `kernels/ops/layernorm/mhc.py` only under **`current_arch().is_sm(10)`** — SM12x keeps the old
+  two-call `tf32_hc_prenorm_gemm` path. The `mega_moe.py` hunk removes the SM107 decode-reserved-SM
+  special case; our MoE is `b12x_next` (`SGLANG_OPT_DEEPGEMM_MEGA_GATE` default False), so **MegaMoE
+  remains a NO-OP branch**. Consistency check on our side: `adapter/hc_fused.py` patches
+  `hc_mix_stats_sinkhorn` (a different symbol), no local code imports the dual API.
+- **Direct answer to the bp6 round-2 arm "(ii) try deep-gemm 0.2.7 (same assert?)" — YES, same
+  assert.** Read at both tags: `csrc/apis/attention.hpp` line **50** (v0.2.6) and line **49**
+  (v0.2.7) both carry
+  `weights.scalar_type() == (arch_major == 10 ? kBFloat16 : kFloat32)` and both set
+  `out_dtype = arch_major == 10 ? kBFloat16 : kFloat32`. So 0.2.7 does **not** lift the arch-12
+  fp32-weights contract that put bp6v2 decode at 36.7. A version bump alone cannot recover the
+  winning DeepGEMM+bf16 combo; the remaining arms are the wheel-local assert patch or an in-window
+  decode measurement.
+- Migration viability of the bump is otherwise fine: PyPI publishes **`sgl_deep_gemm-0.2.7-py3-none-manylinux2014_aarch64.whl`**
+  (5.1 MB), so the arm64 image row can move as it did for 0.2.6. Still a pin-pre-flight item:
+  wheel row + in-image import/API audit (the wrapper now exports one more function; `import
+  deep_gemm` remains satisfied by the wheel, no source vendored here, so no apply check was done).
+- **#46934** touches `srt/mem_cache/` (`buffer_mode/pipeline.py` +26, `unified_cache/components/swa.py`,
+  `unified_radix_cache.py`, rust radix tree). It is HiCache staged-prefetch / storage-attachment
+  plumbing (`prepare_staged_prefetch`, `init_hicache`), and HiCache/host-tier is disabled on this
+  single-node layout — NO-OP at bp5. It partially reverts
+  `_storage_attachment.resolve_prefetch_threshold` integration from the earlier storage train, i.e.
+  it rides the recorded mem_cache window-sub-pool pin cluster rather than fighting it.
+- **Census quality, stated plainly**: of the 8 new commits only 2 are on-surface (#48984, #46934)
+  and **both missed the keyword filter** (`mhc`/`DeepGEMM`, `hicache`); the only keyword hit
+  (#49135) was a false positive on "verify". Cumulative count is now 11/84. Fixed-cutoff wording
+  defect persists — alert text stays "11 commits" on an otherwise quiet run.
+
+### Action items
+
+1. **No maintenance window triggered; nothing done to the fleet.** This run was GitHub + local
+   checkout only (no SSH, no docker, no schedule, no deploy). Destructive actions: none.
+2. **Next-pin candidate remains `5e6995dd` (#49182…)**, merged from the approved head — but the
+   pre-flight for any pin at ≥ `a478cd21e070` now **must also move `sgl-deep-gemm` 0.2.6→0.2.7**
+   in the image row (aarch64 wheel exists). Gates themselves are unchanged by #48984.
+3. **Decode plan update**: 0.2.7 provably does not relax the arch-12 fp32-weights assert, so the
+   "winning combo" remains blocked. Do **not** schedule a window on a version-bump hypothesis; if
+   decode measurement is resumed, go straight to the wheel-local assert patch or the r3 bisect
+   variant plan already prepared.
+4. **#49306** (community fix, closes #49174, CI red) is open and unmerged. Monitor; if a maintainer
+   adopts it, absorb at that pin. Holding action unchanged: anything unsafely aborting/resubmitting
+   long generations on this line (bd headstriking / `FINISH_ABORT` loops) is still exposed to area-1
+   pool desync.
+5. Adjacent **open, unmerged** PRs surfaced while verifying references — no preset action, recheck
+   only: **#43009** (`deepseek-v4`: rebuild evicted SWA window on cache hit), **#49319** (SM12x FA4
+   split-KV outside the arch decode policy), **#45264** (mhc `BLOCK_K=32` hc_mix on SM120),
+   **#41898** (dsa: reject unsupported k-pool backends before weight load).
+6. `gh` auth dead for the automation identity (**5th** run); re-auth `aotsukiqx` at the next
+   operator opportunity. REST-only is viable but the #49306 discovery shows body-level references
+   are easy to miss with comment-count triggers.
