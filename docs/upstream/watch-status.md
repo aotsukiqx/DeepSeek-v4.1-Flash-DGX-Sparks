@@ -661,3 +661,96 @@ matched on its subject (the "materials missed the filter" failure mode of run #6
 6. `gh` auth dead for the automation identity (**7th run**); operator re-auth of `aotsukiqx` remains
    the standing fix. REST-only stays viable for issues/PRs, but #49306 showed body-level references
    are invisible to the comment-count trigger.
+
+## 2026-11-10T12:19Z (2026-11-10 20:19 +08) — watch run #8
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 (12:17:29Z–12:17:38Z); alert re-raised with the
+same three sticky lines (`#49173` comment count, `#49173` CLOSED, cumulative commit count) and
+consumed after acting. `gh auth status` → **invalid token for `aotsukiqx` (8th consecutive run)**;
+all reads via unauthenticated REST, `gh issue view`/`gh pr view` never attempted. Core budget
+56 → 47/60 (2 commit pages, 2 issues, 2 PRs, 2 commit details, 6 adjacent-PR polls, HEAD probe).
+Main HEAD at capture `2d93fbfe51` (`2026-11-10T11:13:23Z`). **Only in-repo change: this file.**
+
+### Issues — no new comment, no state change
+
+- **#49173** — closed `completed` `2026-11-09T07:26:52Z`, `comments=2` (both 2026-11-08) → unchanged
+  since run #1; the only referencing PR remains **#49182** (`merged`, head `a49ff4d7d3`, merge
+  `5e6995dd09`), already the next-pin candidate since run #3.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **fifth consecutive silent
+  run**. Issue search (title+body, PR only): exactly one hit, **#49306** — still open, unmerged,
+  head `4e1544039e`. No new body-level reference to either issue appeared; the alert is repeating
+  fixed facts, not reporting activity.
+
+### sglang main — 11 new commits, no DSV4-material change
+
+Census **18/142** (run #7: 18/131; +11 window commits, +0 keyword hits). Every subject since the
+run-#7 capture (`b2616cabbf` there belongs to run #7):
+
+| Commit | PR | Subject | Class |
+|---|---|---|---|
+| `2d93fbfe51` | #47917 | `[Feat] [NPU] longcat: Support Longcat2.0 for arch22 NPU` | NO-OP (NPU) |
+| `a2ffd21469` | #49335 | `[CI] pp: Launch the PP test servers on DEFAULT_URL_FOR_TEST` | NO-OP (CI) |
+| `626b95d503` | #43032 | `[Feat] Qwen3.8-Flash-Next: Avoid padded PLE prefill activations` | NO-OP (other model) |
+| `4c08984a69` | #48776 | `[Feat] kimi-k3: Read the thinking object, map reasoning effort onto K3 tiers` | NO-OP (other model) |
+| `533c067689` | #48615 | `[Fix] diffusion: Keep explicit cuDNN attention inside LTX breakable CUDA graphs` | NO-OP (diffusion) |
+| `ed06877072` | #49024 | `[Perf] [AMD] wan2.2: Gate FlyDSL norm and scale-shift fusion` | NO-OP (AMD) |
+| `3830fb0713` | #47685 | `[Perf] [NVIDIA] dflash: Top up decode KV pages for the whole batch on allocation steps` | **NO-OP here; pin bookkeeping** (DFlash-only call site) |
+| `670265cd4b` | #48994 | `[Refactor] moe: Rename --moe-a2a-backend flashinfer to flashinfer_nvlink_one_sided` | **NO-OP here; pin bookkeeping** (CLI enum rename, 31 files) |
+| `7e1cf12384` | #49509 | `[CI] NPU: increase NPU coverage timeout, relax non-denoise tolerance` | NO-OP (CI) |
+| `66f47cd634` | #49459 | `[CI] rust-server: Pass architectures to ModelConfig in the crash-dump test` | NO-OP (CI) |
+| `d50f98e7f8` | #48775 | `[Feat] kimi-k3: Stream tool-call arguments incrementally` | NO-OP (other model) |
+
+Details / evidence:
+
+- **#47685** touches a speculative module we do watch (`dflash_info_v2.py`), so the fetched diff
+  was checked: the new top-up helper is called **only** from `DFlashInfoV2.prepare_for_decode`.
+  Four files: `environ.py` (+4), `mem_cache/allocation_sizing.py` (+60, new
+  `add_spec_decode_headroom_pages`), `dflash_info_v2.py` (+11), one test. New env
+  **`SGLANG_OPT_SPEC_DECODE_HEADROOM_PAGES` defaults to 2**, i.e. any future tree running DFlash
+  takes batch-wide page headroom silently. Guard rails: no-op when `page_size == 1` or under a
+  HiSparse coordinator (`batch.hisparse_coordinator`), capped at 8 pages, and skipped when
+  `free < num_needed + bs*page_size + 4*extra` (paged-extend eviction demand). Our spec transform is
+  dspark (`dspark_*` files, per `runtime/bp6r3/*.patch`), and this checkout contains **zero**
+  `dflash` code references — class NO-OP. Playbook note: if a future pin or r3 branch routes DSV41
+  through `dflash_info_v2`, both page-allocation sizing **and** the extra one-allocation-per-step
+  cost need re-baselining before trusting earlier decode/cold numbers.
+- **#48994** changes a server-arg enum value. `grep -rn moe-a2a-backend` in this checkout: **0 hits**
+  (launchers, probes, runtime patches) and our MoE path is `b12x_next` → NO-OP now. Pin pre-flight:
+  the enum's test coverage moved (`test_platforms/...` style server-args tests, +35/−1), so re-run
+  the launcher arg audit at adoption; a relayed script that still passes the old `flashinfer` value
+  would fail arg validation rather than misroute.
+
+### Cross-checks
+
+- Arithmetic: run #7 total 131 + 11 = 142 ✓. The 11 shas in the table equal the shas returned after
+  `2026-11-10T08:25:48Z` (set comparison, no eye-balling), with `b2616cabbf` excluded as #44047 from
+  run #7.
+- **Keyword census misses both near-surface subjects** (`dflash`, `moe` stems absent from the
+  filter) — the counter stayed at 18 while two commits that change shared encoding/environ files
+  landed. Presence here comes from reading every subject, which remains mandatory. Scope still has
+  no DSV4 executable delta: model/spec/attention hits are NPU/AMD/diffusion/kimi/Qwen, and no commit
+  in this batch overlaps the recorded bp6r3 patch targets or `#49436`'s rename surface.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only (no SSH, no docker, no build, no serve, no schedule change). Only destructive
+   action: consuming the alert file.
+2. **Next-pin pre-flight rows now eight** (candidate remains **`5e6995dd`**): (a) DeepGEMM
+   0.2.6→0.2.7; (b) sgl-flash-mla 1.0.3→1.0.4; (c) #49411 kernel-split/dflash additions; (d) check
+   for `runner_backend/full_cuda_graph_backend.py` before evaluating #48860; (e) #49436 deferred-KV
+   rename/prefill-interleave audit; (f) #49420 JIT compile-arch/build-key change (only if the pin
+   postdates #45911); (g) **#48994** — MoE A2A enum rename, re-audit launcher CLI values; (h)
+   **#47685** — DFlash headroom env has a **non-zero default 2**; no dspark call site exists, verify
+   before enabling DFlash paths so page sizing is not double-counted.
+3. **Decode gate unchanged**: bp6 pool+prefill proven, decode gap still the dspark verify host-sync
+   pattern. No upstream sync removal landed here; r3 bisect plan stays as written.
+4. **#49306** still open/unmerged (CI red); #49174 silent for five runs. Exposure to
+   aborted/resubmitted long generations unchanged.
+5. Adjacent **open, unmerged** PRs re-verified this run: **#49499** (dsv4 prefill token block),
+   **#47478** (dsv41-engram P/D sharing), **#43009** (deepseek-v4 evicted-SWA rebuild), **#49319**
+   (SM12x FA4 KV split), **#45264** (mhc SM120 BLOCK_K=32), **#41898** (dsa k-pool guard). Watch
+   only; **#47685 is no longer in this list** (merged, triaged above).
+6. `gh` auth dead for the automation identity (**8th run**); operator re-auth of `aotsukiqx`
+   remains the standing fix. REST-only is sufficient for state/issues, and the search endpoint
+   covered body-level references this run.
