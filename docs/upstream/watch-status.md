@@ -535,3 +535,129 @@ Notes / evidence:
 5. `gh` auth still dead for the automation identity (**6th run**). REST-only remains viable;
    operator re-auth `aotsukiqx` is the standing fix.
 6. Adjacent open/unmerged PRs unchanged, no preset action: #49306, #43009, #49319, #45264, #41898.
+
+## 2026-11-10T08:27Z (2026-11-10 16:27 +08) — watch run #7
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 (twice: unpatched at 08:17Z, patched at 08:27Z);
+raised `/tmp/dsv41-upstream-alert` with three lines (sticky `#49173` count + CLOSED + commit count).
+Log lines 08:17:52Z–08:17:55Z and 08:27:42Z–08:27:52Z. `gh auth status` → **invalid token for
+`aotsukiqx` (7th consecutive run)**; everything read via unauthenticated GitHub REST (`gh issue view`/
+`gh pr view` not attempted). Main HEAD at capture `b2616cabbf` (`2026-11-10T08:25:48Z`). Alert
+consumed (`rm`) after acting. **Only in-repo change this run besides this file: the watcher census.**
+
+### Watcher census — fixed (count), semantics intentionally unchanged
+
+The DSV4 window since `2026-11-08T14:00Z` now holds **131 commits**, but the script fetched a single
+`per_page=100` page. Full pagination shows **18** keyword hits, not the 14 the page-limited query
+reports; the four omissions are all in the `11-08T14:00Z–11-09T02:5x` stretch already triaged in runs
+#1–#2, so nothing material was missed — the number was simply wrong, and this alone explains part of
+the run-to-run wobble (15 → 14) earlier entries credited only to the fixed cutoff.
+
+`scripts/verify/upstream_watch.sh` now pages until exhausted (bounded at 10 pages) and logs
+`dsv41-relevant-since-watch=18 window-commits=131`; the alert body quotes both. Trigger semantics are
+deliberately untouched: the count stays **window-cumulative**, so any hit since 11-08 keeps the alert
+sticky. A per-run delta would require persisting a head SHA; not done here (the prior entries' "leave
+script fixes to the next script touch" note now applies to that item).
+
+### Issues — no new upstream comment or state change
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `state_reason=completed`; still exactly **2 comments**,
+  both dated 2026-11-08, unchanged since run #1. Alert lines are sticky on the state/count, by design
+  of the script.
+- **#49182** (its fix PR) — unchanged: `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge commit
+  **`5e6995dd0953189b538bc35152954414335f4970`**, already recorded in run #3 as the next-pin
+  candidate. Nothing re-read.
+- **#49174** — open, **0 comments**, `updated_at` still `2026-11-08T14:34:50Z` → **fourth consecutive
+  silent run**. **#49306** (community fix) unchanged: open, unmerged, head
+  `4e1544039e3f84ba534a58613787c6f620756d5e`, `updated_at 2026-11-09T12:56:58Z`.
+
+### sglang main — 10 commits between run #6 and capture, +1 during write-up
+
+| Commit | PR | Subject | Class |
+|---|---|---|---|
+| `73bf84e90f` | #49436 | `[Fix] dspark: Write deferred draft KV only for carried requests` | **pin-migration-class** (see below) |
+| `29aaf75899` | #49420 | `[Fix] [NVIDIA] jit: Build sm_107a on CC 10.7, keeping sm_100f only for modules that use CUTLASS` | NO-OP here; pin bookkeeping (JIT arch API) |
+| `ae1347a5c3` | #45263 | `[Perf] [NVIDIA] fp8: Add Triton block-fp8 GEMM configs for RTX PRO 5000` | **NO-OP** (device-keyed to RTX PRO 5000) |
+| `b2616cabbf` | #44047 | `[Fix] openai: Validate sampling bounds and preserve chat output limits` | NO-OP for DSV4; **API-contract tightening** |
+| `fa703d685a` | #46944 | `[CI] [AMD] minimax-m3.1: MI35x MXFP4 + DSpark nightly accuracy gate` | NO-OP (AMD CI; bare keyword hit) |
+| `0c44fbff44` | #44566 | `[Perf] [AMD] Qwen3-Next: consume the fused AR+norm+quant output` | NO-OP (AMD) |
+| `d565013acd` | #47857 | `[Feat] [NPU] attention: enable mixed-chunk for pure MLA on the ascend backend` | NO-OP (NPU) |
+| `6dc7e3ea7e` | #44152 | `[Feat] score/embedding: raw embeddings, score rids, ... schedule-decision logging` | NO-OP |
+| `c678ef8dc4` | #49470 | `[Fix] CODEOWNERS: Restore prefill-only test ownership` | NO-OP |
+| `e03f9eef09` | #49461 | `[Fix] rust-server: Pass architectures to ModelConfig in test_rust_server_crash_dump` | NO-OP |
+| `2fb4f3db43` | #49453 | `[Doc] [AMD] cookbook: Match the Kimi-K3.1-Pro MI35x cells ...` | NO-OP |
+
+Notes / evidence:
+
+- **#49436 is the only material commit, and it is not the decode-gap fix.** Structure (12 files,
+  squash `73bf84e90f`, Liangsheng Yin):
+  `dspark_components/dspark_deferred_commit.py` → **`dspark_deferred_draft_kv.py`**,
+  `DeferredContextCommit` → **`DeferredDraftKVStore`**; removes the worker's
+  `_maybe_build_deferred_commit` (`dspark_worker_v2.py` +25/−94), `note_static_verify`,
+  `after_draft_forward` and the scalar host `staged_bs`; adds `note_staged(reqs)` which stores
+  `(req, retraction_count)` rows and a `before_draft_forward(graph_bs, reqs)` that writes **only rows
+  of requests this draft carries, with unchanged retraction_count**, leaving the staging pending
+  across an intervening prefill. Env names are untouched
+  (`SGLANG_DSPARK_DEFER_CONTEXT_KV`, `SGLANG_OPT_DSV41_DSPARK_ONE_LAUNCH_COMMIT_STAGE`, gated on
+  `SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION`); only their comments changed.
+  Full-diff scan: **zero production `cudaEventSynchronize` / `.item()` / `.cpu()` deltas** — the new
+  work is Python tuples/sets over the batch → the ~44 ms/step verify host-sync attribution stands.
+- **#49436 collision surface**: the bp6r3 V1–V3 reverts target `dspark_verify_window.py`,
+  `ragged_verify_kernels.py`, `decode_cuda_graph_runner.py`, `ragged_verify.py` (+ new test) — **no
+  file overlap**, so those patches do not need re-basing for it. What dies is any future dspark patch
+  anchored on `DeferredContextCommit` / `note_static_verify`. Cost: two O(bs) Python loops per step at
+  the pin; noise vs a 44 ms sync, but measure if the decode gate ever nears target.
+  Lineage: `docs/pin-migration-plan-20261024.md` already listed `dspark_deferred_commit` in the
+  reorganized dspark_components, so the machinery predates this window and must be assumed present
+  on the bp5 pin until the in-image tree is inspected.
+- **#49420** gates #45911's `sm_100f` fallback per module: `arch.MODULE_USES_CUTLASS =
+  ["deep_select_topk"]`, `get_compile_arch(kernel_name)`, module name threaded through `load_jit` and
+  the ninja `-gencode`, build key includes the target. CC 10.7-only (Vera Rubin) → **no SM120
+  behaviour**; recorded because it changes the JIT compile-arch surface and build-key hashing a pin
+  would absorb. Payload useful later: the DSV4 `dpsk_v4_topk_v2` cluster kernels are 49–56 KB static
+  smem and cannot build under `sm_100f` with nvcc 13.4 (they are `sm_90a/100a/103a/107a`); if a pin
+  build fails inside `topk_v2`, suspect the arch target before the source.
+- **#45263** is 8 JSONs under `kernels/ops/gemm/configs/`, all keyed
+  `device_name=NVIDIA_RTX_PRO_5000_72GB_Blackwell`, `block_shape=[32,32]`. Our device name is GB10 →
+  the lookup never matches → NO-OP, and upstream ships **no GB10-keyed Triton fp8 configs**. Keep
+  anyway as the enumerated DSV4.1-Flash dense shape list (`1792×5120, 25600×6144, 32768×1280,
+  4096×1280, 5120×1024, 5120×288, 5120×8192, 576×5120`) and as the tuning method if the Triton w8a8
+  path is ever exercised here.
+- **#44047** validates sampling bounds in `protocol.py` / `sampling_params.py` / `min_new_tokens.py`.
+  Nothing DSV4, but it **rejects out-of-bounds sampling parameters that used to pass through**, and
+  restores chat output-limit enforcement. At the next pin a client sending e.g. `temperature > 2` or
+  an invalid top-p/top-k pair gets a 400 instead of silent clamping; check our eval/probe scripts'
+  payloads before a window.
+- The one hit the keyword set does **not** see is `#45263` (subject says only "RTX PRO 5000"); it was
+  found by reading the subject list, not by the counter. This is the known census weakness in its
+  least harmful form — a device-keyed config PR, not a code change for this line.
+
+**Census quality**: 18/131 by the script's keyword set (was 14/100 before the fix); a widened local
+scan (adds `topk|deferred|moe|deepep` stems) finds 24/131. Of the 18, 3 are AMD/NPU/CI noise
+(#46944, #44566, #47857-plus-#49453 class). This run is otherwise complete: every DSV4-material commit
+matched on its subject (the "materials missed the filter" failure mode of run #6 did not repeat).
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only (no SSH, no docker, no build, no serve, no schedule change). Destructive actions:
+   none besides consuming the alert file.
+2. **Next-pin pre-flight rows now six** (candidate remains **`5e6995dd`**): (a) DeepGEMM 0.2.6→0.2.7;
+   (b) sgl-flash-mla 1.0.3→1.0.4; (c) #49411 kernel-split/dflash additions; (d) confirm whether the
+   pin has `runner_backend/full_cuda_graph_backend.py` before evaluating #48860; (e) **#49436** —
+   audit the pin tree for `DeferredContextCommit`/`note_static_verify` references outside `srt/`, then
+   validate the deferred-KV contract under prefill↔decode interleaving (a prefill now leaves a staging
+   pending, and retracted rows are skipped); (f) **#49420** — JIT compile-arch API/build-key change;
+   verify only if that pin postdates #45911.
+3. **Decode gate unchanged**: bp6 pool+prefill done, decode gap still the dspark verify host-sync
+   pattern. This window contains no sync removal; the r3 bisect plan stays as written and any resumed
+   run must be re-based on a tree that includes #49436's renames if the pin moves first.
+4. **#49306** is still open/unmerged (CI red, body-referenced only); #49174 remains silent. Exposure to
+   aborted/resubmitted long generations on this line is unchanged.
+5. Adjacent **open, unmerged** PRs noticed this run — watch only, no preset action: **#49499**
+   (`dsv4: Size expand_prefill_causally's token block by batch size`), **#47685** (`dflash: Top up
+   decode KV pages for the whole batch on allocation steps`), **#47478** (`dsv41-engram: Share Engram
+   tables across P/D using EGM`). Previous list unchanged otherwise (#43009, #49319, #45264, #41898).
+6. `gh` auth dead for the automation identity (**7th run**); operator re-auth of `aotsukiqx` remains
+   the standing fix. REST-only stays viable for issues/PRs, but #49306 showed body-level references
+   are invisible to the comment-count trigger.

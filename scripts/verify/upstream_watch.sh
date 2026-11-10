@@ -31,25 +31,40 @@ for n in $ISSUES; do
   fi
 done
 
-# new commits on main touching DSV41 axes since cutoff
-newc=$(curl -sf -m 20 "https://api.github.com/repos/sgl-project/sglang/commits?since=$BASE_CUTOFF&per_page=100" 2>/dev/null \
-  | python3 -c '
-import json,sys
-try: data=json.load(sys.stdin)
-except Exception: sys.exit(0)
-axes=("engram.py","speculative/","mem_cache/","deepseek_v4_backend.py","deepseek_v4.py","deepseek_v4_dspark")
-n=0
-for c in data:
-    msg=c["commit"]["message"].splitlines()[0]
-    # keyword census: include the naming variants actually used upstream
-    keys = ("dsv4","dsv4.1","dsv-v4","dspark","engram","indexer","verify",
-            "sm120","sm121","deepseek-v4","dgx","spark")
-    if any(k in msg.lower() for k in keys):
-        n+=1
-print(n)' 2>/dev/null || echo "?")
-echo "$(ts) sglang-main dsv41-relevant-since-watch=$newc" >> "$LOG"
-if [ "$newc" != "?" ] && [ "$newc" -gt 0 ]; then
-  echo "$newc DSV41-relevant commit(s) landed on sglang main since watch began — run the settle sweep" >> "$ALERT.tmp"
+# New commits on main touching DSV4 axes since cutoff. The window has outgrown
+# 100 commits, so page until exhausted; counting only page 1 under-reported the
+# census (14 vs 18 on 2026-11-10) and is never a complete list anyway.
+newc=$(python3 - "$BASE_CUTOFF" <<'PY' 2>/dev/null || echo "? ?"
+import json, sys, urllib.parse, urllib.request
+
+cutoff = sys.argv[1]
+keys = ("dsv4", "dsv4.1", "dsv-v4", "dspark", "engram", "indexer", "verify",
+        "sm120", "sm121", "deepseek-v4", "dgx", "spark")
+hits = total = page = 0
+while page < 10:
+    page += 1
+    url = ("https://api.github.com/repos/sgl-project/sglang/commits?"
+           + urllib.parse.urlencode({"since": cutoff, "per_page": 100,
+                                     "page": page}))
+    req = urllib.request.Request(url, headers={"User-Agent": "dsv41-upstream-watch"})
+    try:
+        batch = json.load(urllib.request.urlopen(req, timeout=25))
+    except Exception:
+        sys.exit(1)
+    for c in batch:
+        total += 1
+        msg = c["commit"]["message"].splitlines()[0]
+        if any(k in msg.lower() for k in keys):
+            hits += 1
+    if len(batch) < 100:
+        break
+print(hits, total)
+PY
+)
+echo "$(ts) sglang-main dsv41-relevant-since-watch=${newc%% *} window-commits=${newc##* }" >> "$LOG"
+hits=${newc%% *}
+if [ "$hits" != "?" ] && [ "$hits" -gt 0 ] 2>/dev/null; then
+  echo "$hits DSV41-relevant commit(s) (of ${newc##* } in the window, since watch began) — run the settle sweep" >> "$ALERT.tmp"
   need_alert=1
 fi
 
