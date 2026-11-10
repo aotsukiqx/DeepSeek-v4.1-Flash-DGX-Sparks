@@ -405,3 +405,133 @@ Notes / evidence:
 6. `gh` auth dead for the automation identity (**5th** run); re-auth `aotsukiqx` at the next
    operator opportunity. REST-only is viable but the #49306 discovery shows body-level references
    are easy to miss with comment-count triggers.
+
+## 2026-11-10T04:17Z (2026-11-10 12:17 +08) — watch run #6
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0; raised `/tmp/dsv41-upstream-alert`
+(`#49173 has 2 comments`, `#49173 CLOSED`, `15 DSV4-relevant commits`). Log lines 04:17:28Z–04:17:31Z.
+`gh auth status` → **token for `aotsukiqx` invalid (6th consecutive run)**; every read below is
+unauthenticated GitHub REST (`gh issue view` / `gh pr view` unusable by design, not attempted).
+Core budget 56/60 at start, 28/60 after triage (28 requests). Alert consumed (`rm`) after acting.
+
+### Issues — no new upstream comments this run
+
+- **#49173** — **closed** `2026-11-09T07:26:52Z`, `state_reason=completed`. Still **2 comments**,
+  both dated 2026-11-08 (15:21:48Z intake + 15:48:22Z "fix is up in #49182"), already recorded in
+  runs #3/#4. No new content; the alert re-raises because the state/count triggers are sticky.
+  Referencing objects with the tool were exactly two: #49173 itself and the merged PR **#49182**
+  (merge commit `5e6995dd`, recorded in run #3 as the next-pin candidate).
+- **#49174** — open, **0 comments**, `updated_at` still `2026-11-08T14:34:50Z` → **third
+  consecutive silent run**. Reference search returns exactly 2 objects (#49174 + PR #49306).
+  **#49306** unchanged since last run: head `4e1544039e3f84ba534a58613787c6f620756d5e`,
+  `updated_at 2026-11-09T12:56:58Z`, 1 commit, 4 files, **+116/−7** of which the source hunks are
+  the previously recorded `schedule_batch.py` +37/−4 and `invariant_checker.py` +8/−2; unmerged,
+  CI red. Nothing to absorb; watch only.
+
+### sglang main since 2026-11-08T14:00Z
+
+**120 commits** (complete census), **+36 vs the 84 recorded at 20:34Z** (84 + 36 = 120 ✓). Only
+2 of these are actionable; all 36 read by subject + file scope:
+
+| Commit | PR | Subject | Class |
+|---|---|---|---|
+| `b5a7900a` | #49411 | `[Feat] kernels: Kimi-K3.1 kernel changes split out of #48414` | **pin-migration-class** (see below) |
+| `0e7d3ab1` | #49362 | `[Chore] deps: Bump sgl-flash-mla to 1.0.4` | **pin-migration-class** (wheel row) |
+| `c4b6338f` | #37472 | `[Fix] dspark: Keep verify bookkeeping in range for rows without candidates` | **bp-class** (decode-gap adjacent, see below) |
+| `790cc463` | #49262 | `[Perf] [NVIDIA] dsv41: Write the MegaMoE input from the fused decode mHC post` | NO-OP at bp5 (MegaMoE off) |
+| `83b3e2e9` | #49388 | `[Fix] [NVIDIA] mega_moe: Accept MXFP4 activations at DSV4.1-Flash's 2304 intermediate size` | NO-OP at bp5 (MegaMoE off) |
+| `66ad8925` | #48860 | `[Fix] cuda_graph: Retain capture inputs for full graph replay` | bp-shape, NO-OP now (runner-split backend) |
+| `8d5411e4` | #48613 | `[Perf] kda: Run the fused CuTe DSpARK verify kernel on a BF16 SSM state` | NO-OP (KDA/K3; census FP on "dspark") |
+| `d76112d3` | #48605 | `[Perf] moe/paged-experts: decide block-wide and skip empty page-ins` | NO-OP (paged-experts backend) |
+| `4a88c741` | #40962 | `[Fix] speculative: build target graphs outside draft contexts` | NO-OP at bp5 (adaptive controller path) |
+| `34f49c9d` | #49253 | `[Fix] scheduler: Retract every KV holder on pause and order a few releases behind in-flight steps` | NO-OP (pause path; adjacent to #49174 family) |
+| `eafc4914` | #44176 | `[Fix] dsa: Route mixed-chunk batches to the RAGGED top-k transform for bf16-only sparse prefill` | NO-OP (`dsa_backend`, not our attention backend) |
+| `fe30d1e0` | #42790 | `[Feat] mamba: Allow skipping per-draft intermediate SSM state` | NO-OP (no SSM) |
+| `33d0465c` | #46213 | `[Perf] flashinfer-megamoe: Add an optional decode workspace` | NO-OP (flashinfer-megamoe off) |
+| `4e9e7e82` | #49386 | `[Fix] scheduler: Record every PP result completion event after the local forward` | NO-OP (no PP) |
+| `ea712f56` | #48556 | `[Fix] moe: Fix illegal memory access in the W4A16/W8A16 Triton MoE kernel (unmasked K tail)` | NO-OP (quant path unused) |
+| `56ee8ed5` | #47943 | `[Fix] ZeroMQ: make blocking send wait for queue space` | NO-OP (transport not on this line) |
+| `5604b31b` | #49000 | `[Fix] [NPU] dsv4: Use explicit compressor state on Ascend 950` | NO-OP (NPU; census FP on "dsv4") |
+| `211b22c6` | #48616 | `[Fix] gemm: Order the CuTe DSL kernels' TMEM release after the epilogue's tcgen05.ld` | NO-OP (CuTe DSL / datacenter Blackwell) |
+| `5f7f971d` | #48126 | `[Feat] [NPU] attention: Support Modelslim GQA mxfp8 kvcache for 950 NPU` | NO-OP (NPU) |
+| `7b150558` | #47529 | `[Fix] RL: Fix crash when returning routed experts under DCP or KV sharding` | NO-OP (RL trainer) |
+| `78e6e9fc` | #49399 | `[Fix] ernie55: Import FlashMLA from the sgl-flash-mla wheel` | NO-OP (ernie model) |
+| `e85fac45` | #45859 | `[Feat] rust/grpc: Report orchestrator launch facts in api.v1 discovery` | NO-OP (Rust control plane) |
+| `e886acfa` | #47620 | `[Fix] hicache: vote the prefetch timeout once per tick, not per admission poll` | NO-OP (HiCache off) |
+| `bcd6a814` | #49398 | `[CI] whl-release: Prefix sgl-project/whl release tags with the package name` | NO-OP (CI) |
+| `60867f43` | #49394 | `[CI] chore: add CI permissions for aaronlinear` | NO-OP (CI) |
+| `9fe1dbb8` | #49350 | `[Fix] test: Drop the removed SGLANG_HICACHE_TMA_TRANSFER from the page-unified HiCache TMA test` | NO-OP (test) |
+| `98d32a4f` | #49235 | `[Test] comfyui: Attach loaded plugin modules to their parents so mock.patch works on Python 3.10` | NO-OP (test) |
+| `340f70fb` | #49346 | `[Test] gemma4: Cover the multimem.ld_reduce rounding in the AR fusion residual check` | NO-OP (test) |
+| `5175c315` | #48956 | `[Chore] CODEOWNERS: Update score, decisions, and embeddings API owners` | NO-OP (meta) |
+| `1be97a0a` | #46052 | `[Doc] cookbook: Fix the dead MiniMax-H3 "Learn more" anchors` | NO-OP (doc) |
+| `e1cd0c55` | #49401 | `[Doc] cookbook: Move Rubin hardware row above AMD` | NO-OP (doc) |
+| `e0187268` | #45599 | `[Perf] [AMD] batch-invariant: Segmented split-K bf16 matmul for gfx950` | NO-OP (AMD) |
+| `4a5c6b8f` | #47585 | `[Fix] [AMD] quark: Widen the Quark MXFP4 W4A16 MoE gate to consumer RDNA …` | NO-OP (AMD) |
+| `f25bb8a1` | #33059 | `[Fix] [AMD] dsa: Align Aiter paged rows with DP-attention metadata` | NO-OP (AMD) |
+| `d766f193` | #49225 | `[Fix] diffusion: Use K/V gather when auto SP cannot split the DiT's heads` | NO-OP (multimodal_gen) |
+| `5379f2cb` | #49224 | `[Fix] diffusion: Let FLUX.3 Image start with --num-gpus alone` | NO-OP (multimodal_gen) |
+
+Notes / evidence:
+
+- **`c4b6338f` #37472 is the only bp-class kernel fix, and it is *not* the host-sync fix the
+  decode gap needs.** It clamps `ell = verify_lens - 1` to `>= 0` in `cap_correct_len` (torch +
+  Triton variants) and replaces "copy every draft, then scatter the bonus" with a `k < correct`
+  where-select in `build_out_tokens` / `_static_accept_tail_kernel`, plus zero-initialised
+  chain-verify buffers in `dflash_utils._get_or_create_chain_verify_buffers`. All of it is index
+  hygiene for **padded graph rows** (`verify_lens == 0`); no new device sync is added or removed,
+  so the ~44 ms/step `cudaEventSynchronize` attribution (#48831-33 rework, r2 trace) stands. Value:
+  it is a real correctness anchor on the exact files our r3 V1 revert (#48833) will collapse — the
+  two touch `dspark_accept.py` / `dspark_verify_window.py`, so **prep must re-check that revert
+  patch still applies after this lands**. Do not add it to bp5 standalone: wrong direction
+  (correctness, not throughput) and it depends on the upstream rework we did not adopt.
+- **`b5a7900a` #49411 is a 2,460-line transducer on our kernel surface** — the Kimi-K3.1 halves of
+  #48414 split out, but it carries anchors we actually ride: `kernels/jit/csrc/deepseek_v4/topk_v2.cuh`
+  (+200: `page_bits` interleave + `global_position()` + coarse-bin cluster path, new
+  `topk_transform_paged_candidates_v2` **entry point only** — no default-path switch observed),
+  new `kernels/ops/attention/mla_window_indices.py`, new `_prepare_dflash_mamba_commit_kernel` in
+  `kernels/ops/speculative/dflash.py` (added, existing accept/bonus code untouched in the shown
+  hunks), and additive `out=` overloads for `concat_mla_absorb_q` / `concat_mla_absorb_q_general`.
+  Classed pin-migration because of size + JIT-cuh surface, not because a behavioural delta was
+  proven. Not cherry-pickable as a bp; absorbed at the next pin.
+- **`0e7d3ab1` #49362** moves `python/pyproject.toml` only; PyPI has
+  `sgl_flash_mla-1.0.4-cp310-abi3-manylinux2014_aarch64.whl` (and x86_64), so the image row can
+  move. It does not interact with the decode gap: bp6r2 already showed fmla 1.0.0 recovered only
+  +2.1 of the ~7 gap.
+- **`66ad8925` #48860** (full graph replay pins each shape's capture inputs) is a genuine leak-class
+  bug fix, but the file lives in upstream's newer `srt/model_executor/runner_backend/` split; the
+  bp5 pin predates that layout (no `runner_backend` reference anywhere in this checkout). Treat as
+  "exists only at pin-migration ≥ that refactor; verify path at apply time", i.e. NO-OP now.
+- The three "dsv41/MegaMoE" hits are all on paths disabled on this line: **#49262** only triggers
+  when `next.mega_moe_input is not None` (`deepseek_v4_mhc.py`, `_post_fusion`) and **#49388** only
+  changes a MegaMoE shape pre-dispatch check; our MoE is `b12x_next` with
+  `SGLANG_OPT_DEEPGEMM_MEGA_GATE` off. Recorded anyway: if a MegaMoE arm is ever opened,
+  DSV4.1-Flash's 2304 intermediate *is* now MXFP4-legal (`mxf4xmxf4` added to the align-128 set).
+- **Census quality**: 5/36 keyword hits, of which 3 are false or gated (KDA DSpARK, NPU `dsv4`
+  compressor, MegaMoE shape check) and 2 real (#37472, #49262). **Four material commits missed the
+  filter entirely**: #49411 (pin-class), #49362 (pin-class), #48860, #49253 (plus #40962 conditional).
+  Cumulative 15/120. Fixed-cutoff wording defect unchanged — the alert's 15 is the whole window's
+  hit count, not this run's.
+
+### Action items
+
+1. **No maintenance window triggered; nothing done to the fleet.** GitHub REST + this checkout only
+   (no SSH, no docker, no build, no serve, no schedule change). Destructive actions: none besides
+   consuming the alert file.
+2. **Next-pin pre-flight now carries four rows** (candidate remains `5e6995dd`): (a) DeepGEMM
+   0.2.6→0.2.7 (#48984, recorded run #5 — arch-12 fp32 assert unchanged, no decode unlock);
+   (b) **sgl-flash-mla 1.0.3→1.0.4** (#49362, aarch64 wheel present); (c) **#49411** land on the
+   pin and re-run adapter anchors (`b12x_next` untouched, but inspect `deepseek_v4/topk*`, dflash,
+   `mla_qk_prep`); (d) confirm whether the pin carries `runner_backend/full_cuda_graph_backend.py`
+   before evaluating #48860. Also pre-flight bookkeeping: verification of the post-49182 shape —
+   `#49262` (mHC post) and `#49388` (shape check) change files (`deepseek_v4_mhc.py`, `mega_moe.py`)
+   that a pin will pick up and that gate checks must not trip.
+3. **Decode gate discipline unchanged**: bp6 pool+prefill are done, decode gap still attributed to
+   the dspark verify rework's host-sync pattern. #37472 is index hygiene, not sync removal; no
+   window for it. If r3 resumes, re-base the qeval A/B plan on the post-#37472 tree.
+4. **#49306** (#49174 fix, CI red) still open, unmerged, body-referenced only — no maintainer
+   comment on #49174. Holding exposure of #49174 unchanged (aborted/resubmitted long generations
+   on this line).
+5. `gh` auth still dead for the automation identity (**6th run**). REST-only remains viable;
+   operator re-auth `aotsukiqx` is the standing fix.
+6. Adjacent open/unmerged PRs unchanged, no preset action: #49306, #43009, #49319, #45264, #41898.
