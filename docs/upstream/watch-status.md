@@ -1018,3 +1018,76 @@ real triage — the 4:1 miss rate from run #9 persists on a small window.
    and priority-order the script fix (fail loud instead of `?`).
 6. `gh` auth dead for `aotsukiqx` (**10th run**); REST-only remains sufficient. Re-auth is the
    standing operator fix.
+
+## 2026-11-13T20:17Z (2026-11-14 04:17 +08) — watch run #11
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 (20:17:33–20:17:42Z); all three legs numeric
+(`#49173 closed comments=2`, `#49174 open comments=0`, `dsv41-relevant-since-watch=55
+window-commits=436`) — the `? ?` masking of runs #9/#10 did not fire. Alert raised on **cumulative**
+facts only (closed status + the frozen comment count), i.e. a trigger, not a delta. `gh auth status`
+→ **invalid token for `aotsukiqx` (11th consecutive run)**; `gh issue view` / `gh pr view` never
+attempted. Core budget: 52/60 at start (used 8), 37/60 at end → **15 core + 1 search** for the
+sweep. **Only in-repo change: this file.** Main HEAD at capture `cc3e9dc03e` (committer
+`2026-11-13T20:12:50Z`).
+**Cadence**: log slots 16:17:37Z → 20:17:33Z, `17 */4` healthy; no new evidence on the 11-10→11-13
+gap.
+
+### Issues — zero delta (10th silent run for #49174)
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at 2026-11-09` → unchanged
+  since run #1; no maintainer text to read.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **tenth consecutive silent
+  run**. Body-reference search (`"49174" type:pr`): `total_count 1`, still **#49306** open/unmerged,
+  `updated_at 2026-11-09T12:56:58Z` — unchanged since run #5, still CI-red.
+- **#49182** — `merged`, merge `5e6995dd09`, head `a49ff4d7d3`, `merged_at 2026-11-09T07:26:50Z` →
+  byte-identical to runs #3/#9/#10; next-pin candidate remains **`5e6995dd`**.
+
+### sglang main — 8 new commits in 4 h; 2 pin/build rows, 6 NO-OP
+
+Census 436, prev head `410e64bb84` at index 8 → slice `[0:8]`. Arithmetic: 428 + 8 = 436 ✓.
+
+| Commit | PR | Subject | Class — note |
+|---|---|---|---|
+| `ad438669fa` | #50369 | [Chore] release: Bump sgl-kernel version to 0.4.11 | **pin-migration-class (dep)** — in-tree version only (`kernels/aot/pyproject{,_cpu,_musa,_rocm}.toml`, `python/sgl_kernel/version.py`); the **consuming dep pin is still `sglang-kernel==0.4.10`** (`python/pyproject.toml:83` at main). **Wheel gap found**: PyPI 0.4.11 (uploaded `2026-11-13T20:02:33Z`) ships **one** file, `cp311-abi3-manylinux2014_x86_64`; 0.4.9/0.4.10 shipped **both** aarch64+x86_64 as `cp310-abi3`. Two shifts: **no aarch64 wheel yet**, ABI floor 3.10→3.11 ⇒ a bump to 0.4.11 cannot install on GB10 until an aarch64 wheel appears or we build the kernel from source |
+| `d133444fec` | #50260 | [Chore] fa3: Serve FA3 from the sgl-fa3 wheel and remove it from sglang-kernel | **pin-migration-class (build)** — dep adds `sgl-fa3==0.1.0rc0 ; linux and x86_64` (**aarch64 skipped by marker**; PyPI has only `cp310-abi3-manylinux2014_x86_64`), `sgl_kernel.flash_attn` module + `flash_ops` symbols deleted from the kernel build (CMakeLists −120, `flash_attn.py` −424). Runtime **NO-OP**: `_is_fa3_supported` covers sm80/86/89/90a only (SM121 rejected), `dsa fa3` impl is SM9.x per KNOWN_FAILURES, and `grep -rn sgl_kernel\.flash_attn runtime/` is empty. Pin check: no module-scope `sgl_fa3` import on the `deepseek_v4_backend` path |
+| `914405d107` | #43136 | [Perf] [AMD] DCP: Slice gathered MHA prefixes with host offsets to drop GPU syncs | **NO-OP (AMD/DCP)** — but it edits **shared** `models/deepseek_common/attention_forward_methods/forward_mha.py` (+1/−3): `all_gather_kv_cache_for_mha_extend` drops the GPU `seq_lens`/`extend_prefix_lens`/`extend_seq_lens` args and takes CPU lists instead. Call site is inside the `dcp_local_prefix_kv_indices` branch (DCP≠1); no local patch anchors on that symbol ⇒ no conflict today |
+| `084a5e9aae` | #47645 | [Fix] [AMD] aiter: Plan the DCP asm verify shard with the draft tokens under CUDA graph replay | **NO-OP** — `aiter_backend.py` only (ROCm). Analog note: the planner localized `seq_lens[:bs]` where the verify window needs `kv_lens`, i.e. a graph-replay verify-shard length bug of the same family as #37472; no shared file, no CUDA effect |
+| `69635d1d3f` | #45905 | [Refactor] moe: simplify FlashInfer MegaMoE autotune handoff | **NO-OP** — `flashinfer_megamoe_autotune.py` + test; MegaMoE bypassed (our MoE is `b12x_next`, `SGLANG_OPT_DEEPGEMM_MEGA_GATE` False) |
+| `cc3e9dc03e` | #50181 | [Fix] hicache: Refuse a runtime write_back policy under buffer_only host memory | **NO-OP** — new refusal in `mem_cache/unified_cache/storage_attachment.py`; host tier disabled, and `unified_cache/` is post-pin (unified sub-pool landed 2026-11-13, pre-flight row n) |
+| `4a4f400022` | #49603 | [Fix] [AMD] docker: Pin UCX and NIXL commits for ROCm PD disaggregation | **NO-OP** — `docker/rocm.Dockerfile` |
+| `a8d88db3d1` | #49632 | [Test] crash-dump: Pin the Python frontend in the tests that resolve `--ssl-keyfile-password` | **NO-OP** — test-only `envs.SGLANG_RUST_SERVER.override(False)` fixtures |
+
+### Cross-checks
+
+- Arithmetic: 428 + 8 = 436 ✓; prev head `410e64bb84` at index 8; 8 = 2 pin/build + 6 NO-OP
+  (of which 2 carry apply/pin notes: #43136 shared-file signature, #50181 post-pin path).
+- Fetch integrity: 8/8 commit details parse with `files[]`+`patch`; 5 census pages, 1 PR, 1 search
+  parse; file count asserted before triage (§1b).
+- Census-cutoff note: my wider `since=2026-11-08T00:00:00Z` fetch returns 477 rows (pages
+  100/100/100/100/77), the script's `BASE_CUTOFF=14:00:00Z` returns 436 — the 41 extras all have
+  committer date ≤ `2026-11-08T01:38:51Z`, i.e. pre-cutoff. Both agree on the 8-row delta.
+- Keyword counter vs reality: it flagged ~2 of 8 (#43136 "syncs", #47645 "verify"), both AMD-only,
+  while the two material rows (#50369/#50260) matched only on generic words — the bidirectional
+  miss keeps holding; per-commit reading stays mandatory.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change. Alert file consumed
+   and removed after acting.
+2. **Next-pin pre-flight rows now sixteen** (candidate **`5e6995dd`**, unchanged): (a)–(n) as run
+   #8/#9, plus **(o) `sglang-kernel` 0.4.11 aarch64 gate** — do not absorb the version bump until
+   an `aarch64` wheel exists on PyPI (0.4.11 today: x86_64 only, and ABI moved to `cp311-abi3`),
+   otherwise the image must build `sglang-kernel` from source; **(p) FA3 wheel split** — confirm at
+   pin that nothing on the DSV4 path imports `sgl_fa3`/`sgl_kernel.flash_attn` at module scope on
+   aarch64 (dep marker excludes us).
+3. **No new bp candidate this window.** #50177 (run #10, decode-attn-TP skip, 3 LOC) remains the
+   only open low-value bp; it cannot close the decode gap.
+4. **Decode gate unchanged**: still no sync removal at our verify site (~44 ms/step
+   `cudaEventSynchronize`, dspark verify rework). #43136 is the closest structural analog (drops
+   GPU syncs) but is AMD DCP-only.
+5. **bp6r3 conflict re-checks stand**: #44588 and #37472 on `dspark_verify_window.py` (V1 revert
+   `bp6r3-pr48833-revert.patch`). #47645 is the same bug family as #37472 but ROCm-local.
+6. **Operator**: `gh` auth dead for `aotsukiqx` (**11th run**) — re-auth remains the standing fix;
+   REST-only stayed sufficient (15/60 core). The script's `? ?`-on-failure masking (runs #9/#10)
+   is still unpatched, though the census leg was healthy this run.
