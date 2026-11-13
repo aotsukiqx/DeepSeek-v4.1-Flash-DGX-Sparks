@@ -754,3 +754,189 @@ Details / evidence:
 6. `gh` auth dead for the automation identity (**8th run**); operator re-auth of `aotsukiqx`
    remains the standing fix. REST-only is sufficient for state/issues, and the search endpoint
    covered body-level references this run.
+
+## 2026-11-13T12:17Z (2026-11-13 20:17 +08) — watch run #9
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 (12:17:38–12:17:40Z) but a **degraded run**:
+both issue fetches logged `fetch-failed` and the census logged `? ?` — the GitHub core budget was
+exhausted (0/60 at 12:18Z, reset 12:19:25Z; `curl -sf` swallows the 403). With no branch raising,
+`need_alert=0` **deleted** the alert file: a fully rate-limited run is indistinguishable from a
+clean one (known script limitation, recorded; fix deferred to the next script touch). No alert
+content existed to consume. All data below comes from a manual REST sweep after the reset.
+`gh auth status` → **invalid token for `aotsukiqx` (9th consecutive run)**; `gh issue view`/
+`gh pr view` never attempted. Core budget 60 → 9/60 across the sweep (2 issues, 2 PRs, 2 searches,
+7 census pages, 31 commit details, HEAD probes).
+**Automation gap**: no log lines between 2026-11-10T12:17Z and this run — the `17 */4 * * *` Orca
+cron produced 0 of ~17 expected runs in 3 days (the log file still holds its 11-10 lines, so not a
+/tmp wipe; more likely host sleep or a paused automation). Operator attention item, not fixable
+from this repo. Main HEAD at capture `6d2d13a1c4` (`2026-11-13T12:20:16Z`).
+**Only in-repo change: this file.**
+
+### Issues — zero delta across the 3-day gap
+
+- **#49173** — closed `completed` `2026-11-09T07:26:52Z`, `comments=2` (both 2026-11-08) → unchanged
+  since run #1. Only referencing PR remains **#49182**: `merged`, head `a49ff4d7d3`, merge
+  `5e6995dd09` — identical SHAs to run #3's recording; next-pin candidate unchanged.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **eighth consecutive silent
+  run**. Issue search (PR bodies): still exactly one hit, **#49306** — open, unmerged, head
+  `4e1544039e`, `updated_at 2026-11-09T12:56:58Z` (unchanged). No new body-level references.
+
+### sglang main — 269 new commits in 3 days; 41 material rows, 3 pin-relevant dep bumps
+
+Census **51/411** by the script's keyword set (run #8: 18/142; +269 window commits, +33 keyword
+hits). Arithmetic: 142 + 269 = 411 ✓ (pages 100/100/100/100/11/0; run-#8 head `2d93fbfe51` found
+at index 269 — slice, not eye-balling). Every one of the 269 subjects was read; 56 were triaged
+individually below (41 material + 15 residual watch), the remaining **213 grouped NO-OP**: 45
+diffusion/multimodal-gen, 28 AMD/ROCm, 30 CI/Test/Doc/Chore+tooling, 21 other models/MM, 16
+API/serving surface, 15 NPU/Ascend, 13 other spec algos (KDA/GDN/EAGLE/dflash/ngram), 10
+PD/PP/multi-node, 9 disabled tiers (hicache/paged-experts/linker/offload), 9 scheduler/infra
+refactors (request-list move/retirer wave: #49677/#49623/#49496/#49751 — behaviour-neutral, anchor
+churn only), 1 XPU/Apple, plus 16 DSV4/dspark-keyword NO-OPs on NPU/AMD/CI/test surfaces folded in
+(#47934, #42977, #48031, #50096, #49054, #50267, #50252, #49443, #49428, #49647, #48891, #48731,
+#44017, #49380, #49601, #42855).
+
+| Commit | PR | Subject | Class — note |
+|---|---|---|---|
+| `2c75d490` | #50016 | [Chore] deps: Bump sgl-deep-gemm to 0.2.8 and sgl-flash-mla to 1.0.5 | **pin-migration** — wheel matrix; DeepGEMM attention.hpp byte-identical to 0.2.7 (see below) |
+| `175ab802` | #49980 | [Perf] dsa: Native-head FlashMLA and a precomputed schedule for DCP decode | **pin-migration** — touches `deepseek_v4_backend.py` +25/−3, `dsa_backend.py` +48/−14 |
+| `94d3dbad` | #49966 | [Refactor] mem_cache: Compose same-lifetime parts into one unified sub-pool | **pin-migration** — kv/build,decl,plan +185/−40, new layout/composite.py +271 |
+| `2c597c92` | #49922 | [Perf] dsa: Stage the DCP top-k merge push in smem, fall back in registers ≤2 ranks | **pin-migration** — dcp_topk_merge.cuh +73/−15 |
+| `92929577` | #49912 | [Feat] dsa: Honor the page stride of index-K buffers | **pin-migration** — indexer k-cache layout contract, 11 files incl. dsv4_fp4_index_k_cache |
+| `bddf8d01` | #49775 | [Fix] mem_cache: Size a fused draft's KV region in the dtype the draft resolves | **NO-OP here; bookkeeping** — 11 nextn/eagle models touched, dspark absent; contract if drafts ever fuse |
+| `a081aaa2` | #49771 | [Chore] deps: Bump FlashInfer to 0.7.4 | **pin-migration** — Dockerfile+pyproject+uno_utils; enablement for #45262/#49595 |
+| `62eab144` | #49662 | [Chore] sgl-kernel: Stop bundling triton_kernels in the sglang-kernel wheel | **NO-OP here; bookkeeping** — wheel composition change |
+| `ed15b28d` | #49661 | [Refactor] mxfp4: Dequantize MXFP4 MoE weights with a JIT kernel instead of triton_kernels | **NO-OP here; bookkeeping** — triton_kernels removal wave |
+| `df4ec2e0` | #49660 | [Refactor] moe: Remove the triton_kernel MoE runner backend | **NO-OP here; bookkeeping** — backend we never selected |
+| `51401bab` | #49659 | [Refactor] quantization: Quantize MXFP8 weights with a JIT kernel instead of triton_kernels | **NO-OP here; bookkeeping** — same wave |
+| `72f72cca` | #49656 | [Fix] kernels: Synchronize AOT MoE prefix before expert lookup | **watch** — AOT MoE prefix sync (not our MoE path; kernel-level sync semantics) |
+| `21453213` | #49616 | [Fix] dsa: Give each FlashMLA decode graph its own schedule for native-head kernels | **pin-migration** — dsa_backend −37; DSA decode-graph scheduling wave |
+| `9fdd3920` | #49595 | [Perf] dspark: opt-in MXFP8 draft lm_head on SM10x via --speculative-dspark-lm-head-dtype | **pin-migration** — replaces ROCm-only env; flashinfer mm_mxfp8 cute-dsl; verify-logits GEMM axis |
+| `0f5a47de` | #49538 | [Refactor] moe: Remove the SM120 top-22 small-M router path | **pin-migration** — −109 moe_fused_gate.py + test deleted; top-22 is our router shape |
+| `fc6d3b6f` | #49499 | [Perf] dsv4: Size expand_prefill_causally's token block by batch size | **bp-class** — merged from our adjacent watch list; attn_metadata_kernels +3/−2 |
+| `56e38dfe` | #49476 | [Fix] dsv4/topk_v2: Move the cluster kernels' top-k buffer to dynamic shared memory | **bp-class** — static smem pressure drops (cf. run #7's 49–56 KB note) |
+| `43d0ecf9` | #49402 | [Refactor] graph: Introduce device-neutral graph backend bases (1/3) | **pin-migration** — runner_backend churn incl. full_cuda_graph_backend.py; parts 2–3 pending |
+| `3d04a487` | #49321 | [Perf] [NVIDIA] dsv41: Fork the decode attention mHC mix at the MegaAttention core | **bp-class** — deepseek_v4.py/_boundary/_mhc +32/−4 |
+| `e674ed71` | #49311 | [Fix] mem_cache: Signal a double free of unified pages when invariant checks are on | **NO-OP here; bookkeeping** — invariant diagnostics |
+| `e8a2bee9` | #49310 | [Fix] scheduler: Apply the write-after-read barrier in the PP loops and on every unified-memory device | **NO-OP here; bookkeeping** — unified-memory wave, no PP here |
+| `1b51a111` | #49301 | [Feat] mem_cache: Ask every unified memory capacity question of every pipeline stage | **pin-migration** — capacity contract change |
+| `2a7c267e` | #49300 | [Refactor] mem_cache: Ask unified memory every capacity question as a demand | **pin-migration** — capacity contract change |
+| `e38dff3e` | #49299 | [Fix] mem_cache: Reset a reused request row's state in the next forward | **NO-OP here; bookkeeping** — row-state hygiene |
+| `e9fd9efe` | #49263 | [Fix] cuda-graph: Pause automatic GC during CUDA graph capture | **bp-class** — base_cuda_graph_runner +8/−2; capture-time robustness |
+| `f9b90d33` | #49189 | [Refactor] cleanup: Prune dead code and env vars, fix silent failures | **pin-migration** — deletes dsv4/dsa anchors (below); env prunes cross-checked: none used here |
+| `84ee24c9` | #49102 | [Perf] dsa: bf16 MQA logits for the prefill indexer | **pin-migration** — SGLANG_DSA_INDEXER_BF16_LOGITS default off; topk_v2.cuh + topk_impl.cuh |
+| `93dbe651` | #48949 | [Perf] reject_sampling: Vocabulary-tiled final-token pass at small batch | **watch** — +447 lines in the shared spec op; dspark consumer unconfirmed |
+| `219b7e7a` | #48928 | [Perf] DeepSeek-V4.1-Flash: Use segmented fastokens for prompt encoding | **NO-OP here; watch** — parser-side prompt encoding |
+| `026a145a` | #48456 | [Perf] [NVIDIA] dsv41: Run the side-stream mHC mix in BF16x3 for Blackwell decode batches | **bp-class** — mhc.py + deepseek_v4_mhc.py; BF16x3 BLOCK_K=64 const |
+| `d46d9adf` | #48367 | [Perf] speculative: Fuse the draft proposal's Gumbel-max sample into one pass | **NO-OP here; watch** — generic draft-side sampling |
+| `4929ba40` | #48350 | [Perf] flashinfer_cutedsl: Use swap-AB MoE on Blackwell | **NO-OP here; watch** — not our MoE backend |
+| `4a99de61` | #47469 | [Perf] [NVIDIA] attention: opt-in LiteTopK prefill indexer top-k for DSA (FP8) and DSV4.1 (FP4) on SM100 | **NO-OP now; pin candidate** — SGLANG_OPT_USE_PREFILL_LITE_TOPK, off, SM100-gated, ~3.7k LOC |
+| `75e8d543` | #46830 | [Fix] dsa: Remove host syncs from rank-divergent eager paths | **watch** — host-sync family, but eager metadata, not our verify site |
+| `884d29b2` | #46186 | [Perf] spec: radix top-k for speculative verify target probabilities | **NO-OP here; watch** — dflash consumer |
+| `1017f576` | #46185 | [Feat] gdn: run DFLASH and DSPARK verify on the ReplaySSM spec ring | **NO-OP here; bookkeeping** — GDN-local; shared spec_utils.py −42 anchor churn |
+| `d684cc9f` | #45264 | [Perf] [NVIDIA] mhc: Use BLOCK_K=32 for the hc_mix kernel on SM120 | **NO-OP here; bp candidate** — gate is CC==(12,0) only; code says "SM121 has not been measured" |
+| `6c0c4d32` | #45262 | [Perf] [NVIDIA] fp8: Use FlashInfer b12x for block-fp8-as-MXFP8 linears on SM12x | **pin-migration** — dynamic is_backend_supported("b12x", SM) gate, K%128==0 |
+| `00752f26` | #44823 | [Fix] scheduler: Park a chunked prefill continuation when its chunk or KV budget is spent | **NO-OP here; watch** — chunked-prefill budget semantics |
+| `e11c9583` | #44588 | [Feat] spec: Online acceptance estimator for DSpark confidence-scheduled verification | **pin-migration** — SGLANG_DSPARK_USE_ONLINE_ESTIMATOR off; touches dspark_verify_window.py (bp6r3 flag) |
+| `5d0de926` | #42566 | [Fix] quantization: Load block-FP8 MoE TP shards that split checkpoint blocks | **NO-OP here; bookkeeping** — our TP4 shard dims are 128-block aligned; shared loader path |
+
+Residual individually-read NO-OPs (kept for their pin notes):
+
+| Commit | PR | Subject | Class — note |
+|---|---|---|---|
+| `8385d83d` | #50144 | [Feat] JIT: Add SGLANG_JIT_ENABLE_LINEINFO for profiler source views | NO-OP here; bookkeeping — useful for the r3 decode profiling |
+| `74cb973d` | #49943 | [Perf] dcp: Replay prefix hits under breakable prefill graphs | NO-OP here; watch — no breakable prefill graphs on this line |
+| `087e57c4` | #49931 | [Fix] [NVIDIA] unquant: restore eager low-M BF16 performance | NO-OP here; watch |
+| `983455ae` | #49868 | [Fix] test: Seed the retracted queue through move() in test_prealloc_token_usage | NO-OP — test-only; #49174-adjacent surface |
+| `07a6c955` | #49497 | [Perf] flashinfer-autotune: Tune MoE with varied warm-up tokens | NO-OP here; watch — autotune not exercised |
+| `7b4cf858` | #49370 | [Refactor] custom-ar-v2: Move the DPX pair stages into their own header | NO-OP here; bookkeeping |
+| `2f209ae0` | #49365 | [Refactor] custom-ar-v2: Single-word push epoch and consume-style pull semaphores | NO-OP here; bookkeeping — verify which AR path the pin uses |
+| `dec82422` | #49139 | [Perf] [NVIDIA] unquant: Re-land low-M BF16 autotune via FlashInfer CuTe DSL mm_bf16 | NO-OP here; watch |
+| `a8ff9948` | #48947 | [Perf] layernorm_sp: Add --layernorm-sp-min-tokens to run small extend passes replicated | NO-OP here; watch — SP unused here |
+| `c7f3e2bd` | #48602 | [Perf] dsa: Add an opt-in FlashInfer Prims-TS sparse MLA backend | NO-OP now; pin candidate — new decode backend option |
+| `46aa131b` | #48295 | [Feat] modelopt: Quantize block-FP8 MTP draft experts to NVFP4 for MIXED_PRECISION checkpoints | NO-OP |
+| `3769d88f` | #48272 | [Fix] mem_cache: report the CUDA error when host registration fails | NO-OP — diagnostics |
+| `6299ec26` | #48271 | [Perf] qsa: drop the per-layer RoPE cache length check in the indexer | NO-OP — other model's indexer |
+| `ed037608` | #48263 | [Perf] [NVIDIA] nvfp4: Fuse SiLU-and-mul with the next linear layer's NVFP4 activation quant | NO-OP — NVFP4 unused |
+| `800f9b30` | #44753 | [Refactor] RoPE: Support RotaryEmbedding class usage for DiT models | NO-OP — DiT |
+
+### Evidence notes (fetched diffs; runbook §1b/§3b applied)
+
+- **#50016 wheel contract**: Dockerfile `DEEPGEMM_REF v0.2.7→v0.2.8`; raw-diff of DeepGEMM
+  `csrc/apis/attention.hpp` between v0.2.7 and v0.2.8 is **byte-identical** → the arch-12
+  fp32-weights assert (`weights.scalar_type() == (arch_major == 10 ? kBFloat16 : kFloat32)`)
+  **persists in 0.2.8**; the bump still cannot recover bf16-weights decode MQA logits on SM121
+  (extends the 2026-11-09 known answer to 0.2.8). PyPI: `sgl_deep_gemm-0.2.8-py3-none-
+  manylinux2014_aarch64.whl` ✓ and `sgl_flash_mla-1.0.5-cp310-abi3-manylinux2014_aarch64.whl` ✓.
+- **#45264**: `_hc_mix_stats_sinkhorn_block_k` returns 32 only when
+  `torch.cuda.get_device_capability(device) == (12, 0)`, with the comment **"SM121 has not been
+  measured."** GB10 is CC 12.1 → default BLOCK_K retained. A one-line extension + measurement
+  candidate, not a free win. #48456 in the same kernel adds `_HC_MIX_BF16X3_BLOCK_K = 64`.
+- **#48891**: `_small_heads_prefill_enabled` requires `device_sm_major == 10` → excludes CC 12.1
+  (the inverse of #49182's restored `>=10`); no behaviour change here.
+- **#49595**: deletes `SGLANG_ROCM_OPT_DSPARK_FP8_LM_HEAD` (moved to the deprecated-map pointing at
+  the new flag) and adds `--speculative-dspark-lm-head-dtype {fp8,mxfp8}`; the mxfp8 path is
+  flashinfer `mm_mxfp8` (cute-dsl) gated only on `hidden.is_cuda and K%32==0 and N%128==0` → applies
+  to SM121 **iff** FlashInfer 0.7.4 ships the cute-dsl kernel for it. Measurement candidate for the
+  verify-logits GEMM, gated on the #49771 bump.
+- **#44588**: kernel op `dspark_verify_window.py` +18/−1, `dspark_worker_v2.py` +64,
+  `SGLANG_DSPARK_USE_ONLINE_ESTIMATOR` default False. **bp6r3 collision**: the V1 revert
+  (`runtime/bp6r3/bp6r3-pr48833-revert.patch`) touches `dspark_verify_window` — conflict re-check
+  required before resuming the r3 bisect.
+- **#49189**: deletes `layers/attention/dsa/kpool_fp8_index.py` (−127) and
+  `layers/attention/dsv4/compressor_v2.py` (−93), prunes `dsa_indexer_kpool.py` (−84). The 8 pruned
+  env vars cross-checked against this checkout (launchers, probes, runtime patches, .env files):
+  **zero usage**. Anchors for the indexer-arch-gate audit (docs/upstream/indexer-arch-gate-48399-bug.md)
+  change at the next pin.
+- **#49538** removes the SM120 top-22 small-M router fast path entirely (−109 + test deleted).
+  Top-22 is our router shape; whether SM121 ever took that path is unrecorded → decode router
+  re-baseline at the next pin.
+- **#49102**: `SGLANG_DSA_INDEXER_BF16_LOGITS` (default off; interacts with pre-existing
+  `SGLANG_OPT_DSV41_BF16_INDEX_LOGITS`, whose unset default is "bf16 on SM100, fp32 elsewhere") —
+  prefill-side bf16 logits axis; the decode-side DeepGEMM assert is untouched (first note).
+- **Census quality**: the script's keyword set misses **42 of the 56 individually-triaged rows**
+  (both dep bumps, the mem_cache/graph refactors, the whole DSA decode wave, #49189 cleanup). The
+  alert counter (+33) would have undersold this window ~4:1 — reading every subject remains
+  mandatory, and after a multi-day gap the window must be re-sliced from the last recorded head.
+
+### Cross-checks
+
+- Arithmetic: run #8 total 142 + 269 new = 411 ✓; census pages 100/100/100/100/11 (page 6 empty);
+  run-#8 head `2d93fbfe51` at index 269; 269 = 41 material + 15 residual + 213 grouped.
+- Fetch integrity: all 44 API JSONs parse (issues, PRs, searches, 5 census pages, 31 commit
+  details); batch-loop failure mode of §1b checked explicitly.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only (no SSH, no docker, no build, no serve, no schedule change). No alert consumed
+   (none existed — see tooling note).
+2. **Next-pin pre-flight rows now fourteen** (candidate remains **`5e6995dd`**): (a) DeepGEMM →0.2.8
+   [supersedes the 0.2.7 row — attention.hpp identical, arch-12 fp32-weights assert persists];
+   (b) sgl-flash-mla →1.0.5 [supersedes 1.0.4 — aarch64 cp310-abi3 wheel confirmed]; (c) #49411
+   kernel-split/dflash; (d) runner_backend path checks [#49402 base-class wave, parts 2–3 pending];
+   (e) #49436 deferred-KV rename audit; (f) #49420 JIT build key (pin post-#45911 only); (g) #48994
+   moe-a2a enum rename; (h) #47685 DFlash headroom default 2; **(i) #49771 FlashInfer 0.7.4** —
+   enablement gate for #45262/#49595; **(j) #49538** SM120 top-22 router path removed — decode
+   router re-baseline; **(k) #45262** b12x-for-block-fp8-as-MXFP8 dense linears — confirm our dense
+   path's backend and K%128 on SM121; **(l) #49595** `--speculative-dspark-lm-head-dtype` —
+   verify-logits GEMM measurement (needs i); **(m) #49189** kpool_fp8_index/compressor_v2 anchors
+   deleted — redo the indexer-arch-gate audit anchors; **(n) #49966/#49300/#49301** unified
+   sub-pool + capacity-as-demand — mem_cache layout migration.
+3. **Decode gate unchanged in substance**: no sync removal on our verify site (the ~44 ms/step
+   dspark verify host-sync stands; #46830 removes syncs only from rank-divergent eager metadata).
+   Upstream added default-off perf axes relevant to us — #44588 online acceptance estimator,
+   #49102 prefill bf16 indexer logits, #47469 LiteTopK prefill top-k, #49595 lm_head dtype,
+   #48602 Prims-TS backend — **none active by default; evaluate at the next pin, not via runtime
+   patch**. r3 bisect stays as written, now with the #44588 conflict re-check.
+4. **bp6r3**: `bp6r3-pr48833-revert.patch` (V1) vs #44588's `dspark_verify_window.py` change —
+   conflict re-check before any resumed bisect; #37472 note from run #6 unchanged.
+5. **Adjacent watch list shrank**: **#49499 and #45264 merged** (triaged above as bp-class and
+   NO-OP-here/bp-candidate). Still open, not re-polled this run (budget): #47478 (dsv41-engram P/D),
+   #43009 (evicted-SWA rebuild), #49319 (SM12x FA4 KV split), #41898 (dsa k-pool guard) — last
+   verified run #8. #49306 open/CI-red as before; #49174 silent (8th run).
+6. **Orca automation gap 11-10 → 11-13** (~17 missed cron slots): operator should confirm the
+   automation host/schedule (this run was the first log line in 3 days). The script's
+   silent-clean-on-rate-limit behaviour (alert deleted when fetches fail) is recorded as a known
+   limitation; fix deferred to the next script touch.
+7. `gh` auth dead for the automation identity (**9th run**); operator re-auth of `aotsukiqx`
+   remains the standing fix. REST-only stayed sufficient, including body-reference searches.
