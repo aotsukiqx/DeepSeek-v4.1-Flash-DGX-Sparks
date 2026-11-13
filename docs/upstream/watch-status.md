@@ -940,3 +940,81 @@ Residual individually-read NO-OPs (kept for their pin notes):
    limitation; fix deferred to the next script touch.
 7. `gh` auth dead for the automation identity (**9th run**); operator re-auth of `aotsukiqx`
    remains the standing fix. REST-only stayed sufficient, including body-reference searches.
+
+## 2026-11-13T16:17Z (2026-11-14 00:17 +08) — watch run #10
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 (16:17:37–16:18:05Z). **Partial run**: both
+issue fetches succeeded, but the census leg printed `dsv41-relevant-since-watch=? window-commits=?`
+(python/urllib exit in the script) while the alert still raised on issue facts — so this run was not
+silently clean, but the commit counter was unusable and the sweep below is manual. A direct re-run of
+the same urllib call 90 s later returned `ok 100`; budget was not exhausted at the time (53/60 at
+16:18Z, window reset 16:19:52Z → 59/60 after). Transient, but the `? ?`-on-failure masking is the
+second consecutive run it hid real signal (run #9 was a full 403 blackout). Fix still deferred.
+`gh auth status` → **invalid token for `aotsukiqx` (10th consecutive run)**; `gh issue view` /
+`gh pr view` never attempted. Core budget: ≈20/60 for the sweep (2 issues, 2 comment lists, 1 PR,
+1 search, 1 adjacent PR, 5 census pages, 7 commit details, 1 probe). **Only in-repo change:
+this file.** Main HEAD at capture `410e64bb84` (`2026-11-13T15:51:53Z`).
+**Cadence**: log shows the `17 */4` slots at 11-13T12:17Z and 11-13T16:17Z — 4 h apart, healthy
+since the 3-day gap recorded in run #9; that gap's cause remains unexplained.
+
+### Issues — zero delta; PR candidate unchanged
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, both `Kylinny` **2026-11-08**
+  (15:21:48Z / 15:48:22Z) → no maintainer comment since run #1; nothing new to read.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **ninth consecutive silent
+  run**. Body-reference search: still exactly one hit — **#49306** open, unmerged, head
+  `4e1544039e`, `updated_at 2026-11-09T12:56:58Z` (unchanged since run #5; still CI-red).
+- **#49182** — `merged`, merge `5e6995dd09`, head `a49ff4d7d3`, `merged_at 2026-11-09T07:26:50Z` →
+  **byte-identical to run #3/#9 recording**; next-pin candidate remains **`5e6995dd`**.
+
+### sglang main — 17 new commits in 4 h; 1 bp candidate, 4 pin notes, 0 new-model work
+
+Census 428, prev head `6d2d13a1c4` at index 17 → slice `[0:17]`. Arithmetic: 411 + 17 = 428 ✓.
+Keyword counter would have said **3 of 17** (only #50039/#50178/#50177 match) for what is 6 rows of
+real triage — the 4:1 miss rate from run #9 persists on a small window.
+
+| Commit | PR | Subject | Class — note |
+|---|---|---|---|
+| `dac84ad8cc` | #50177 | [Fix] DeepSeek-V4: Skip decode attention TP setup when it is off | **bp-class** — `maybe_use_decode_attn_tp` short-circuits when `get_cp_decode_attn_tp_ctx().is_enabled` is False (our CP=1 config): skips per-layer `isinstance`+ctx resolution on decode. 3 LOC, tiny CPU saving, **not** the ~44 ms `cudaEventSynchronize` site. Anchor `maybe_use_decode_attn_tp` must exist at pin 8817f63c — check at apply time |
+| `2e8a2346cd` | #50039 | [Fix] deepseek-v4.1: Preserve compact DSpark outputs with CP bounded replay | **pin note** — `_forward_impl` L4747: `cuda_cp_tail = not capture_dspark and _needs_cp_tail_scatter(...)`; CP-only (our CP=1 ⇒ `_needs_cp_tail_scatter` False ⇒ unchanged). Adds an 80-line unit test pinning the "compact gather" contract for DSpark capture under CP. Anchor churn in the exact `capture_dspark` tail block any future bp would touch |
+| `410e64bb84` | #49382 | [Refactor] custom-ar-v2: Share one symmetric workspace per group | **pin note** — 1463/−879 structural: new `symm_workspace.py`, `custom_all_reduce_v2.py` rewrite, `parallel_state.py` +23/−4. Custom-AR-v2 is not our cross-node path (1 GPU/node, all-reduce over RoCE via NCCL) ⇒ NO-OP-here; re-check at pin that TP init is unaffected |
+| `0508e4c6d3` | #46132 | [Perf] cuda-graph: Raise the decode graph ceiling `max_bs` 32→128 for 35–60 GiB | **NO-OP here** — only the `gpu_mem < 60*1024` branch changed (A100-40/L40); GB10 (128 GiB unified) sits in the ≥90 GiB branch and our launcher sets `max_bs` explicitly |
+| `c65c1e5d29` | #49866 | [Fix] sgl-kernel: Do not compile FA3 instantiation files twice | **NO-OP runtime / build** — `kernels/aot/CMakeLists.txt` +6/−9 only; shorter sgl-kernel build at the next image |
+| `530db9b470` | #49477 | [Perf] attention: Optimize FA3/FA4 tree attention | **NO-OP** — confined to `flashattention_backend.py` + new `kernels/ops/attention/metadata.py::prepare_tree_spec_metadata`; our DSV4 serve path is `deepseek_v4_backend`, and dspark verify is not tree attention |
+| `56b32550c7` | #50178 | [Fix] DeepSeek-V4: Default `input_embeds` to `None` in DS4 forward | **NO-OP** — signature default only (+1/−1); no caller change |
+| `dad2c79111` | #49338 | [Fix] compressed-tensors: Reject WNA16 MoE TP shards that split a scale group | **NO-OP** — WNA16 weight-only quant gate, not our config |
+| `0758280c8d` | #49878 | [Fix] disaggregation: Attribute decode HiCache hits to host and storage | **NO-OP** — PD disagg + HiCache host tier disabled |
+| `85111ff763` | #47842 | [Fix] diffusion: Cosmos 3 Edge/Nano fused QK-norm/RoPE on SM 121 (GB10) | **NO-OP** — diffusion model path, not the LLM serving surface (SM121 named only) |
+| `7eaa90110f` | #50098 | [Fix] diffusion: Wan2.2-TI2V-5B 32-pixel patch grid | **NO-OP** — diffusion |
+| `822e3e2dd1` | #48629 | [Perf] models: fused `apply_qk_norm` in Exaone, HunYuan-V3, AfMoE, BailingMoE | **NO-OP** — other models |
+| `806417dc77` | #49964 | [Fix] kimi_k25: vision projection under caller's grad mode | **NO-OP** — other model |
+| `0745bfe49b` | #49600 | [Feat] function_call: `granite_toolcall_parser` | **NO-OP** — serving surface, unused parser |
+| `1b2870d33d` | #46408 | [Refactor] multimodal: [MM refactor 2/9] processors from config | **NO-OP** — MM processors |
+| `eaf392e425` | #50033 | [Doc] hybrid: sizing state/KV pools for multi-turn reuse | **NO-OP** — docs |
+| `b9283c02f3` | #50231 | [Doc] [NPU] restructure Ascend tuning guide | **NO-OP** — docs/NPU |
+
+### Cross-checks
+
+- Arithmetic: run #9 total 411 + 17 = 428 ✓; prev head `6d2d13a1c4` at index 17 of 428; pages
+  100/100/100/100/28 (page 5 short → stop); 17 = 1 bp-class + 16 NO-OP, of which 4 carry
+  pin/build notes (#50039, #49382, #46132, #49866) and 12 are plain NO-OP.
+- Fetch integrity: all 12 API JSONs parse (2 issues, 2 comment lists, 2 PRs, 1 search, 5 census
+  pages); commit-detail batch 7/7 parsed (§1b assertion run on the file set).
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change. Alert file consumed
+   and removed after acting.
+2. **Next-pin pre-flight rows stay fourteen** (candidate **`5e6995dd`**, unchanged); add #50039's
+   `_forward_impl` anchor churn and #49382's `parallel_state.py`/`symm_workspace.py` to the
+   apply-check notes only — neither is a contract change for TP-only serving.
+3. **New bp candidate (low value)**: #50177 decode-attn-TP skip — 3 LOC, worth folding in only if a
+   window is already open for other reasons; it cannot close the decode gap.
+4. **Decode gate unchanged**: still no sync removal at our verify site; #49477's tree-attention
+   metadata rewrite is a different backend.
+5. **Orca automation**: cadence healthy (2 slots 4 h apart); the 11-10→11-13 gap remains
+   unexplained and the census `? ?` masking fired again — operator should confirm the automation host
+   and priority-order the script fix (fail loud instead of `?`).
+6. `gh` auth dead for `aotsukiqx` (**10th run**); REST-only remains sufficient. Re-auth is the
+   standing operator fix.
