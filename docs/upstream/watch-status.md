@@ -1273,3 +1273,84 @@ at index 17 → slice `[0:17]`. Arithmetic: 457 + 17 = 474 ✓.
    windows that contain material commits. Fail loud (non-zero rc, keep the alert).
 7. `gh` auth dead for `aotsukiqx` (**13th run**) — re-auth remains the standing operator fix;
    REST-only stayed sufficient.
+
+## 2026-11-14T08:19Z (2026-11-14 16:19 +08) — watch run #14
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 (08:17:35–08:17:46Z). **First fully numeric
+census since run #11**: `dsv41-relevant-since-watch=55 window-commits=482` — the urllib leg worked,
+so the `? ?` failure mode (#9/#10/#12/#13) did not recur. Keyword counter is window-wide and
+cumulative (55 is the same 55 as every run since the window filled), **not** an incremental count;
+the incremental slice is 8 and carries **0** of the script's keys. `gh auth status` → **invalid
+token for `aotsukiqx` (14th consecutive run)**; `gh issue view`/`gh pr view` not attempted — REST
+only (budget 31/60 core after the sweep). **Only in-repo change: this file.** Main HEAD at capture
+`2456e0beab` (committer `2026-11-14T07:00:33Z`).
+
+### Issues / PR — zero delta (13th silent run for #49174)
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at 2026-11-09T07:26:52Z`;
+  byte-identical to runs #1–#13 (both comments `Kylinny`, 2026-11-08). No new maintainer comment to
+  read; the alert line for it is cumulative (`need_alert` also fires on `state=closed`).
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **thirteenth consecutive
+  silent run**. Body-reference PR **#49306** still open/unmerged, `updated_at 2026-11-09T12:56:58Z`
+  (unchanged since run #5). The `TRUNCATE=0` workaround in `adapter/loop_abort.py` remains the only
+  mitigation.
+- **#49182** (fix PR for #49173) — merged, merge **`5e6995dd09`**, head `a49ff4d7d3`,
+  `merged_at 2026-11-09T07:26:50Z` → unchanged. Next-pin candidate remains **`5e6995dd`**.
+
+### sglang main — 8 new commits in 4 h; 1 bp candidate, 7 NO-OP
+
+Census **482** (`since=2026-11-08T14:00:00Z`); prior total 474 + 8 new = 482 ✓, script agreed
+independently. Slice taken above prior head `bd47834099` (committer `03:26:49Z`).
+
+| Commit | PR | Subject | Class — note |
+|---|---|---|---|
+| `4a909c3ba6` | #50400 | [Perf] sampling: Re-derive the top-k flags when a running batch drops rows | **bp-class (decode-path, low value)** — `sampling/sampling_batch_info.py` +28/−12, `managers/schedule_batch.py` +3, test +58. `filter_batch` left `is_all_greedy`/`need_top_k_sampling`/`max_top_k`/`npu_top_k_top_p_eligible` as derived from the pre-drop batch ("safe but sticky"): one finished greedy row keeps the survivors on the top-k path (and `max_top_k=None` disables the tight host-side bound) for the running batch's remaining life. Fix factors the five derivations into `_top_k_flags()` + new `refresh_top_k_flags()`, called from `ScheduleBatch.filter_batch` right after `sampling_info.filter_batch(keep_indices, keep_indices_device)`. Host-side flag/derivation only — **no GPU work removed at the verify site; does not touch the decode gap**. Effect is conditional on mixed greedy/non-greedy batches (all-`top_k=TOP_K_ALL` traffic derives the same flags either way) |
+| `cb55118032` | #49895 | [Fix] entrypoints: Resolve auth levels of included routers and pin a level for every route | **NO-OP** — `srt/utils/auth.py` +25/−10 + test +133. Route-level auth defaults; `start-tp4.sh` sets no `--api-key` (0 hits) so the TP4 line runs unauthenticated |
+| `a05c729c4e` | #38362 | [Fix] hicache: Include logical KV dtype in storage keys | **NO-OP (host/L3 tier off)** — `managers/cache_controller.py` +21/−9, `mem_cache/hicache_storage.py` +2/−2, tests +128. Wrong-dtype L3 key collisions; inert with hicache storage disabled |
+| `04eece19ad` | #46410 | [Refactor] multimodal: [MM refactor 4/9] Split feature transport and preprocessing placement out of the base processor | **NO-OP** — new `multimodal/serving_preprocessing.py` (+128), `multimodal/transport/feature_transport.py` (+157), `base_processor.py` −219. Text-only serving; parts 5–9 pending |
+| `7c683961cc` | #49234 | [Perf] diffusion/cosmos: optimize bf16 fa | **NO-OP** — `multimodal_gen/runtime/**` flashinfer FA2 backend + docs + tests |
+| `6a64408419` | #50390 | [Perf] diffusion: Look up the rounded SiLU of the gated activation in a table on sm_10x | **NO-OP (additive, opt-in)** — `kernels/jit/csrc/elementwise/activation.cuh` +135, `kernels/ops/activation/activation.py` +60, `+221/−0` total: new `build_silu_rounding_table` / `run_silu_and_mul_rounded_table` entrypoints only, the existing `silu_and_mul` dispatch is untouched. Only a caller opting in (diffusion) pays the 128 KB table build. **If a later commit wires this into the LLM MLP path on sm_10x it becomes bp-class perf** (expf-plus-divide removed from a per-token op) |
+| `ac939dfaa8` | #34353 | [Fix] [NPU] modelslime: Fix NEXTN startup and mamba scatter UB overflow | **NO-OP** — `hardware_backend/npu/**`, `modelslim.py`, `qwen3_5_mtp.py`; Ascend only |
+| `2456e0beab` | #50466 | [Test] ep: Temporarily disable test_mooncake_ep_small on the Mooncake EP JIT nvcc spawn flake | **NO-OP** — CI-only (1 line, `test/registered/ep/`) |
+
+### Cross-checks
+
+- Arithmetic: 474 + 8 = 482 ✓ against the script's own `window-commits=482`; prev head
+  `bd47834099` sits at index 8 of the 9-row `since=03:00Z` fetch.
+- Fetch integrity: 1 census page (script, 5 pages) + 1 commit-list page + 8 commit details + 2 issue
+  legs + 2 PR legs = all JSON parsed before triage; 2 patch bodies fetched over plain
+  `github.com/.../commit/<sha>.patch` (no API budget).
+- Class totals: 1 bp + 7 NO-OP = 8 ✓. NO-OP breakdown: diffusion 2, hicache 1, MM refactor 1,
+  auth 1, NPU 1, CI 1.
+- **Keyword counter: 0 of 8** — the only row worth recording (#50400: "sampling", "batch") is
+  invisible to the script's key set, as in run #13 (#49721). Triage cannot be reduced to keywords.
+- Anchor-file sweep: no commit in this slice touches `deepseek_v4_backend.py`, `deepseek_v4.py`,
+  `deepseek_v4_dspark.py`, `dspark_components/*`, `engram.py`, `speculative/`, `deepseek_v41` config
+  or `srt/kernels/`. Only `managers/schedule_batch.py` intersects our surface, and only via #50400;
+  the local `schedule_batch` hook (`loop_abort.install` → wraps `Req.update_finish_state`) is on a
+  different symbol, so a #50400 backport would not collide with the adapter.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change. Alert file consumed
+   and removed after acting.
+2. **New bp candidate #50400** (`4a909c3ba6`): low value, decode-path sampling overhead only, and
+   conditional on mixed greedy/non-greedy batches. Anchors to confirm at apply:
+   `SamplingBatchInfo.filter_batch`, `from_schedule_batch`'s inline flag derivation, `TOP_K_ALL`,
+   `max_top_k`, the `_fast_copy_enabled`/`_FIELD_NAMES` path (the new method uses `setattr` and adds
+   no field, so the fast-copy tuple is unaffected), call site
+   `ScheduleBatch.filter_batch` → `self.sampling_info.filter_batch(keep_indices, keep_indices_device)`.
+   **Block-level apply check not done** (pin 8817f63c tree is not in this checkout); the diff's `-`
+   lines show the pre-fix inline form, consistent with the pin. Apply only in an authorised window.
+   **Does not close the decode gap**; #49721 and #50177 stand as the other low-value bps.
+3. **Next-pin pre-flight rows remain seventeen** (candidate **`5e6995dd`**, unchanged): (a)–(q) as
+   run #12. No dependency, Dockerfile or wheel change in this window.
+4. **Decode gate unchanged**: no commit this window touches the dspark verify host-sync
+   (~44 ms/step `cudaEventSynchronize`, dspark verify rework #48831-33). #50400 is host-side flags,
+   #50390 is additive and opt-in.
+5. **bp6r3 conflict re-checks stand**: #44588 and #37472 on `dspark_verify_window.py`. No new
+   upstream commit on that file this window.
+6. **Operator**: (a) `gh` re-auth (**14th run**), (b) make the census leg fail loud in
+   `scripts/verify/upstream_watch.sh` — it recovered this run, but 4 failures in the last 6 runs
+   with silent `? ?` substitution is still the top tooling risk.
