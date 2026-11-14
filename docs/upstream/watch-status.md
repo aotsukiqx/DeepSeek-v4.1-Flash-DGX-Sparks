@@ -1091,3 +1091,99 @@ Census 436, prev head `410e64bb84` at index 8 → slice `[0:8]`. Arithmetic: 428
 6. **Operator**: `gh` auth dead for `aotsukiqx` (**11th run**) — re-auth remains the standing fix;
    REST-only stayed sufficient (15/60 core). The script's `? ?`-on-failure masking (runs #9/#10)
    is still unpatched, though the census leg was healthy this run.
+
+## 2026-11-14T00:17Z (2026-11-14 08:17 +08) — watch run #12
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 (00:17:38–00:18:03Z). **Partial run again**:
+both issue legs numeric, census leg printed `dsv41-relevant-since-watch=? window-commits=?` (the
+script's python/urllib call exits early) while the alert raised on cumulative issue facts. Budget at
+that moment **49/60 core** → this is *not* a rate-limit symptom; it is the third occurrence of the
+script's census failure mode (run #9 = full 403 blackout, #10 = same `? ?` at 53/60 core) and the
+second consecutive time it masked a window containing material commits. Census redone manually
+below via `curl --http1.1 --compressed` (5 pages, 21 new rows).
+`gh auth status` → **invalid token for `aotsukiqx` (12th consecutive run)**; `gh issue view` /
+`gh pr view` never attempted — REST only. Core budget 49/60 at start → 31/60 after the sweep
+(**18 core**: 2 census+2 issue legs are the script's, 5 census pages, 3 issue/PR/search reads,
+10 commit details). **Only in-repo change: this file.** Main HEAD at capture `8c7ec05287`
+(committer `2026-11-13T23:36:19Z`).
+**Cadence**: log slots 20:17:33Z → 00:17:38Z, `17 */4` healthy; the 11-10→11-13 gap stays
+unexplained.
+
+### Issues — zero delta (11th silent run for #49174)
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at 2026-11-09T07:26:52Z`;
+  the two comments are both **`Kylinny` on 2026-11-08** (15:21:48Z / 15:48:22Z) — nothing newer
+  than run #1, so no maintainer text to read.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **eleventh consecutive
+  silent run**. Body-reference search (`"49174" type:pr`): `total_count 1`, still **#49306**
+  open/unmerged, `updated_at 2026-11-09T12:56:58Z`, unchanged since run #5.
+- **#49182** — `state=closed`, `merged=True`, merge **`5e6995dd09`**, head **`a49ff4d7d3`**,
+  `merged_at 2026-11-09T07:26:50Z` → byte-identical to runs #3/#9/#10/#11. Next-pin candidate
+  remains **`5e6995dd`**.
+
+### sglang main — 21 new commits in 4 h; 1 build/dep row, 20 NO-OP
+
+Census **457** (`since=2026-11-08T14:00:00Z`, pages 100/100/100/100/57), prev head `cc3e9dc03e`
+at index 21 → slice `[0:21]`. Arithmetic: 436 + 21 = 457 ✓.
+
+| Commit | PR | Subject | Class — note |
+|---|---|---|---|
+| `3e4d7bd0c5` | #50394 | [Chore] flash-attn: Restore the kernels-hub FA3 loader and the kernel lock | **pin-migration-class (build/dep)** — new runtime dep **`kernels>=0.14.1,<0.15`** + `[tool.kernels.dependencies] "kernels-community/sgl-flash-attn3" = 1`; **new env `SGLANG_USE_SGL_FA3_KERNEL = EnvBool(True)`** (`environ.py:1654`, default **on**) routes `_load_fa3_kernels()` to `_load_fa3_kernel_from_sgl_fa3()`, whose body is a bare `from sgl_fa3 import …` **outside the try/except** (the try/except only wraps the kernels-hub branch, and its `except` falls *back to* the wheel). #50260's dep marker is `linux and **x86_64**` ⇒ on aarch64 that import is unavailable, i.e. the failure is an ImportError, not a caught fallback. `Dockerfile.cu134` +24: `kernels lock python` then `kernels download python` with an explicit aarch64 skip branch ("sgl-flash-attn3 ships no arm variants; JIT-compile at runtime") and `kernels.lock` moved into `SGLANG_CACHE_DIR`. Runtime scope: FA3 is excluded at SM121 by `_is_fa3_supported` (sm80/86/89/90a, per run #11), so no DSV4 serve path should reach the loader — the pin risk is (a) module-scope import of `sglang/kernels/ops/attention/flash_attention_v3.py` on aarch64, (b) `kernels` installing in the aarch64 image |
+| `d38c87c4fd` | #49906 | [Fix] mem_cache: Keep freeing SWA slots for an unpublished prefill with a pending SWA branch | **NO-OP now / pin note** — `mem_cache/unified_radix_cache.py` +10/−0 (+2 disagg tests). Unified radix cache is **post-pin** (unified sub-pool landed 2026-11-13, pre-flight row n); at the next pin any SWA-enabled or PD path inherits the free-slot fix. No local patch anchors on `mem_cache/*` (`grep` over `runtime/*.patch` is empty) ⇒ no conflict today |
+| `257ba631d4` | #49636 | [Feat] kv-shard: Let out-of-tree backends and pools join logical-page KV sharding | **NO-OP / pin note** — `arg_groups/kv_shard_hook.py` +19/−2, `mem_cache/kv_cache_configurator.py` +9/−0, `mem_cache/page_interleave.py` touched. Logical-page KV sharding is not our layout (TP4 over NCCL, no kv-shard); `kv_cache_configurator` gains a hook post-pin code may call |
+| `d7a4948025` | #50364 | [Feat] quantization: Support dense SiLU+mul fusion for masked per_token_group_quant | **NO-OP (default off) / optional lever** — new `kDenseSiluAndMul` trait arg on `PerTokenGroupQuantMaskedKernel` and `masked_layout` removed from the dense-mode rejection, so `silu_and_mul_mode="dense"` now works on the **masked (MoE) layout**, bit-exact vs flat dense (new `test_dense_silu_masked_bitexact`). Opt-in only; no launcher flag in this repo sets `silu_and_mul_mode`. Different files from our bp4-pr46088 anchors (`deepseek_v4_mhc.py` imports `create_per_token_group_quant_fp8_output_scale` from `ops/quantization/fp8_kernel`, not `per_token_group_quant`) ⇒ no anchor churn |
+| `6ddfd1380c` | #49686 | [Feat] disaggregation: Make the PD top-logprobs metadata width configurable | **NO-OP** — PD disagg; but `managers/scheduler.py` +23/−5 (our bp anchors `managers/scheduler_components/batch_result_processor.py`, a different file) |
+| `a1bc580cfd` | #49917 | [Fix] hicache: Lock the window a staged buffer-mode load-back keeps | **NO-OP** — `mem_cache/buffer_mode/pipeline.py` +19/−1 + 384 lines of tests; HiCache host/buffer tier disabled here |
+| `0e509eaf4c` | #49633 | [Perf] hicache: Stage kernel-backend host index uploads in pinned memory | **NO-OP** — `mem_cache/pool_host/unified.py`, `utils/device.py` (pinned-alloc helper); host tier disabled |
+| `9521f578b7` | #47025 | [Feat] disaggregation: Add opt-in Mooncake TENT transfer engine backend for PD | **NO-OP** — +1107/−26 PD transfer engine (`tent_transfer_engine.py` new); PD not used |
+| `aebd76a5f3` | #50363 | [Perf] [AMD] hicache: Submit staged write-back copies with hipMemcpyBatchAsync | **NO-OP** — ROCm + host tier |
+| `8c7ec05287` | #50373 | [Test] server_args: Stop two PortArgs tests from probing fixed host ports | **NO-OP** — test-only (+15/−2) |
+| `d6bc9e7272` `108ffbdc5b` `2815ad0907` `b71901e7ad` `fbe18964eb` `27c2438dae` `b71152ae2a` `34fd2d48c9` `5bfcc9f1f2` `29327444b1` `26f3f4e1c0` | #50199 #50190 #50189 #49907 #49663 #49653 #49650 #49640 #49635 #50204 #49631 | rust-server block: MM item identity hashed once; abort-hook request names; `--warmups`/`--gc-warning-threshold-secs`; MM processor request failure; `/generate` error type+retryability; Python-parity rejections; media without a fetch slot; tokenizer-queue 503 + extension metrics + GIL release on shutdown; **aarch64 SHA-256 instructions**; `/v1/loads` snapshot lock off async workers; `managers/load_snapshot.py` encode-before-lock | **NO-OP (11 rows)** — the Rust frontend is opt-in (`SGLANG_RUST_SERVER`); this line serves with the Python frontend (`grep` of `scripts/`, `runtime/` finds no `RUST_SERVER` reference). #50204 is build-only for a Rust binary we do not ship. Note the block is the largest single cadence of upstream work this window (11/21) — the Rust frontend is getting the attention, our Python serve path is not |
+
+### Cross-checks
+
+- Arithmetic: run #11 total 436 + 21 = 457 ✓; prev head `cc3e9dc03e` at index 21 of 457.
+- Fetch integrity: 5 census pages + 10 commit details + 1 PR + 1 search + 1 comment list = 18 JSONs,
+  all parse (asserted before triage, §1b); `uc/` count asserted at 10.
+- Class totals: 1 pin/build + 20 NO-OP = 21 ✓. NO-OP breakdown: rust-server/load-snapshot 11,
+  HiCache host tier 3, PD disagg 2, other 4 (test, quant default-off, kv-shard, post-pin radix cache).
+  Four NO-OPs carry pin notes (#49906, #49636, #49686, #50364).
+- **Keyword counter: 0 of 21.** The script's own heuristic would have reported *no* DSV4-relevant
+  commits in a window that contains a default-on FA3 loader switch, a new runtime dependency, and a
+  Dockerfile cubin path. Worst counter miss recorded (previous worst: 42 of 56 rows missed, run #9).
+  Per-commit reading is the only reliable mode.
+- Manual-vs-script cutoff agreement: the script's `? ?` gives no number this run, so the 457 total
+  and the 21-row slice come from one fetch path only (`curl --http1.1 --compressed`, run #11's
+  confirmed-safe form); no second-cutoff cross-check available.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change. Alert file consumed
+   and removed after acting.
+2. **Next-pin pre-flight rows now seventeen** (candidate **`5e6995dd`**, unchanged): (a)–(p) as
+   runs #8/#9/#11, with **row (p) revised** and **row (q) added**:
+   - **(p) FA3 sourcing is now dual-path, wheel preferred** — #50260 removed FA3 from
+     sglang-kernel; #50394 restores a kernels-hub loader but makes the `sgl-fa3` wheel the
+     **default** (`SGLANG_USE_SGL_FA3_KERNEL=True`). The dep marker is `linux and x86_64`, so on
+     aarch64 the default branch reaches `from sgl_fa3 import …` with no guard. Pin check: confirm
+     nothing on the DSV4 path imports `flash_attention_v3.py` at module scope, or set the env off
+     in the image.
+   - **(q) new runtime dependency `kernels>=0.14.1,<0.15`** — confirm it installs in the aarch64
+     image and that the Dockerfile's aarch64 cubin-skip branch is present in whatever recipe the
+     next image is built from; otherwise the build's `kernels download python` step has no
+     aarch64 variant to fetch.
+3. **No new bp candidate this window.** #50177 (run #10, decode-attn-TP skip, 3 LOC, cp path
+   disabled) remains the only open low-value bp; it cannot close the decode gap.
+4. **Decode gate unchanged**: no sync removal at our verify site (~44 ms/step
+   `cudaEventSynchronize`, dspark verify rework). Nothing in this window touches
+   `deepseek_v4_backend.py`, `dspark_verify_window.py`, `ragged_verify*`,
+   `decode_cuda_graph_runner.py`, or `parallel_state.py` — the files our patches anchor on.
+5. **bp6r3 conflict re-checks stand**: #44588 and #37472 on `dspark_verify_window.py`. No new
+   upstream commit on that file this window.
+6. **Operator — script fix is now the top item**: the census leg has failed in 3 of the last 4 runs
+   (#9, #10, #12) and twice it silently substituted `? ?` for a window that contained material
+   commits. Fail loud (non-zero rc + keep the alert) instead of printing `?`; the `? ?` path also
+   makes "nothing changed" and "everything failed" indistinguishable for any downstream reader.
+7. `gh` auth dead for `aotsukiqx` (**12th run**) — re-auth remains the standing operator fix;
+   REST-only stayed sufficient (18/60 core).
