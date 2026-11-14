@@ -1187,3 +1187,89 @@ at index 21 → slice `[0:21]`. Arithmetic: 436 + 21 = 457 ✓.
    makes "nothing changed" and "everything failed" indistinguishable for any downstream reader.
 7. `gh` auth dead for `aotsukiqx` (**12th run**) — re-auth remains the standing operator fix;
    REST-only stayed sufficient (18/60 core).
+
+## 2026-11-14T04:18Z (2026-11-14 12:18 +08) — watch run #13
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 (04:17:40–04:18:03Z). **Partial run again**:
+both issue legs numeric, census leg `dsv41-relevant-since-watch=? window-commits=?` (the script's
+python/urllib call exits early). Budget measured immediately afterwards **53/60 core, used 7** →
+rate limiting is excluded; this is the **4th occurrence in 5 runs** (#9 full 403 blackout, #10/#12/#13
+`? ?` at 53/49/53 core) and the third time it masked a window. Census redone manually below via
+`curl --http1.1 --compressed` (5 pages, 17 new rows).
+`gh auth status` → **invalid token for `aotsukiqx` (13th consecutive run)**; `gh issue view` /
+`gh pr view` never attempted — REST only. Core budget 53/60 at start → 48/60 after the sweep
+(reset rolled mid-sweep). **Only in-repo change: this file.** Main HEAD at capture
+`bd47834099` (committer `2026-11-14T03:26:49Z`).
+**Cadence**: log slots 00:17:38Z → 04:17:40Z, `17 */4` healthy.
+
+### Issues — zero delta (12th silent run for #49174)
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at 2026-11-09T07:26:52Z`;
+  byte-identical to runs #1–#12 (both comments are `Kylinny` on 2026-11-08). No maintainer text to
+  read; the alert line for it is cumulative.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **twelfth consecutive
+  silent run**. Body-reference search (`"49174" type:pr`): `total_count 1`, still **#49306**
+  open/unmerged, `updated_at 2026-11-09T12:56:58Z` — unchanged since run #5.
+- **#49182** — `merged=True`, merge **`5e6995dd09`**, head **`a49ff4d7d3`**,
+  `merged_at 2026-11-09T07:26:50Z` → unchanged. Next-pin candidate remains **`5e6995dd`**.
+
+### sglang main — 17 new commits in 4 h; 1 low-value bp candidate, 16 NO-OP
+
+Census **474** (`since=2026-11-08T14:00:00Z`, pages 100/100/100/100/74), prev head `8c7ec05287`
+at index 17 → slice `[0:17]`. Arithmetic: 457 + 17 = 474 ✓.
+
+| Commit | PR | Subject | Class — note |
+|---|---|---|---|
+| `fe10e2be64` | #49721 | [Fix] scheduler: Answer health probes that are waiting behind other requests | **bp-class (low value, monitoring)** — `managers/scheduler.py` +21/−0 (`_ack_waiting_health_checks()` called after the early returns in `_get_new_batch_prefill_raw`, `+2` at the call site) + `dllm/mixin/scheduler.py` +1 + test +188. A `health_check_generate` probe queued behind a chunked prefill would otherwise wait out every chunk; it is now acked and retired. `start.sh`/`stop.sh`/`scripts/verify/window_guard.sh` all gate on HTTP health, so this is liveness-only value during windows — **zero effect on decode or prefill perf**. Anchors to confirm at apply: `is_health_check_generate_req`, `return_health_check_ipcs`, `maybe_send_health_check_signal` likely pre-pin; **`RequestRetirer.release` and `finish_outside_step` look post-pin** (req-lifecycle refactor) ⇒ expect a rewrite, not a straight apply |
+| `1dd0dcce38` | #49992 | [Feat] mem_cache: Joint Full/SWA eviction walk on the Rust tree core | **NO-OP now / pin note** — `rust_tree_core/adapter.py` +21/−8, `rust/sglang-radix-tree/{swa.rs,unified_lru_list.rs,unified_tree_core.rs,python_bindings.rs}` +753 total. Rust tree core is post-pin (unified sub-pool, pre-flight row n); at the next pin Full/SWA eviction walks jointly |
+| `e1113c1fc3` | #49695 | [Refactor] mem_cache: Tag full-only KV frees that release a tree node's value, commit load-backs through one method | **NO-OP now / pin note** — `unified_cache/cache_action.rs`+`cache_action.py` tag bit, `unified_radix_cache.py` +14/−5. Post-pin unified cache; no local anchor (`mem_cache/*` absent from `runtime/*.patch`) |
+| `800f596bfc` | #49641 | [Fix] radix-tree: Clamp SWA tombstone recovery to the protected prefix in the Rust tree core | **NO-OP now / pin note** — Rust core only (`swa.rs` +2/−1, tests +159/−5). Post-pin |
+| `25363debb8` | #49649 | [Fix] scheduler: Observe finished storage prefetches before shortest-prefill-first ranks, count staged prefixes as cached | **NO-OP (policy-gated)** — `schedule_policy.py` +21/−11, `base_prefix_cache.py` +10, `unified_radix_cache.py` +52/−12. Two independent gates: `poll_storage_prefetches` returns unless `policy == SHORTEST_PREFILL_FIRST`, and our launchers set **no `--schedule-policy`** anywhere (grep over the checkout: zero hits) ⇒ default `fcfs`. Rest is post-pin unified cache |
+| `e5caad9a07` | #49658 | [Feat] scheduler: Add opt-in aging to the shortest-prefill-first policy | **NO-OP (default off)** — new `--shortest-prefill-aging-factor` default **`0.0`**, and the constructor raises unless `schedule_policy=shortest-prefill-first` ⇒ inert on our `fcfs` line. `schedule_policy.py` +49/−5, `scheduler.py` +5/−2 |
+| `5f11045a08` | #49666 | [Perf] hicache: Keep the buffer load-back ownership check from waiting on the GPU at admission | **NO-OP (host tier off) / directional note** — replaces the admission-time `torch.equal(canonical, device_indices)` ownership check with a device-side compare staged through **`async_d2h`**, read at the load-back ack (`buffer_mode/pipeline.py` +57/−13). A sync removal, but on the HiCache buffer load-back path we do not enable — **does not touch the dspark verify sync site**, so the ~7-token decode gap is unaffected |
+| `cbf4c36687` | #49644 | [Perf] hicache: End each buffer-only backup chain where the insert walk's previous one ended | **NO-OP** — `unified_tree_core.rs` +41/−20 + `buffer_mode/pipeline.py` +1/−2; Rust core is post-pin, host tier off |
+| `56fa7ca6e7` | #50370 | [Feat] kv-shard: Let an out-of-tree HiCache storage backend join logical-page KV sharding | **NO-OP** — `arg_groups/kv_shard_hook.py` +19, `mem_cache/{buffer_mode/pipeline,hybrid_cache/hybrid_cache_controller,pool_host/page_interleave,unified_cache/storage_attachment}.py`. kv-shard off, host tier off |
+| `6317e8ed4b` | #46409 | [Refactor] multimodal: [MM refactor 3/9] Extract a shared multimodal processor mixin | **NO-OP** — new `multimodal/multimodal_processor_mixin.py` (+411), `processors/base_processor.py` −385. Text-only serving here; parts 4–9 pending, watch only if a later part changes scheduler-side MM admission |
+| `bd47834099` `c5d7c59804` `19668f7b9b` `1be399bd11` `b074ad473a` `6e4f22fcd1` | #49970 #50407 #50401 #49630 #50396 #49634 | rust-server block: client request IDs up to 256 B; video item frame/token caps to MM processors; **serve HTTP/2 h2c beside HTTP/1.1 (`--enable-http2`)**; drain scheduler-kill log + bounded reap; per-test shutdown topology; refresh frontend config catalogue, drop the Rust lexer | **NO-OP (6 rows)** — Rust frontend is opt-in (`SGLANG_RUST_SERVER`); this line serves with the Python frontend |
+| `fc8d97d142` | #44613 | [CI] tests: Give each NIXL storage test its own temp directory | **NO-OP** — CI-only |
+
+### Cross-checks
+
+- Arithmetic: run #12 total 457 + 17 = 474 ✓; prev head `8c7ec05287` at index 17 of 474.
+- Fetch integrity: 5 census pages + 10 commit details + 2 issue legs + 1 PR + 1 search = 19 JSONs,
+  all parse (asserted before triage, §1b).
+- Class totals: 1 bp + 16 NO-OP = 17 ✓. NO-OP breakdown: rust-server 6, Rust-core/unified
+  mem_cache 3, scheduler policy-gated 2, HiCache buffer/host tier 2, kv-shard 1, MM refactor 1,
+  CI 1. Four NO-OPs carry pin notes (#49992, #49695, #49641, #49649).
+- **Keyword counter: 0 of 17** (recomputed over the slice with the script's own key set). It would
+  have reported a clean window and missed the only row worth recording (#49721 — "scheduler" and
+  "health" are not keys). Script census could not have reported it either: `? ?` again.
+- Anchor-file sweep: no new commit touches `deepseek_v4_backend.py`, `deepseek_v4.py`,
+  `dspark_verify_window.py`, `engram.py`, `parallel_state.py`, `speculative/`, or
+  `scheduler_components/batch_result_processor.py`. Only `mem_cache/` and `managers/scheduler.py`
+  intersect our patch surface, both via post-pin/policy-gated paths.
+- Manual-vs-script cutoff agreement: script gave `? ?`; manual 474 from one fetch path
+  (`curl --http1.1 --compressed`).
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change. Alert file consumed
+   and removed after acting.
+2. **Next-pin pre-flight rows remain seventeen** (candidate **`5e6995dd`**, unchanged): (a)–(q) as
+   run #12. No dependency or Dockerfile change in this window.
+3. **New bp candidate #49721** (`fe10e2be64`): low value — health-probe liveness behind chunked
+   prefills, no perf surface. Apply only in an authorised window, and expect to rewrite the retire
+   call (`RequestRetirer`/`finish_outside_step` are post-pin). #50177 (run #10) stands as the other
+   low-value bp. **Neither closes the decode gap.**
+4. **Decode gate unchanged**: no sync removal at our verify site (~44 ms/step
+   `cudaEventSynchronize`, dspark verify rework #48831-33). #49666 is a sync removal, but in HiCache
+   buffer load-back, not the verify site.
+5. **bp6r3 conflict re-checks stand**: #44588 and #37472 on `dspark_verify_window.py`. No new
+   upstream commit on that file this window.
+6. **Operator — script fix still top item**: census leg failed in **4 of the last 5 runs**
+   (#9/#10/#12/#13), and today at a 53/60 budget, which **refutes the earlier 403-only
+   explanation** — the urllib path fails independently. It also silently substitutes `? ?` for
+   windows that contain material commits. Fail loud (non-zero rc, keep the alert).
+7. `gh` auth dead for `aotsukiqx` (**13th run**) — re-auth remains the standing operator fix;
+   REST-only stayed sufficient.
