@@ -1551,3 +1551,78 @@ no code). Per-commit reading remains the only reliable mode.
 6. **Operator**: (a) `gh` re-auth (**16th run**; every run is REST-only now), (b) the 3.2-day Orca
    outage is over (clean scheduled slot this run), but the host resolver stays the single point of
    failure for polling.
+
+## 2026-11-17T20:18Z (2026-11-18 04:18 +08) — watch run #17
+
+**Tooling**: script rc=0 with all three legs numeric — `issue#49173 state=closed comments=2`,
+`issue#49174 state=open comments=0`, `dsv41-relevant-since-watch=78 window-commits=741`
+(20:17:40–20:18:14Z, `fetch_rc=0`). Scheduled `17 */4` 20:17Z slot; the 12:17Z slot ran (TLS retry
+ladder: 12:18Z `fetch-failed`, then successful 12:31/12:32Z retries) and 16:17Z ran clean, so **no
+log gap**. The alert file holds only the cumulative triggers (#49173 closed + its fixed comment
+count), not new activity; consumed.
+
+`gh auth status` → invalid token for `aotsukiqx` (**17th consecutive run**); `gh issue view`/`gh pr
+view` not attempted. REST only: 8 census pages + 2 issue legs + 2 comment legs + 1 PR leg + 1
+referencing-PR search + 9 commit details = **22 core + 1 search**. Core budget **49/60 at start**
+(11 used) and the hour window rolled to **60/60, 0 used** by the end; search 10/10 → 9/10.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at 2026-11-09T07:26:52Z`:
+  byte-identical to runs #1–#16. Both comments are the original maintainer thread (Kylinny,
+  11-08T15:21Z intent + 11:48Z "fix is up in #49182"); no new comment.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **sixteenth consecutive
+  silent run**. Referencing-PR search re-run: still exactly **#49306** (`closes #49174`), `open`,
+  `merged=None`, `updated_at 2026-11-09T12:56:58Z` — untouched for 8 days; no re-triage needed.
+  `adapter/loop_abort.py` `TRUNCATE=0` remains the only mitigation.
+- **#49182** — merged `2026-11-09T07:26:50Z`, merge **`5e6995dd09`**, head `a49ff4d7d3`, unchanged.
+  Next-pin candidate remains **`5e6995dd`**.
+
+### sglang main — 9 new commits; all NO-OP
+
+Census **741** (`since=2026-11-08T14:00:00Z`, 7×100 + 41); prior total **732 + 9 = 741 ✓**. Slice
+above prior head `b2cc023f23` (`2026-11-17T13:53:57Z`) is exactly 9 commits (prior head at index 9);
+new head **`1aa45c6617`** (`2026-11-17T19:45:00Z`).
+
+| Commit | PR | Subject | Class — evidence |
+|---|---|---|---|
+| `1aa45c6617` | #50126 | [Perf] tokenizer: flat output sampling masks | **NO-OP** — new request fields only (`return_flat_raw_sampling_mask[_b64]`, default `False`, chat form requires `return_meta_info`); the non-flat `to_lists()` branch is the old behavior and `chunk` is `None` unless sampling masks are requested; `rust/sglang-processor` is opt-in |
+| `5cefe8de82` | #48097 | [Feat] [AMD] AITER MegaMoEGfx1250 + mori dispatch | **NO-OP** — the `fp8.py` edits sit under `if _use_aiter and self.is_fp4_expert` (ROCm only) and `is_megamoe()`; our MoE is `b12x_next` with MegaMoE bypassed |
+| `b43c4c00a6` | #51044 | [CI] qknorm rope AMD stage rename + ml-dtypes cap | **NO-OP** — `scripts/ci/amd` + HIP/JIT tests only |
+| `31e55a5120` | #50874 | [CI] suites: unify CI suite/command names | **NO-OP** — 300 files, all `.github/workflows`, `scripts/ci*`, `scripts/lint`, test registration and docs; no `python/sglang/srt` file touched |
+| `9c1b3eceb8` | #44349 | [Feat] beam-search trie head + shared-context attention | **NO-OP (feature-gated)** — both new envs default `False`; every new branch keys on `req.beam_group`/`forward_batch.beam` which are `None` for non-beam batches (`beam_decode_budget`/`beam_launch_complete` return the old value); trie head installs only when a bundled trie file is found in the model dir (`configure_model_trie_output_heads` returns `False` first); the new flashinfer wrapper exists only on the non-MLA branch. **Pin note**: it parameterizes `schedule_policy` budgets, `logits_processor`, `model_runner`, `forward_batch_info` and `decode_cuda_graph_runner.can_run_graph` — re-derive any budget/`can_run_graph` bp against this shape at the next pin |
+| `aa3ccefd38` | #50983 | [Fix] gc: warn on frozen garbage, don't report a leak | **NO-OP** — post-pin `scheduler_components/gc_freezer.py`; diagnostic only, drops the `SGLANG_ENABLE_GC_FROZEN_GARBAGE_CHECK` env and the `Severity.LEAK` report, keeps `refreeze_gc` |
+| `90121c62a8` | #50059 | [Fix] mem_cache: prompt end in the same checkpoint as an SWA branch point | **NO-OP** — the added `checkpoint_into_tree` call is gated on `result.swa_branch_inserted`; DSV4.1 on this line is MLA/DSA with no sliding-window pool. Cache-correctness only, no perf surface. Re-check the gate at apply time if a hybrid-SWA model ever runs here |
+| `ba9c86bb7e` | #46029 | [Feat] [NPU] diffusion MindIE-SD into Ascend FA | **NO-OP** — `multimodal_gen` + `platforms/npu.py` only |
+| `db12772f0c` | #47293 | [Fix] unified_cache: Inkling MTP draft state in the direct external linker | **NO-OP** — restores SWA+FULL sidecars for *hybrid* drafts; every `DeepSeekV4TokenToKVPool` branch is preserved (`_draft_bytes` keeps the SWA-only path, `build_hicache_draft_sidecars` and `kv_cache_builder` keep their DSV4 branches), and the HiCache host/draft-sidecar tier is off on this line. Files are post-pin (`hybrid_cache/*`, `linker_pool_assembler.py`) — re-take wholesale at the next pin |
+
+### Cross-checks
+
+- Arithmetic: 732 + 9 = **741** ✓ against the independent page count (7×100 + 41); prior head
+  `b2cc023f23` at index 9, the row just above it is `db12772f0c` (`2026-11-17T16:38:04Z`).
+- Class totals: **0 material rows + 9 individually-read NO-OPs = 9** ✓ (every sha assigned once).
+- No commit in the slice touches `speculative/`, `dspark_*`, `deepseek_v4*`, `engram.py`,
+  `mem_cache/` (runtime file) or the indexer backend — the decode-gate search surface is untouched.
+- Fetch integrity: 8 census pages + 2 issue legs + 2 comment legs + 1 PR leg + 1 search + 9 commit
+  details; all 14 cached JSON bodies re-parsed, 9/9 commit details present.
+- **Keyword counter: 0 of 9** — the total stayed at 78 across the window, so the counter was a
+  complete miss on this slice (it would have reported "nothing new" for a 2 678-line feature).
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change. Alert consumed.
+2. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged; #49182 is what the next pin
+   absorbs, and nothing in this window walks back the `>=10` dense-gate family.
+3. **Standing — decode gate unchanged**: still no CUDA host-sync removal on the dspark verify path.
+   The ~44 ms/step `cudaEventSynchronize` attribution stands.
+4. **Standing pre-flights (unchanged)**: #49896 admin-key gate breaks unauthenticated
+   `/start_profile` in `scripts/profile/profile_decode.sh` +
+   `scripts/verify/decode_profile_bounded.sh`; sglang-kernel 0.4.11 aarch64 `cp311-abi3` wheel;
+   sgl-deep-gemm 0.2.8 / sgl-flash-mla 1.0.5, arch-12 fp32-weights assert unchanged.
+5. **Standing — bp6r3 conflict re-checks**: #44588 and #37472 on `dspark_verify_window.py`. No new
+   commit on that file this window; the nearest new conflict surface is #44349's parameterization of
+   `schedule_policy`/`logits_processor`/`decode_cuda_graph_runner`.
+6. **Operator**: (a) `gh` re-auth (**17th run**; every run is REST-only), (b) no Orca/log gap this
+   window (12:17Z, 16:17Z, 20:17Z all present), (c) the host resolver/TLS path stayed healthy this
+   run after the 12:17Z failure — still the single point of failure for polling.
