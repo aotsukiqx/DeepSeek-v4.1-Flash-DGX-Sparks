@@ -1501,6 +1501,11 @@ view` not attempted. REST only: 8 census pages + 2 issue legs + 1 PR leg + 1 ref
 1 commit detail + 1 check-runs leg + 2 searches ≈ 15 core + 2 search requests. Core budget
 **50/60 at start, 53/60 at end** (the unauthenticated hour window rolled mid-sweep), search 8/10.
 
+**Push backlog flushed**: origin was still at `99a21a8`, so both `8156c8a` (the script retry-fail-loud
+patch) and `0222605` (run #15's entry) had never been published — the run #15 commit happened, the
+push did not. This run's `git push` carried all three commits (`99a21a8..0d3cc76`); `git ls-remote`
+confirms `origin/main = 0d3cc762ad`. Run #15's work is only now visible on GitHub.
+
 ### Issues / PR — zero delta
 
 - **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at 2026-11-09T07:26:52Z`:
