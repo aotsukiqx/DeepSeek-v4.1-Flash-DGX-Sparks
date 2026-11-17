@@ -1354,3 +1354,135 @@ independently. Slice taken above prior head `bd47834099` (committer `03:26:49Z`)
 6. **Operator**: (a) `gh` re-auth (**14th run**), (b) make the census leg fail loud in
    `scripts/verify/upstream_watch.sh` — it recovered this run, but 4 failures in the last 6 runs
    with silent `? ?` substitution is still the top tooling risk.
+
+## 2026-11-17T12:32Z (2026-11-17 20:32 +08) — watch run #15
+
+**Tooling**: script rc=0 at 12:18:03–12:18:22Z, but **all three legs failed** — `issue#49173
+fetch-failed`, `issue#49174 fetch-failed`, `dsv41-relevant-since-watch=? window-commits=?`. First
+total blackout in 15 runs, and the first one that was transport rather than budget. **Log gap**:
+the previous run was 2026-11-14T08:17Z, so ~19 four-hour slots (3.2 d) did not run; the log is
+append-only and resumes cleanly, so the automation/host was down, not wiped.
+
+**Root cause — transport, not rate limiting.** `/rate_limit` answered on the first manual try
+(core **40/60** remaining after the failed run, 32/60 after this sweep; never exhausted). What
+failed: curl (LibreSSL 3.3.6) is reset mid-handshake on `api.github.com` — `SSL_ERROR_SYSCALL`,
+rc 35, plus rc 28 timeouts — and `github.com` then stopped resolving entirely (`Could not resolve
+host`) while `api.github.com` kept resolving. Python's urllib (OpenSSL) worked for the API, and
+`curl --resolve github.com:443:20.169.109.160` worked for patch bodies. Every number below was
+collected with those two workarounds. `gh auth status` → **invalid token for `aotsukiqx` (15th
+consecutive run)**; `gh issue view`/`gh pr view` never attempted, REST only.
+
+**Script patched in this run** (the deferred fix from run #14 action item 6b): each issue leg now
+retries 4× over curl → curl `--tlsv1.2` → python urllib, the census leg retries urllib → curl
+(plain and `--tlsv1.2`), and any leg that still fails sets `FETCH_RC`, writes a `TOOL FAILURE`
+line into the alert, and makes the script exit non-zero instead of deleting the alert. Failure
+path proven at 12:31:58Z: rc=1, `ALERT raised (fetch_rc=1)`, alert body says the clean-looking
+result is not a clean result. A second run at 12:32:40Z still failed every leg — by then
+`api.github.com` had stopped resolving too (`Errno 8: nodename nor servname provided`), so the
+retry ladder was verified as *loud*, not as self-healing. Retries cannot beat a dead resolver —
+that part stays a host problem.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at 2026-11-09T07:26:52Z`;
+  byte-identical to runs #1–#14 (both comments `Kylinny`, 2026-11-08). No new maintainer comment.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **fourteenth consecutive
+  silent run**. No PR body-reference appeared this window either; the `TRUNCATE=0` workaround in
+  `adapter/loop_abort.py` remains the only mitigation.
+- **#49182** — merged `2026-11-09T07:26:50Z`, merge **`5e6995dd09`**, head `a49ff4d7d3` — unchanged.
+  Next-pin candidate remains **`5e6995dd`**.
+
+### sglang main — 249 new commits (3.2-day window); 1 new bp candidate, 3 pin-migration rows
+
+Census **731** (`since=2026-11-08T14:00:00Z`, 7 full pages + 31); prior total **482 + 249 = 731 ✓**.
+Slice above prior head `2456e0beab` (committer `2026-11-14T07:00:33Z`), newest `703e763d5f`
+(`2026-11-17T11:19:50Z`). All 249 subjects read; 18 diffs read at block level via
+`github.com/.../commit/<sha>.patch`; **8 anchors checked against the pin tree** by raw fetch at
+`8817f63c`.
+
+| Commit | PR | Subject | Class — note |
+|---|---|---|---|
+| `7b5fb39bb9` | #49896 | [Feat] entrypoints: Require --admin-api-key for sensitive admin endpoints | **pin-migration (pre-flight #1)** — `AuthLevel.ADMIN_FORCE` routes (weight update, LoRA, memory release, **profiling**, `/set_internal_state`, `/hicache/storage-backend`, pause/continue) answer **403 when no admin key is configured at all**. `scripts/profile/profile_decode.sh` and `scripts/verify/decode_profile_bounded.sh` POST `/start_profile`/`/stop_profile` unauthenticated, and `start.sh`'s `api_key()` deliberately sends no `--api-key` on this line ⇒ **profiler capture breaks at the next pin** unless the launcher exports `SGLANG_ADMIN_API_KEY`/`--admin-api-key` and both scripts send `Authorization: Bearer`. `/abort_request` and `/flush_cache` stay keyless while no admin key is set (`memguard.py` unaffected). Same family: `f7f0c930c1` #50559 (single route-level table) and `17e4738c4c` #50586 |
+| `233d6bae87` | #50397 | [Chore] deps: Bump sglang-kernel to 0.4.11 and sgl-fa3 to 0.1.0 | **pin-migration (deps)** — `SGL_KERNEL_VERSION`/`sglang-kernel` 0.4.10→**0.4.11**, `sgl-fa3` 0.1.0rc0→0.1.0 (x86_64 marker kept), `sgl-deep-gemm` 0.2.8 and `sgl-flash-mla` 1.0.5 unchanged, plus an `assert_pkg_version` in `entrypoints/engine.py`. **Correction to pre-flight row p**: PyPI 0.4.11 *does* publish `sglang_kernel-0.4.11-cp311-abi3-manylinux2014_aarch64.whl` — the "x86_64-only, no aarch64 wheel" note recorded 2026-11-13 is wrong, so the 0.4.11 aarch64 gate is clear |
+| `b8555f91bb` | #50994 | [CI] docker: Drop sgl-fa3 from the CUDA 13.4 image | **pin-migration (image)** — `sed -i '/^  "sgl-fa3==/d' pyproject.toml` in `docker/Dockerfile.cu134`, rationale in-comment: sgl-fa3 pins its torch (non-stable C++ ABI) and ships only sm80/sm86/sm90a kernels; FA3 is imported lazily. Our image is exactly this one and no repo script imports `sgl_fa3` (0 hits) ⇒ bookkeeping row: the next image has no sgl-fa3 |
+| `d1e7987757` | #50981 | [Fix] gc: Keep the heap frozen after a CUDA graph capture | **bp-class (low value)** — `freeze_gc` in `model_executor/runner/base_cuda_graph_runner.py` **exists at the pin** in the simpler collect→freeze→unfreeze→collect form; the fix re-freezes after capture when the heap was frozen before (and honours `gc_was_enabled`). Host-heap/RSS hygiene around capture and recapture only. Companions `8d07d63f37` #50980, `9eb23a3e63` #50883, `988b043982` #50882 live in `utils/gc_utils.py` + `managers/scheduler_components/gc_freezer.py`, both **404 at the pin** |
+| `9fd8b7fef2` | #50719 | [Perf] [NVIDIA] dsv4: Score the V4.1 prefill indexer with DeepGEMM fp8 MQA logits on Hopper | **NO-OP (watch)** — the new prefill-score path is gated on `get_platform().is_sm90`; SM12x keeps `is_sm100_or_newer()` = `is_sm_at_least(10)` for prefill and decode, and the candidate indexer only renames publish/consume flags. Recorded because it churns the exact `v41_indexer` arch-gate family from #49173/#49182 and its comment still documents the "sgl-deep-gemm 0.2.6 dispatches arch 12 with the fp32 weights/logits contract" behaviour; upstream now carries `test_dsv41_indexer_arch_gates.py`. No `==10` regression |
+| `a27a59c2e7` | #50471 | [Perf] dsv41: Share Engram tables across servers with replication group_shards | **NO-OP (overridden)** — new opt-in `replication: group_shards` (+`group_size`/`group_store`, validated and rejected unless set) touching `srt/layers/engram.py` +241 and `arg_groups/engram_config.py`. Our line replaces `EngramEmbedding` wholesale with `adapter/engram_backend.py` (NVMe exact rows, host callback), so upstream churn here is conflict-relevant only at pin migration |
+| `04af670a31` | #50512 | [Perf] [AMD] deepseek-v4.1: Build the low-ratio extend slot gather once per forward, without a host sync | **NO-OP (HIP-only)** — `deepseek_v4_backend_hip_radix.py` + `dsv4/low_ratio_backend_hip.py` only; the CUDA `low_ratio_backend.py` is **404 at the pin**. The decode-gap axis (a host sync in the low-ratio/verify path) is still untouched on CUDA |
+| `5c2d9e4056` | #47013 | [Fix] kvcache: Skip the reserved padding slot in the zero-RoPE MLA KV writer | **NO-OP (not our writer)** — pin file confirms the bug verbatim (`kernels/ops/kvcache/mla_buffer.py:149`: the norope kernel "takes no skip index and writes every loc"). DSV4.1 does not use it: `mem_cache/deepseek_v4_memory_pool.py` at the pin has three own `set_kv_buffer` impls and no `set_mla_kv_buffer` call. bp-writable (anchor exists) but currently unnecessary |
+| `710813dee3` | #46781 | [Perf] spec: Avoid blocking H2D for MRoPE delta in spec decode | **NO-OP (MRoPE)** — one call site in `compute_spec_mrope_positions`; MRoPE is the multimodal position path, DSV4.1 spec decode uses plain RoPE |
+| `a187006c24` | #44861 | [Fix] [NVIDIA] modelopt: Keep SM12x FP8 batch-invariant in deterministic mode | **NO-OP (deterministic off)** — `other=0.0` on two masked `tl.load`s in `kernels/ops/gemm/fp8_kernel.py` `scaled_mm_kernel` (arch-independent, file exists at the pin) plus `apply_fp8_linear_deterministic`. Our FP8 GEMMs dispatch to DeepGEMM/flashinfer, not this Triton kernel, and the deterministic helper needs deterministic inference |
+| `80a461512e` | #49170 | [Fix] deepseek-v4.1: Keep active DP decode ranks out of idle tail replay | **NO-OP (DP)** — drops `late_dp_counts` from the DSV4 layers call and adds `global_late_layer_tail_graph_compatible` to the DP late-layer exchange; `dp_size=1` on this pure-TP line does no DP exchange |
+| `a51b0e2b84` | #50311 | [Perf] mem_cache: Cut unified-memory admission host work | **NO-OP (pool not enabled)** — `managers/schedule_policy.py`, `mem_cache/kv/alloc/chain.py`, `prefetch_budget.py`; the unified sub-pool is not enabled here (0 launcher hits for unified/hicache). Same for `9ae8cf0608` #50310, `fd510c505f` #50309, `a7da11be3d` #50308, `ff68baae6d` #50307, `03d4f49f22` #50306 |
+| `7e2d9b85a3` | #48065 | [Fix] [AMD] dsv4: Fix the mHC weight orientation | **NO-OP (AMD guard)** — `fn_transpose=_is_gfx1250_supported or not self.attention` in `deepseek_v4_boundary.py`/`deepseek_v4_platform_stage.py`; `is_gfx1250_supported()` is False on GB10 |
+| `9158db2b97` | #48095 | [Perf] [AMD] dspark: Speed up the DSPARK draft step | **NO-OP (AMD guard)** — a `_is_gfx1250_supported` branch selecting `fused_hc_head` in `deepseek_v4_dspark.collapse_hc_head`; CUDA keeps `hc_head_torch` |
+| `d8a6e5a9de` | #50771 | [Fix] [NVIDIA] mega_moe: Stop DeepGEMM's MLOPart helper before every KV cache sizing | **NO-OP (MegaMoE off)** — `SGLANG_OPT_DEEPGEMM_MEGA_GATE` is False and our MoE is `b12x_next` |
+| `24feb92de0` | #50608 | [Perf] [NVIDIA] mega_moe: Allow DeepGEMM weight localization on SM 10.0 and 10.3 | **NO-OP** — SM10.0/10.3 only; GB10 is CC 12.1 |
+| `c67db7c762` | #50982 | [Fix] cuda-graph: Free the old decode graphs before a recapture | **NO-OP (recapture path)** — this line captures once at boot; recapture is owned by the dual-graph adapter |
+| `f74df0c3d6` | #50717 | [Fix] scheduler: Wait for the launched forward before writing weights | **NO-OP (weight update)** — RL/eval weight-update path |
+| `837d1cf76e` | #50741 | [Perf] tokenizer_manager: Poll client disconnects once per wait timeout | **NO-OP (frontend CPU)** — tokenizer-manager only, no engine path effect on bench traffic |
+| `c712459e7f` | #49823 | [Fix] http_server: Hold the HTTP port across the model load | **NO-OP (boot surface)** — our readiness gates on `/health_generate` 200, not on connect success |
+| `07f4c845c2` | #50234 | [Fix] weights: Reject mismatched manifests before distributed broadcasts | **NO-OP (load guard)** — earlier error message for a case our NFS weight loads do not hit |
+| `6565c03ff9` | #40893 | [Fix] spec: Support a reduced draft vocabulary in rejection sampling | **NO-OP (flag off)** — needs `--speculative-use-rejection-sampling` (default False), unsupported on PD decode servers |
+| `72d55dc900` | #49805 | [Fix] models: Forward router top_k to fused MoE experts | **NO-OP** — hunyuan/llama4/olmoe-class models; no `deepseek_v4` file touched |
+| `f75136c949` | #50019 | [Fix] moe: Apply the model's swiglu_limit in the CuTe DSL MoE runner | **NO-OP** — `moe_runner/flashinfer_cutedsl.py`; our MoE path is DeepGEMM/`b12x_next` |
+| `3981de0825` (+`775db052b6`) | #50156 | Revert "[Perf] [NVIDIA] runtime: Blackwell/Rubin serving optimizations for hybrid GDN + QSA + MoE models" | **NO-OP (reverted pair)** — landed `2026-11-16T01:35Z`, reverted in the same window; re-triage only if it re-lands |
+
+**Grouped NO-OPs — the remaining 223 commits**, each read by subject (all 249 assigned to exactly
+one bucket; counts sum to 249):
+
+| Bucket | n | Examples |
+|---|---|---|
+| diffusion (image/video models) | 45 | `25c1c43942` #50765 sm120 cosmos GEMM, `37bc19e86e` #49599 H3 FP8 attention on DGX Spark |
+| AMD | 31 | `87f393c249` #48064 aiter sparse prefill, `ed3aa8c322` #41382 gfx1250 launch retune, `4469f9fc7f` #49732 absorb-BMM wave budget |
+| other models | 29 | `6321f714dd` #48414 Kimi-K3.1 merge, `2b9eab7125` #46392 Kimi rejects flashinfer_mxfp4 SiTU on SM90/SM120, `40723a52de` #47802 GLM-4 GQA Triton decode |
+| NPU | 24 | `2a71304ac5` #49481 breakable prefill graph for DSV4, `baaa201a14` #49294 DSpark multi-stream drafts, `88151fa62c` #42224 INT8 LightningIndexer |
+| CI | 19 | `83c2c71774` #42806, `ba93265487` #50872 |
+| auth / metrics / infra / parsing | 13 | `f7f0c930c1` #50559 route auth table, `17e4738c4c` #50586, `2e55a173a7` #47060 |
+| router / rust | 11 | `2588d80d06` #50732 delete sgl-model-gateway, `b947a615f6` #50671 source-only |
+| DP / CP / PP only | 9 | `50fbc8af48` #40333 DSV4.1 prefill CP+BCG (2/N), `552e16968b` #50146 prefill delayer, `9a0e6eafef` #50481 PP depth |
+| hicache / hisparse (tier off) | 7 | `d9bf131d8b` #49473 hisparse data plane, `19af0c78a2` #45351 PP-sync depth |
+| unified pool / GDN | 7 | `883476951c` #50122 opt-in state_cost eviction |
+| multimodal refactor | 5 | `22e1cb6d98` #46412 6/9, `5ec2b14be5` #46411 5/9 |
+| disaggregation (PD) | 4 | `6795aed975` #50895 first-token stream, `b40c565be9` #50520 |
+| docs / chore / other-hw | 10 | `d766b7327e` #50677, `d08d15985b` #50486 (MUSA) |
+| gc series (post-pin paths) | 3 | `8d07d63f37` #50980, `9eb23a3e63` #50883, `988b043982` #50882 |
+| comm / multimem, policy-gated, megakernel | 6 | `a0d169e8d0` #50764 Lamport markers, `0e8c255117` #46022 SPF (fcfs here), `0b28a39a2b` #50157 |
+
+### Cross-checks
+
+- Arithmetic: 482 + 249 = **731** ✓ against the independent page count (7×100 + 31); prior head
+  `2456e0beab` sits at index 249, and the row just above it is `233d6bae87` (`2026-11-14T08:52Z`).
+- Class totals: 25 Table-A rows (26 shas, the reverted pair shares one row) + 223 grouped = **249** ✓,
+  assigned programmatically with an assertion that every sha lands in exactly one bucket.
+- Fetch integrity: 8 census pages + 2 issue legs + 2 comment legs + 1 PR leg + 1 rate-limit call
+  (≈13 core requests) plus 18 `.patch` bodies over `github.com` (no API quota); every JSON parsed.
+- **Keyword counter: 23 of 249 (9.2%)** and **all four material rows were misses** (#49896, #50397,
+  #50994, #50981); most of the 23 hits are AMD/NPU/doc rows. Per-commit reading stays mandatory.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change. Alert consumed.
+2. **Pre-flight #1 (new, repo-actionable)**: #49896 admin-key gate. Decide before the next pin:
+   launch with `--admin-api-key`/`SGLANG_ADMIN_API_KEY` and add `Authorization: Bearer` to
+   `scripts/profile/profile_decode.sh` + `scripts/verify/decode_profile_bounded.sh`, or accept that
+   decode/torch profiling cannot be captured at the next pin. `memguard.py`'s `/abort_request`
+   keeps working keyless as long as no admin key is set.
+3. **Pre-flight deps corrected**: sglang-kernel 0.4.11 has an `aarch64` `cp311-abi3` wheel
+   (filename evidence above) — row p's "no aarch64 wheel" claim is withdrawn. sgl-deep-gemm stays
+   0.2.8 and flash-mla 1.0.5, so the arch-12 fp32-weights assert situation is unchanged.
+4. **Pre-flight image**: the cu134 image no longer installs sgl-fa3; nothing in the repo imports it.
+5. **New bp candidate #50981** (`d1e7987757`): anchors confirmed at the pin; low value (host heap
+   around capture). The rest of the gc series is post-pin and must be re-taken wholesale at the next
+   pin, not backported.
+6. **Decode gate unchanged**: no CUDA host-sync removal landed on the dspark verify path. #50512 is
+   HIP-only, #46781 is MRoPE-only, #50197/#49905/#50306-07 are GDN. The ~44 ms/step
+   `cudaEventSynchronize` attribution still stands.
+7. **Watch**: #50719 confirms upstream still uses `is_sm_at_least(10)` for the dense DSV4 indexer
+   gates and now has an explicit arch-gate test — the bp6 chain collapse at candidate `5e6995dd`
+   still applies. Do not re-pick `#50156` unless it re-lands.
+8. **Operator**: (a) `gh` re-auth (**15th run**), (b) the automation did not run for 3.2 days
+   (11-14 08:17Z → 11-17 12:18Z) — check the Orca schedule/host, (c) this host's network resets
+   TLS handshakes and intermittently fails DNS for `github.com`; the script now fails loud, but
+   polling needs a working resolver, and a stale-IP `--resolve` pin is only a stopgap.
