@@ -1486,3 +1486,63 @@ one bucket; counts sum to 249):
    (11-14 08:17Z → 11-17 12:18Z) — check the Orca schedule/host, (c) this host's network resets
    TLS handshakes and intermittently fails DNS for `github.com`; the script now fails loud, but
    polling needs a working resolver, and a stale-IP `--resolve` pin is only a stopgap.
+
+## 2026-11-17T16:18Z (2026-11-18 00:18 +08) — watch run #16
+
+**Tooling**: script rc=0 with **all three legs numeric** — `issue#49173 state=closed comments=2`,
+`issue#49174 state=open comments=0`, `dsv41-relevant-since-watch=78 window-commits=732`
+(16:17:48–16:18:00Z, `fetch_rc=0`). First fully-clean run since #14: the retry ladder added in #15
+is now proven self-healing as well as loud, and the resolver is answering again. Slot is the
+scheduled `17 */4` 16:17Z and the 12:17Z slot ran (the #15 path), so **no log gap** — the Orca
+automation has resumed after the 3.2-day outage.
+
+`gh auth status` → invalid token for `aotsukiqx` (**16th consecutive run**); `gh issue view`/`gh pr
+view` not attempted. REST only: 8 census pages + 2 issue legs + 1 PR leg + 1 referencing-PR leg +
+1 commit detail + 1 check-runs leg + 2 searches ≈ 15 core + 2 search requests. Core budget
+**50/60 at start, 53/60 at end** (the unauthenticated hour window rolled mid-sweep), search 8/10.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at 2026-11-09T07:26:52Z`:
+  byte-identical to runs #1–#15, no new maintainer comment.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **fifteenth consecutive
+  silent run**. Referencing-PR search re-run (0 comments is not proof of inactivity): still exactly
+  **#49306** (`closes #49174`), `open`, `merged=False`, head `4e1544039e`, 1 commit (+116/−7), last
+  touched `2026-11-09T12:56:58Z`, CI still red (`pr-test-finish` `failure`; 126 of 127 check runs
+  `skipped`). `adapter/loop_abort.py` keeps `TRUNCATE=0` as the only mitigation.
+- **#49182** — merged `2026-11-09T07:26:50Z`, merge **`5e6995dd09`**, head `a49ff4d7d3`, unchanged.
+  Next-pin candidate remains **`5e6995dd`**.
+
+### sglang main — 1 new commit; NO-OP
+
+Census **732** (`since=2026-11-08T14:00:00Z`, 7×100 + 32); prior total **731 + 1 = 732 ✓**.
+Slice above prior head `703e763d5f` (`2026-11-17T11:19:50Z`) is exactly one commit; new head
+**`b2cc023f23`** (`2026-11-17T13:53:57Z`).
+
+| Commit | PR | Subject | Class — note |
+|---|---|---|---|
+| `b2cc023f23` | #51021 | [Chore] mem_cache: Add UMBP code owners | **NO-OP (bookkeeping)** — `.github/CODEOWNERS` +1 line adding `/python/sglang/srt/mem_cache/storage/umbp`. No code path, wheel, launcher flag or arch gate touched |
+
+Keyword counter over the slice: **0/1** (the only subject matches the `mem_cache` keyword but carries
+no code). Per-commit reading remains the only reliable mode.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change. Alert consumed.
+2. **Standing — bp6 collapse at candidate `5e6995dd`**: the #49182 fix family is what the next pin
+   absorbs; #50719 confirms upstream keeps `is_sm_at_least(10)` for the dense DSV4 indexer gates
+   (no `==10` regression).
+3. **Standing — decode gate unchanged**: no CUDA host-sync removal landed on the dspark verify path
+   (#50512 is HIP, #46781 MRoPE, #50197/#49905/#50306-07 GDN). The ~44 ms/step
+   `cudaEventSynchronize` attribution stands.
+4. **Standing pre-flights (unchanged this window)**: #49896 admin-key gate breaks unauthenticated
+   `/start_profile` in `scripts/profile/profile_decode.sh` +
+   `scripts/verify/decode_profile_bounded.sh`; sglang-kernel 0.4.11 ships an aarch64 `cp311-abi3`
+   wheel; sgl-deep-gemm 0.2.8 / sgl-flash-mla 1.0.5 unchanged, so the arch-12 fp32-weights assert
+   situation is unchanged.
+5. **Standing — bp6r3 conflict re-checks**: #44588 and #37472 on `dspark_verify_window.py`. No new
+   upstream commit on that file this window.
+6. **Operator**: (a) `gh` re-auth (**16th run**; every run is REST-only now), (b) the 3.2-day Orca
+   outage is over (clean scheduled slot this run), but the host resolver stays the single point of
+   failure for polling.
