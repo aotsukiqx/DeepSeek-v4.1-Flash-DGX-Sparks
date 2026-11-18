@@ -1975,3 +1975,138 @@ of `tools`.
    sgl-deep-gemm 0.2.8 / sgl-flash-mla 1.0.5, arch-12 fp32-weights assert.
 6. **Operator**: (a) `gh` re-auth (**20th run**; REST-only throughout), (b) no log gap this slot,
    (c) polling path clean on every leg — no TLS retry needed for the second consecutive run.
+
+## 2026-11-18T12:18Z (2026-11-18 20:18 +08) — watch run #21
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 after 28.1 s, silent stdout; log lines
+`12:17:47Z` (issue legs) → `12:18:14Z` (`fetch_rc=0`, ALERT raised). Every leg numeric on the first
+attempt, no TLS retry. The alert holds only the three standing triggers (#49173 closed, its 2
+comments, **91** cumulative keyword hits) and was consumed. `gh auth status` → **token for
+`aotsukiqx` invalid** (**21st consecutive run**); all payloads below are unauthenticated REST.
+Core budget **45/60** remaining immediately after the script; the primary window rolled over
+mid-session (final read `56/60`, search `10/10` untouched), so this run's ~31 reads cost nothing.
+
+No log gap: `08:18Z` → `12:18Z` on schedule.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at` identical to that second:
+  byte-identical to runs #1–#20. Both comments are the original Kylinny thread (11-08T15:21Z intent,
+  11:48Z "fix is up in #49182"); **no new maintainer comment to read**.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **twentieth consecutive
+  silent run**. Referencing PR **#49306** (`closes #49174`) still `open`, `merged=False`, head
+  `4e1544039e`, `updated_at 2026-11-09T12:56:58Z` — untouched for 9 days. `adapter/loop_abort.py`
+  `TRUNCATE=0` remains the only mitigation.
+- **#49182** — `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge **`5e6995dd09`**,
+  head `a49ff4d7d3` — unchanged. Next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 18 new commits: 1 pin-migration (dependency bump), 1 bp-class (env-only, expected nil), 15 NO-OP
+
+Census **810** (`since=2026-11-08T14:00:00Z`, 9 pages = 8×100 + 10, **0 duplicate shas**); prior
+total **792 + 18 = 810 ✓**. Prior head `da52796a05` sits at index 18, so the slice `[0:18]` is
+exactly the delta. New head **`4693deba5a`** (`2026-11-18T08:25:24Z`).
+
+| Commit | PR | Subject | Class — evidence |
+|---|---|---|---|
+| `c2e9301c5b` | #51048 | [Feat] inkling2: Add the FlashInfer CuTe DSL and DeepGEMM MegaMoE kernel ops | **PIN-MIGRATION (dependency bump)** — `DEEPGEMM_REF` v0.2.8→**v0.2.9**, `sgl-deep-gemm` 0.2.8→**0.2.9**; contract check below |
+| `0893ad02f1` | #49067 | [Perf] dsv41-flash: Increase the prefill Indexer score tile budget | **bp-class (env-only; expected nil here)** — see below |
+| `0299a10a5a` | #51034 | [Fix] jit: Add memory clobbers to the mbarrier wrappers | **pin-migration-class (correctness, post-pin path)** — file 404s at the pin |
+| `440086bdd8` | #49457 | [Refactor] graph: Decouple eager_on_graph from CUDA capture (2/3) | **NO-OP at bp5**, re-anchor note — breakable capture never enabled |
+| `21dae9b17e` | #49066 | [Perf] dsv41-flash: Add FP8 DeepGEMM prefill scoring on Hopper | **NO-OP** — Hopper-only + `EnvBool(False)` |
+
+Residual NO-OPs, each read by file list: `44227af064` #48254 (tokenizer_manager abort echo,
+`_rid` cleanup — manager-side; `adapter/loop_abort.py` patches the scheduler finish path and is
+untouched), `ea93e2fcd0` #51000 (67 files, ROCm gfx950 Kimi-K3.1 plus post-pin
+`kernels/ops/speculative/dflash_mla_ctx.py` + `arg_groups/`), `e0decbc338` #50124 (both call sites
+under `batch.return_logprob`; decode benches request no logprobs and it never touches the verify
+`cudaEventSynchronize`), `a8db62b8a4` #51030 (jit benchmark marker → package; post-pin dev tooling),
+`ac59b471d3` #46414 + `3a41a59919` #51207 + `6a31888b33` #50965 (tests / NPU workflows only),
+`009b31b010` #51147 (Rust `sgl-router --dp-rank-policy least_tokens`; no router on this line),
+`f04d886bf7` #51215 (`utils/common.__getattr__` shim for `get_cuda_graph_batch_size_alignment` /
+`require_attn_tp_gather` moved to `dp_attention`; `dp_size=1`), `8b546b85d7` #47756 +
+`225cb59c67` #50519 (diffusion / ROCm), `bbf0b4e89b` #50805 (77 files, **70** under post-pin
+`python/sglang/kernels/`, rest tests), `4693deba5a` #46413 (Qwen-VL token-space strategy + `mrope`;
+DSV4.1 text path has no multimodality).
+
+**#51048 in detail** — the only material hunk is the version triple:
+`docker/Dockerfile.cu134` `ARG DEEPGEMM_REF=v0.2.8→v0.2.9`, `SGL_DEEP_GEMM_VERSION=0.2.8→0.2.9`,
+`python/pyproject.toml` `sgl-deep-gemm==0.2.8→0.2.9`. Evidence, not assumption:
+**(a) wheel** — `pypi.org/pypi/sgl-deep-gemm/json` publishes
+`sgl_deep_gemm-0.2.9-py3-none-manylinux2014_aarch64.whl`, so the image matrix is satisfied;
+**(b) contract** — `DeepGEMM v0.2.9 csrc/apis/attention.hpp` is **byte-identical** to v0.2.8
+(54858 B, sha256 `2b0a542e7c…`), so line 49
+`DG_HOST_ASSERT(weights.scalar_type() == (arch_major == 10 ? torch::kBFloat16 : torch::kFloat32))`
+still forces fp32 MQA-logits weights on arch 12 ⇒ **the bump cannot recover bf16-weights decode on
+SM121** (the known-answer chain 0.2.6→0.2.9 now closed end to end). Remaining hunks are new
+inkling2 kernel files + one line in `kernels/ops/gemm/quantization/utils.py`; our MoE is
+`b12x_next` with MegaMoE bypassed.
+
+**#49067 in detail** (2 product files, +15/−2): adds
+`SGLANG_OPT_DSV41_LARGE_PREFILL_SCORE_BUDGET = EnvBool(False)` and a `_prefill_score_budget_bytes()`
+helper (2 GiB when set) applied at two call sites — `score_tiles` (DeepGEMM leg) and `_score_chunks`
+(torch leg). At pin `scoring.py:36` `_DEEP_GEMM_SCORE_BUDGET_BYTES = 2 << 30` and `:329`
+`_TORCH_SCORE_BUDGET_BYTES = 1 << 30`, **identical to main's defaults at the commit**, so the only
+behavioural delta is the torch chunk width 1→2 GiB. This line runs the dense full-top-k path with
+`_deep_gemm_consume_prefill` (candidate keys zeroed by `adapter/sm120_candidates.py`), so the torch
+leg is a fallback and the lever is expected to be a no-op. Recorded, not scheduled: all four anchors
+exist at the pin (scoring.py 36/278/329/429), so it applies clean as a runtime patch if a torch-leg
+measurement ever wants it.
+
+**#49457 in detail** (9 files, +164/−63): replaces the `BreakableCUDAGraphCapture` contextvar with a
+device-neutral `BreakableCaptureRecorder` protocol (new `capture_recorder.py`, 36 LOC) plus
+`use_/get_breakable_capture_recorder`, and routes `eager_on_graph` segment splits through it.
+`breakable_cuda_graph.py` **does exist at the pin** (18537 B raw at `8817f63c`) — so this is not a
+runner-split artifact — but the only reference in our tree is the guard
+`adapter/prefill_sp.py:628 v4.is_in_breakable_cuda_graph()`; breakable capture is never enabled.
+Part 1/3 was #49402 (11-13); re-read at the next pin.
+
+**#51034 in detail** (1 file, 6 lines): adds `"memory"` clobbers to `mbar_init`, `mbar_arrive`,
+`mbar_arrive_relaxed`, `mbar_arrive_expect_tx` and `mbar_wait_parity`. Path
+`python/sglang/kernels/jit/include/sgl_kernel/ptx/barrier.cuh` → **404 at `8817f63c`** (contents
+API), i.e. the `sglang/kernels` JIT tree is post-pin; a bp has nothing to anchor on. Take it with the
+tree at the next pin and re-check that our JIT-built kernels (b12x / mxfp8 adapters) compile against
+the clobbered headers — a missing clobber there is a miscompile, not a perf delta.
+
+**#49066 in detail** (7 files, +200/−30): `SGLANG_OPT_DSV41_SM90_DEEPGEMM_PREFILL = EnvBool(False)`;
+`use_sm90_deep_gemm_consume` additionally needs `candidate_block_size == CANDIDATE_BLOCK_SIZE`, and
+the consumer branch is only reachable through `_use_sm90_prefill_scores()` (Hopper). Side effect
+worth noting for the next pin: it extracts `select_prefill_block_ids` into `scoring.py` and re-points
+`sparse_table.select_prefill_rows` at it — candidate-sparse path only, which is zeroed here. Neither
+new env key exists at the pin (`environ.py` has `SGLANG_OPT_DSV41_BF16_INDEX_LOGITS` at 1952 and no
+`PREFILL_LITE_TOPK`).
+
+### Cross-checks
+
+- Arithmetic: **792 + 18 = 810 ✓** against the independent 9-page count; prior head `da52796a05` at
+  index 18 with `4693deba5a` at 19 — slice and delta agree.
+- Class totals: **3 material (1 dep bump, 1 bp, 1 pin note) + 2 NO-OP-with-pin-note + 13 residual
+  NO-OPs = 18** ✓ (every sha assigned once).
+- Keywords: **2 of 18** — #49066/#49067 `dsv41` — lifting the cumulative counter 89 → **91 ✓**,
+  which the full-scan recomputation matches exactly (91/810). The counter would have missed every
+  other row: #51034 (a real correctness fix), #49457 (graph stack) and #51048 (the dependency bump)
+  carry no keyword at all.
+- Coverage: **none** of the 18 touch `engram.py`, `mem_cache/` runtime files, `deepseek_v4.py`,
+  `deepseek_v4_backend.py`, or a CUDA attention backend.
+- Fetch integrity: 2 issue legs + 9 census pages + 18 commit details + 2 PR legs + 1 contents-API
+  (404, expected) all re-parsed; no truncation. Free reads (no quota): pin `scoring.py` /
+  `environ.py` / `breakable_cuda_graph.py` / `Dockerfile.cu134`, DeepGEMM `attention.hpp` at v0.2.8
+  and v0.2.9, PyPI JSON.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + raw reads
+   + this checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged; nothing in this window walks
+   back the `>=10` dense-gate family.
+3. **Standing — decode gate**: unchanged. #50124 batches top-logprob D2H copies but is
+   `return_logprob`-gated; #51048's DeepGEMM 0.2.9 keeps the arch-12 fp32-weights assert, so the
+   host-sync attribution (~44 ms/step) and the wheel-local assert patch remain the open option.
+4. **New — next-pin dependency matrix**: main now **0.2.9 / sglang-kernel 0.4.11 / sgl-flash-mla
+   1.0.5**, while the live `Dockerfile.canary-mig` builds **0.2.6 / 0.4.10 / 1.0.2** — the next pin
+   moves three DeepGEMM minors at once. Re-check the 0.4.11 `cp311-abi3` aarch64 wheel before the
+   build; 0.2.9 aarch64 is confirmed present.
+5. **New — pin-migration re-anchor list additions**: #49457 recorder protocol,
+   #49066 candidate-sparse helper extraction (`select_prefill_block_ids`), #49067 env-only scoring
+   budget, and confirm #51034's clobbered `barrier.cuh` is present once `sglang/kernels/jit` lands.
+6. **Operator**: (a) `gh` re-auth (**21st run**; REST-only throughout), (b) no log gap this slot,
+   (c) polling path clean.
