@@ -1865,3 +1865,113 @@ head **`386edff54d`** (`2026-11-18T04:12:45Z`).
 6. **Operator**: (a) `gh` re-auth (**19th run**; REST-only throughout), (b) no log gap this slot —
    `04:17Z` follows `00:17Z` on schedule, (c) the polling path fetched clean on every leg this run,
    so the TLS fragility of 11-17 did not recur.
+
+## 2026-11-18T08:18Z (2026-11-18 16:18 +08) — watch run #20
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 after 40.6 s, silent stdout; log lines
+`08:17:44Z` (issue legs) → `08:18:22Z` (`fetch_rc=0`, ALERT raised). All legs numeric, no retry
+fallback exercised. The alert holds only the two standing triggers (#49173 closed + **89**
+cumulative keyword hits) and was consumed. `gh auth status` → **token for `aotsukiqx` invalid**
+(**20th consecutive run**); every payload below is unauthenticated REST. Core budget **16/60
+remaining** at the run's last leg (≈44 consumed: script census + this session's reads); search
+untouched.
+
+No log gap: `04:18Z` → `08:18Z` on schedule.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at` identical to that second:
+  byte-identical to runs #1–#19. Both comments are the original Kylinny thread (11-08T15:21Z intent,
+  11:48Z "fix is up in #49182"); **no new maintainer comment to read**.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **nineteenth consecutive
+  silent run**. Referencing PR **#49306** (`closes #49174`) still `open`, `merged_at=None`,
+  `updated_at 2026-11-09T12:56:58Z` — untouched for 9 days. `adapter/loop_abort.py` `TRUNCATE=0`
+  remains the only mitigation.
+- **#49182** — `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge **`5e6995dd09`**,
+  head `Kylinny:fix-49173-dsv41-sm120` — unchanged. Next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 23 new commits: 1 pin-migration-class (shape), 22 NO-OP
+
+Census **792** (`since=2026-11-08T14:00:00Z`, 8 pages = 7×100 + 92, **0 duplicate shas**); prior
+total **769 + 23 = 792 ✓**. Prior head `386edff54d` sits at index 23, so the slice `[0:23]` is
+exactly the delta. New head **`da52796a05`** (`2026-11-18T08:09:12Z`).
+
+| Commit | PR | Subject | Class — evidence |
+|---|---|---|---|
+| `4d200caec7` | #50763 | [Perf] [NPU] dsv4: mirrorless seq_lens path for DFlash-family spec decode | **PIN-MIGRATION (shape)** — see below |
+| `da52796a05` | #49514 | [Fix] openai: Render DSV4.1 message tools with recipe | **NO-OP at bp5**, functional re-anchor at next pin (recipe path) |
+| `0e0f003efc` | #47644 | [Fix] dflash: Stage the draft sampler only for batches its buffers hold | **NO-OP** — `dflash_worker_v2.py` only (DFLASH worker; this line's draft is DSPARK), 14/−5 |
+| `160adb6db9` | #47703 | [Fix] trtllm_mha: Pack a graph-built page table for eager reads | **NO-OP** — `trtllm_mha_backend.py`; SM120 attention here is b12x/FlashMLA |
+| `da395ae091` | #50707 | [Feat] [AMD] muse-spark: gfx1250 support | **NO-OP (ROCm-gated)** — every shared-srt hunk keys on `gcnArchName` containing `gfx1250` or `_is_hip`; on CUDA the probes throw into `except → False` and `_GFX1250_LMHEAD` caches the decision at first call |
+| `4af099e86e` | #50999 | [Feat] [AMD] speculative: MLA draft verify, DFLASH MLA ctx, target-only sampling | **NO-OP (ROCm-gated)** — new `verify_sampling` arm is `elif is_hip() and is_gfx95_supported()`; new `bf16_dot` kwarg on `extend_attention_fwd` is trailing and defaults `False` |
+| `8d72d2ea11` | #50997 | [Feat] [AMD] dsa: gfx950 sparse MLA, DCP top-k, FP4 index-K | **NO-OP (ROCm-gated)** — `aiter.*` imports are function-local; new `dsa/__init__` exports exist unconditionally but only aiter callers reach them; `aiter_paged_mqa_logits` gained a trailing keyword-only `persistent_schedule=None` |
+| `9e5c4a78e8` | #50998 | [Feat] [AMD] kimi-k3: gfx950 KDA verify, A8W4 MoE, latent-tail | **NO-OP** — Kimi-K3/KDA kernels; `moe_sorting_small` gains a `qx_stride` parameter (generic column-slice fix) with its Kimi-K3 (E=896, top-16) selector gated on that shape |
+| `e1f0fc95db` | #48313 | [Perf] [NVIDIA] fused_moe: H20 down-projection (TMA) configs for GLM-5.3-Flash | **NO-OP** — 8 Triton config JSONs, `device_name=NVIDIA_H20`; GB10 selects none |
+| `bf5af3dee5` | #49348 | [Fix] model-loader: RunAI for PP Nemotron MTP drafts | **NO-OP** — `pp_draft_embedding.py` + model-loader; `pp=1` here |
+| `ca89faed52` | #51083 | [Fix] lora: bias / deferred-finalize flags on LoRA-wrapped layers | **NO-OP** — 5 lines, LoRA not enabled |
+| `0ad64771d6` | #51081 | [Fix] hicache: KV dtype suffix in page-unified L3 object names | **NO-OP** — one test file only |
+
+NO-OP, no DSV4 surface (tests/CI/docs, read by file list): `c808dcac90` #51177 and `79db781e5b`
+#51171 (NPU workflow + NPU DSV4-Flash cases), `4dfbb953eb` #49488, `5dae4eec30` #51176,
+`9eb3904d1c` #51087, `9d3c71cbbe` #51152, `c8dc16dc23` #48894, `47d00340ba` #51160,
+`063d9d4af8` #51085, `7a04e8f443` #51134 (PD consensus store; no `--disaggregation-mode` here).
+**`013c0fbcbc` #51086 (cpu: pin outlines) is an empty commit** — single parent, `files=[]`,
+`+0/−0`; the outlines-pin diff is already in the tree, nothing to take.
+
+**#50763 in detail** (8 files, +375/−81): the material row is `ascend_dsv4_backend.py` +
+`dsv4_common_hooks.py` — an Ascend-only mirrorless replay path for DFlash/DSpark verify
+(`SGLANG_NPU_ATTN_BACKEND_NEEDS_CPU_SEQ_LENS=0`, device-side `seq_lens`, static-shape async compact
+instead of boolean-index D2H). Shared-file part is the plumbing: `batch.max_seq_len_host`
+(host upper bound of final KV lengths) is now set in `eagle_utils.eagle_prepare_for_verify`,
+`dflash_info.prepare_for_verify`, `dflash_info_v2.prepare_for_decode`, and forwarded by
+`dspark_draft._run_forward` into the hand-built `ForwardBatch`. Pin-side anchors verified by raw
+read at `8817f63c`: `forward_batch_info.py` **already has** `max_seq_len_host` and `eagle_utils.py`
+already references it, while `dspark_draft.py` does **not** — so this commit closes that gap
+without adding a field. **Zero CUDA behaviour**: nothing on the CUDA side reads
+`max_seq_len_host`, and the NPU backend is not reachable here. Keep it in the pin-migration notes as
+the nearest upstream *shape* to our decode gap, not as a fix — it bounds a page-table copy, it does
+not remove the `cudaEventSynchronize` host sync (~44 ms/step attribution stands).
+
+**#49514 in detail** (3 product files, +592/−11): message-declared `tools` are now bracketed into
+marker system messages (`_take_message_tools` / `_declare_message_tools`) and `tool_choice` is
+forwarded even without request tools. **Not perf.** Adapter check: our
+`adapter/placeholder_sanitize.py` wraps `deepseek_recipe_renderer.pre_normalize`, and that symbol is
+**untouched by this commit** (grep of the patch: no `pre_normalize` hunk), so the sanitizer anchor
+holds at the next pin; the rewriting happens later, in render, on messages our adapter never strips
+of `tools`.
+
+### Cross-checks
+
+- Arithmetic: **769 + 23 = 792 ✓** against the independent 8-page count; prior head `386edff54d`
+  at index 23 with the row below it (`063d9d4af8`) at 24 — slice and delta agree two ways.
+- Class totals: **1 pin-migration + 11 individually-read NO-OPs + 11 file-list NO-OPs = 23** ✓
+  (every sha assigned once).
+- Keywords: **7 of 23** — #49514 `DSV4.1`, #51177 `DSV4`, #50707 `spark`, #50999 `verify`,
+  #51171 `deepseek-v4`/`DSPARK`, #50763 `dsv4`/`verify`, #50998 `verify` — lifting the cumulative
+  counter 82 → **89 ✓**, which this run matches the full-scan total exactly. Still a trigger, not a
+  census: 16 of the 23 subjects produced no hit at all.
+- Coverage: **none** of the 23 touch `engram.py`, `mem_cache/` runtime files, `deepseek_v4.py`,
+  `deepseek_v4_backend.py`, or a CUDA attention backend. The only DSV4-relevant file touched is
+  `speculative/dspark_components/dspark_draft.py` (#50763, pass-through only).
+- Fetch integrity: 2 issue legs + 8 census pages + 23 commit details (+10 repeat reads for file
+  lists) + 7 patches + 3 raw pin reads + 1 PR leg, all re-parsed; no truncation. Approx. **44/60**
+  core requests consumed this run; no referencing-PR search issued (state carried from run #19).
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + raw reads
+   + this checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged; nothing in this window walks
+   back the `>=10` dense-gate family.
+3. **Standing — decode gate**: unchanged. #50763 is NPU-only; the nearest CUDA-adjacent change is
+   the portable `max_seq_len_host` *field*, which no CUDA path consumes.
+4. **New — pin-migration prep**: add #50763 to the re-anchor list (`run_compact` /
+   `TargetVerifyExecutor` unchanged this time, but `dspark_draft._run_forward` gains a kwarg into the
+   hand-built `ForwardBatch`); add #49514 as a **functional** re-anchor on the recipe path
+   (message-declared tools), not a perf one.
+5. **Standing pre-flights (unchanged)**: #49896 admin-key gate breaks unauthenticated
+   `/start_profile` in `scripts/profile/profile_decode.sh` +
+   `scripts/verify/decode_profile_bounded.sh`; sglang-kernel 0.4.11 aarch64 `cp311-abi3` wheel;
+   sgl-deep-gemm 0.2.8 / sgl-flash-mla 1.0.5, arch-12 fp32-weights assert.
+6. **Operator**: (a) `gh` re-auth (**20th run**; REST-only throughout), (b) no log gap this slot,
+   (c) polling path clean on every leg — no TLS retry needed for the second consecutive run.
