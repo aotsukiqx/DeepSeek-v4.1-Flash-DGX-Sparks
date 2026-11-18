@@ -2193,3 +2193,82 @@ after it — harmless with the flag off.
    `models/kimi_k3.py`); no other re-anchor from this window.
 5. **Operator**: (a) `gh` re-auth (**22nd run**; REST-only throughout), (b) no log gap this slot,
    (c) polling path clean.
+
+## 2026-11-18T20:18Z (2026-11-19 04:18 +08) — watch run #23
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, silent stdout, 13.4 s. Log
+`20:17:41Z`–`20:17:53Z`, `fetch_rc=0`; every leg numeric on the first attempt, no TLS retry. The
+alert body is the standing trigger set only (#49173 closed, its 2 comments, **91** cumulative
+keyword hits) and was consumed. `gh auth status` → **token for `aotsukiqx` invalid** (**23rd
+consecutive run**); every payload below is unauthenticated GitHub REST (read-only, public API).
+
+No log gap: `16:18Z` → `20:18Z` on schedule.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at` identical to the close
+  second: byte-identical to runs #1–#22. Both comments are the original Kylinny thread (11-08
+  intent; "the fix is up in #49182"), already absorbed into `docs/PROJECT_STATE.md`. **No new
+  maintainer comment to read.**
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **twenty-second
+  consecutive silent run**. Referencing PR **#49306** (`closes #49174`) still `open`,
+  `merged=false`, head `4e1544039e`, `updated_at 2026-11-09T12:56:58Z` — untouched for 10 days.
+- **#49182** — `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge **`5e6995dd09`**,
+  head `a49ff4d7d3` — unchanged. Next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 4 new commits: 4 NO-OP (0 bp-class, 0 pin-migration)
+
+Census **816** (`since=2026-11-08T14:00:00Z`, page 1); prior total **812 + 4 = 816 ✓**, and prior
+head `37f3b2730b` sits at index 4 of the newest-first slice, so `[0:4]` is exactly the delta. New
+head **`9fbab1f6ed`** (`2026-11-18T19:20:18Z`).
+
+| Commit | PR | Subject | Class — evidence |
+|---|---|---|---|
+| `9fbab1f6ed` | #51080 | [Perf] attention: Launch the qk-norm, KV-prepare and gate kernels with PDL | **NO-OP at bp5** — touches Qwen3.5/QSA/Gemma kernels + generic fast_topk/elementwise; none imported by any DSV4 path |
+| `8be74d4137` | #50611 | [Fix] diffusion/h3: Keep the projected AdaLN LoRA in the adapter dtype | **NO-OP** — `multimodal_gen/` only (H3 DiT + its unit test) |
+| `d08f4feee7` | #50727 | [CI] [AMD] spur: Stop the log streamer's SIGPIPE from cancelling healthy jobs | **NO-OP** — one AMD slurm CI shell script, no image we build |
+| `935055b42a` | #51290 | [Doc] cookbook: Add DaisyRose-27B cookbook | **NO-OP** — docs only (+804, incl. logo PNG and a jsx config) |
+
+**#51080 in detail** (6 files, +38/−13): adds programmatic-dependent-launch (`launch_pdl: True`)
+gated on `current_arch().supports_pdl` / `is_arch_support_pdl()` in
+`kernels/ops/attention/fused_qk_rmsnorm_rope_gate.py` (docstring: Qwen3.5 interleaved Q+Gate
+layout), `srt/layers/attention/qsa/fused_kv.py`, `kernels/ops/elementwise/elementwise.py`
+(`fused_sigmoid_mul`), plus a `USE_PDL` constexpr / trigger in `kernels/jit/csrc/elementwise/
+fast_topk.cuh` + `fast_topk.py`. `gemma_qkv_norm_rope.py` explicitly pins `ENABLE_PDL=False`,
+i.e. the authors did not enable it on that path. All five files **do exist at `8817f63c`** (5/5
+HTTP 200), so existence alone proves nothing; the import audit does: `deepseek_v4_backend.py`
+imports only `sglang.kernels.ops.attention.dsv4.*` and `sglang.kernels.ops.speculative.dspark.*`,
+and `dspark/fused_kv_write.py` is self-contained Triton (torch/triton imports only). Greps for
+`fast_topk|elementwise|fused_kv|qsa|fused_qk_rmsnorm` on `deepseek_v4_backend.py`,
+`models/deepseek_v4.py`, `dsv41_indexer/sparse_table.py`, `dsv41_indexer/scoring.py` and
+`dsv4/attn_metadata_kernels.py` → **zero hits**. No DSV4 kernel touched → not backportable, and
+its perf effect (launch overlap) cannot reach bp5. Latent-only note: if a future pin wires
+`fused_sigmoid_mul` into a DSV4 path, that path inherits PDL automatically.
+
+**#50611** (2 files, +23/−2): `minimax_h3.py` dtype of the projected AdaLN LoRA plus a contract
+unit test. **#50727** (1 file, +10/−4): `scripts/ci/slurm/launch_amd_ci_mi35x.sh`.
+**#51290** (5 files, +804/−0): cookbook docs and assets.
+
+### Cross-checks
+
+- Arithmetic: **812 + 4 = 816 ✓** against the log's `window-commits=816`; prior head found at
+  index 4 of page 1, so the delta is complete and no page-2 straddle is possible.
+- Keywords: **0 of 4** new commits keyword-visible, consistent with the unchanged **91**; the
+  counter's blind spot is unchanged (a fix naming no axis would still be missed).
+- Coverage: no touched path is `engram.py`, `mem_cache/`, `deepseek_v4.py`,
+  `deepseek_v4_backend.py`, or a CUDA DSV4 attention backend. Every touched path exists at
+  `8817f63c` (5/5 probe), so the NO-OP calls rest on import reachability, not on absence.
+- Fetch integrity: 2 issue legs + PR #49182 + PR #49306 + 1 census page + 4 commit details + 5
+  raw/pin probes, all re-parsed; no truncation, no retry (13.4 s total).
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged.
+3. **Standing — decode gate**: unchanged; nothing in this window touches the verify host-sync or the
+   DeepGEMM arch-12 fp32-weights assert.
+4. **Next pin**: the `layers/communication/kda_dwdp` import check from run #22 still stands; #51080
+   adds no re-anchor (PDL is opt-in per kernel and DSV4 does not call those kernels).
+5. **Operator**: (a) `gh` re-auth (**23rd run**; REST-only throughout), (b) no log gap this slot,
+   (c) polling path clean.
