@@ -1626,3 +1626,116 @@ new head **`1aa45c6617`** (`2026-11-17T19:45:00Z`).
 6. **Operator**: (a) `gh` re-auth (**17th run**; every run is REST-only), (b) no Orca/log gap this
    window (12:17Z, 16:17Z, 20:17Z all present), (c) the host resolver/TLS path stayed healthy this
    run after the 12:17Z failure — still the single point of failure for polling.
+
+## 2026-11-18T00:18Z (2026-11-18 08:18 +08) — watch run #18
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 after 24 s; log lines
+`00:17:41Z` (issue legs) → `00:18:02Z` (`fetch_rc=0`). Alert raised on the two standing triggers
+(#49173 closed + 79 keyword hits) and consumed. Run #17 appended cleanly, so the 00:17Z slot had
+no gap. `gh auth status` → **token for `aotsukiqx` invalid** (**18th consecutive run**); every
+payload below is unauthenticated REST. `raw.githubusercontent.com` timed out twice under `curl`
+(rc 28); the same URLs came through `urllib` in <2 s — the TLS-path fragility from 11-17 is still
+there, just on the raw host this time, and it did not affect the census.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at=closed_at` same second:
+  byte-identical to runs #1–#17. Both comments are the original Kylinny thread (11-08T15:21Z
+  intent, 11:48Z "fix is up in #49182"); no new comment to read.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **seventeenth consecutive
+  silent run**. Referencing-PR search re-run: still exactly **#49306** (`closes #49174`), `open`,
+  `merged_at=None`, `updated_at 2026-11-09T12:56:58Z` — untouched for 9 days.
+  `adapter/loop_abort.py` `TRUNCATE=0` remains the only mitigation.
+- **#49182** — closed, merged `2026-11-09T07:26:50Z`, merge **`5e6995dd09`**, head `a49ff4d7d3`,
+  `updated_at 2026-11-09T07:26:51Z` — unchanged. Next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 8 new commits: 1 material, 7 NO-OP
+
+Census **749** (`since=2026-11-08T14:00:00Z`, 7×100 + 49); prior total **741 + 8 = 749 ✓**. Slice
+above prior head `1aa45c6617` (index 8 of the newest-first page) is exactly 8 commits; new head
+**`ecd3d75a2a`** (`2026-11-17T23:33:41Z`).
+
+| Commit | PR | Subject | Class — evidence |
+|---|---|---|---|
+| `4b9f9043fa` | #46190 | [Feat] spec: confidence-scheduled compact verify for DFLASH | **PIN-MIGRATION (material)** — see below; inert on the live config, but it rewrites the verify/planner/relay surface our bp6 chain anchors on |
+| `7aaebb1cf0` | #50740 | [Feat] spec/dflash: per-request draft KV ring for all-sliding-window MHA drafts | **NO-OP (feature-gated)** — new arm only for `DFLASH_MHA_RING_DRAFT_BACKENDS = ("trtllm_mha", "fa4")` behind `_mha_ring_unsupported_reason` (requires CUDA, `dcp_size==1`, `attn_cp_size==1`, no attn DP, and an all-sliding-window **MHA** draft); our draft is MLA/DSA and the ring switch is off. **Pin-shape note**: `draft_kv_ring_unsupported_reason` gained `attn_cp_size`/`enable_dp_attention`/`is_cuda`, `_init_draft_kv_ring` gained `warm_block_locs(...)`, and `set_draft_kv_ring` landed on `flashattention_backend`/`trtllm_mha_backend` |
+| `372b35034d` | #50712 | [Fix] disaggregation: poll decode transfer queue while retracted requests wait | **NO-OP** — only `Scheduler.process_decode_queue` inside `disaggregation/decode.py`; the PD decode path does not exist on a single-node TP4 line (no `--disaggregation-mode`) |
+| `5830ea8205` | #50196 | [Perf] [AMD] mhc: enable AITER mHC kernels on gfx942 | **NO-OP** — both hunks are `is_hip` + `is_gfx95_supported()/is_gfx942_supported()` + `SGLANG_USE_AITER`; `deepseek_v4_fused_mhc.py` lives under `models/deepseek_common/**amd**/`, `mhc.py`'s aiter branch returns `None` off HIP |
+| `1280ff574b` | #38344 | [Feat] CP: prefill context parallelism for Kimi K3 | **NO-OP** — `enable_prefill_cp` + `attn_cp_size>1` only, and the new branch raises for every non-Kimi arch; we launch neither. **Guard note**: a mambaish arch with `--enable-prefill-cp` now hard-fails (`Linear-attention prefill CP is not integrated with …`) instead of silently falling back |
+| `9d9b45d413` | #38766 | [Feat] diffusion: rank-local TP checkpoint loading for MiniMax-H3 | **NO-OP** — `multimodal_gen/**` only |
+| `85360aaab8` | #50748 | [Fix] [AMD] monokernels: keep a draft's forward on hf_config mismatch | **NO-OP** — `kernel_plugins/**/amd/` only |
+| `ecd3d75a2a` | #49290 | [Fix] diffusion/security: `safe_pickle_loads` for DiffusionServer | **NO-OP** — `multimodal_gen/**` inbound request deserialization |
+
+### The one material row — #46190 `4b9f9043fa` (18 files, +1220/−129)
+
+First commit in the whole watch window to touch the DSpark verify surface. What it actually does:
+
+- `dspark_verify.py::TargetVerifyExecutor.run_compact` — **full-block fast path**: when
+  `RaggedVerifyLayout.is_full_block(stride)` (new helper on `ragged_verify.py`) the packed rows
+  *are* the `[bs, verify_num_draft_tokens]` window, so `BuildRaggedVerifyWindow` plus both
+  `ScatterCompactToStrided` calls are skipped. `kv_injector` becomes `Optional` (default `None`,
+  asserted in `commit_hidden`). `dspark_verify_window.py::RaggedVerifyWindow.window_index` becomes
+  `Optional[torch.Tensor]`.
+- `dspark_planner.py` — `plans_verify_budget()` / `_plan_verifies_every_draft()` /
+  `_compact_graph_tier()`: when the shortest plan already replays the full-block compact graph
+  (e.g. a single request), the step prices **no** budget, so the per-step schedule and its
+  host↔device round trips are skipped. `is_verify_all` now also requires no pinned
+  `forced_budget_frac`.
+- `overlap_utils.py::ConfidenceRelay` — `resolve()` replaces a non-blocking
+  `copy_done[slot].query()` miss (return `None`, fall back) with a blocking
+  `copy_done[slot].synchronize()`; `scatter()` waits on the previous ring copy's stream event.
+- Shared plumbing: `spec_info.supports_ragged_verify`, `decide_needs_confidence_relay`, and the
+  `internal_state` runtime-override guards widen `is_dspark()` → `is_dflash_family()`; a pinned
+  budget is now rejected under `SGLANG_SIMULATE_ACC_LEN > 1`.
+- `forward_batch_info.compute_spec_mrope_positions` — ragged mRoPE via new
+  `spec_mrope_token_deltas()` (`view` → `reshape`); text-only branch equivalent.
+
+**Liveness on our line = nil.** `envs.SGLANG_RAGGED_VERIFY_MODE` defaults to `"static"` at our pin
+`8817f63c` (and on main), `start.sh` never sets it, and `boot.py` only switches on
+`SGLANG_RAGGED_VERIFY_MODE=compact` when an SPS table path made it into the argv — which
+`sps_table_args()` prohibits on this Engram model. With `mode=static`, `schedule_layout()` returns
+`None`, `run_compact` is never entered, and `decide_needs_confidence_relay()` is `False`, so neither
+the fast path nor the new `synchronize()` executes. The `is_dflash_family()` widening is also a
+no-op for DSPARK: the predicate already exists at the pin and `supports_ragged_verify()` returns
+`is_dspark()` only for the DFLASH arm.
+
+**Decode gate unchanged.** #46190 does not remove a host sync from the static verify path — it
+*adds* one, on a relay that is inactive here. The ~44 ms/step `cudaEventSynchronize` attribution on
+the dspark verify stands; treat #46190 as the reference shape if the line ever moves off `static`
+(which needs the SPS table, still prohibited), **not** as the decode fix.
+
+**Re-anchor list for the next pin** (the bp6 chain edits three of these): `run_compact`,
+`TargetVerifyExecutor.__init__`, `RaggedVerifyWindow`, `dspark_planner` budget scheduling,
+`ConfidenceRelay.resolve`, `compute_spec_mrope_positions`. Prior doc's bp6r3 conflict surface
+(`dspark_verify_window.py`, #44588/#37472) is now live: this commit changes that file's types.
+
+### Cross-checks
+
+- Arithmetic: 741 + 8 = **749** ✓ against the independent page count; prior head `1aa45c6617` at
+  index 8, the row just above it (`4b9f9043fa`) at 9.
+- Class totals: **1 material + 7 individually-read NO-OPs = 8** ✓ (every sha assigned once).
+- Coverage: 2 of 8 touch `python/sglang/srt/speculative/` (#46190, #50740); 1 touches an
+  AMD `deepseek_common` file; **none** touch `engram.py`, `mem_cache/` runtime files,
+  `deepseek_v4.py`, or `deepseek_v4_backend.py` — the indexer/engram/cache axes stayed quiet.
+- Fetch integrity: 2 issue legs + 1 PR leg + 1 search + 8 commit details + 5 patch re-fetches
+  (needed to rule out gating on the #46190/#50740/#38344/#50712 rows) + 2 raw pin reads.
+  Core budget **50/60 at start, 53/60 after** (hour rolled mid-run); search 10/10.
+- **Keyword counter: 1 of 8** — the single hit is `verify` in #46190's subject; the other 7 were
+  invisible to the counter, which again means the `79` in the alert is a trigger count, not a census.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged; #49182 is what the next pin
+   absorbs and nothing this window walks back the `>=10` dense-gate family.
+3. **New — pin-migration prep**: add #46190 to the migration notes and re-derive the verify/planner
+   bps against it; #50740 for the ring paths. Neither changes today's line behaviour.
+4. **Standing — decode gate**: unchanged, and #46190 is not the fix (see above).
+5. **Standing pre-flights (unchanged)**: #49896 admin-key gate breaks unauthenticated
+   `/start_profile` in `scripts/profile/profile_decode.sh` +
+   `scripts/verify/decode_profile_bounded.sh`; sglang-kernel 0.4.11 aarch64 `cp311-abi3` wheel;
+   sgl-deep-gemm 0.2.8 / sgl-flash-mla 1.0.5, arch-12 fp32-weights assert.
+6. **Operator**: (a) `gh` re-auth (**18th run**; REST-only throughout), (b) no log gap this slot,
+   (c) raw-host TLS needed the urllib fallback — the polling path still has a single point of
+   failure, now demonstrably on both API and raw hosts across separate runs.
