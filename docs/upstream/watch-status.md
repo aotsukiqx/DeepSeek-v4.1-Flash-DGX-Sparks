@@ -1739,3 +1739,129 @@ the dspark verify stands; treat #46190 as the reference shape if the line ever m
 6. **Operator**: (a) `gh` re-auth (**18th run**; REST-only throughout), (b) no log gap this slot,
    (c) raw-host TLS needed the urllib fallback — the polling path still has a single point of
    failure, now demonstrably on both API and raw hosts across separate runs.
+
+## 2026-11-18T04:18Z (2026-11-18 12:18 +08) — watch run #19
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 after 26 s; log lines `04:17:46Z` (issue legs)
+→ `04:18:12Z` (`fetch_rc=0`). **All legs fetched on the first try** — first fully clean run since
+11-17, no retry fallback exercised. Alert raised on the two standing triggers (#49173 closed + 82
+keyword hits) and consumed. `gh auth status` → **token for `aotsukiqx` invalid** (**19th consecutive
+run**); every payload below is unauthenticated REST. Core budget **43/60** after the run (hour rolled
+mid-run at 04:00Z); search 10/10.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `state_reason=completed`, `comments=2`,
+  `updated_at=closed_at` same second: byte-identical to runs #1–#18. Both comments are the original
+  Kylinny thread (11-08T15:21Z intent, 11:48Z "fix is up in #49182"); nothing new to read.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **eighteenth consecutive
+  silent run**. Referencing-PR search re-run: still exactly **#49306** (`closes #49174`), `open`,
+  `merged=False`, head `4e1544039e` — unchanged since 11-09. `adapter/loop_abort.py` `TRUNCATE=0`
+  remains the only mitigation.
+- **#49182** — merged `2026-11-09T07:26:50Z`, merge **`5e6995dd09`**, head `a49ff4d7d3` — unchanged.
+  Next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 20 new commits: 1 pin-migration-class (boot blocker), 19 NO-OP
+
+Census **769** (`since=2026-11-08T14:00:00Z`, 7×100 + 69, **0 duplicate shas** across pages); prior
+total **749 + 20 = 769 ✓**. Prior head `1aa45c6617` sits at index 28; the previous run's eight shas
+(`4b9f9043fa` … `5830ea8205`) occupy indices 20–27, so the slice `[0:20]` is exactly the delta. New
+head **`386edff54d`** (`2026-11-18T04:12:45Z`).
+
+| Commit | PR | Subject | Class — evidence |
+|---|---|---|---|
+| `7946e589c5` | #51074 | [Refactor] server_args: Remove deprecated flags, choice values and environment variables | **PIN-MIGRATION (boot blocker)** — new `environ.REMOVED_ENVS` + `arg_groups/validation_hook.py::validate_removed_options` **raise `ValueError` at startup**; two names we set are on the list. See below |
+
+**#51074 in detail** (300 files, +1478/−2385 — the "SGLang 1.0" arg cleanup):
+
+- **`SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE` → REMOVED.** `start.sh:374` (head) and `start.sh:526`
+  (worker) set it to `0` unconditionally. At this commit the server refuses to boot while it is in
+  the environment. Replacement is `--engram-config '{"placement": "cpu"}'` for the *enabled* case;
+  we disable it, so the correct migration edit is to **delete the two `-e` lines** (default off).
+  Siblings on the same list: `SGLANG_DSV41_ENGRAM_HOST_TABLE_LAYOUT` (→ `"replication": "per_node"`)
+  and `SGLANG_OPT_DSV41_ENGRAM_PEER_SHARDS` (→ `"lookup": "peer_read"`) — we set neither.
+- **`SGLANG_DSPARK_FOLDED_SAMPLING` → REMOVED.** Forwarded conditionally at `start.sh:387-388` and
+  `:531-532`; `docs/tp4.md:80` and `docs/tp4-optional-setups.md:20` record production intent `=2`
+  (keep sampled requests in the CUDA graph). At this commit the surviving knobs are
+  `SGLANG_DSPARK_FOLDED_PROPOSAL = EnvBool(True)` and `SGLANG_DSPARK_USE_GREEDY_DRAFT =
+  EnvBool(False)`, i.e. *a folded proposal samples by default*. The FORCE=2 equivalence is
+  therefore plausibly the default, but that is a re-derivation to prove in-window, not an
+  assumption — the removal message says "set `USE_GREEDY_DRAFT=1` … or `FOLDED_PROPOSAL=0`", which
+  describes the *off* directions only.
+- **Flags we pass are untouched.** `REMOVED_FLAGS` = `--disable-cuda-graph`,
+  `--enable-dp-attention`, `--monokernel-backend`, `--enable-flashinfer-allreduce-fusion`,
+  `--disable-fast-image-processor`, `--disable-outlines-disk-cache`, `--show-time-cost`,
+  `--triton-attention-reduce-in-fp32` — grep of this checkout for all eight: **0 hits**. Our
+  `EXTRA_SGLANG_ARGS` (`--fp8-gemm-backend flashinfer_cutlass --watchdog-timeout 1800
+  --sleep-on-idle --min-free-slots-delay 1 --enable-metrics`) has zero removal hunks.
+  `REMOVED_CHOICES` covers `attention_backend` (`compressed`→`dsv4`, `nsa`→`dsa`,
+  `tokenspeed_mla`→`cutedsl_mla`), `moe_a2a_backend` (`flashinfer`→`flashinfer_nvlink_one_sided`),
+  and `tool_call_parser` (`qwen25`, `glm45`) — none selected on this line.
+- **`SGL_` prefix auto-rewrite deleted.** No `SGL_`-prefixed names exist in this checkout (only
+  `SGLANG_*`), so inert here.
+- **`docker/Dockerfile.cu134` diff in this commit is a two-line comment**: the MSA plugin is now
+  advertised as `--enable-nvidia-megakernel` instead of `--monokernel-backend msa`. **No version
+  bump, no wheel-matrix change.**
+
+| Commit | PR | Subject | Class — why it is inert here |
+|---|---|---|---|
+| `386edff54d` | #51093 | [CI] slash-command: refresh CI-states block | NO-OP — `.github/` workflow only |
+| `b085beba3d` | #50783 | [Fix] [NPU] dspark: dspark & dp attention during prefill with pp/cp | NO-OP — NPU backend, requires attn-DP plus PP or CP; this line is `dp_size=1`, `pp=1`. **Note**: it is the only in-slice commit touching dspark, and it does not touch the verify-sync site |
+| `f61c3b51f5` | #51149 | [Chore] CODEOWNERS: weight_cache owner | NO-OP — CODEOWNERS |
+| `b1a02a5371` | #51124 | [Fix] [Intel] cpu: pin Outlines version | NO-OP — Intel CPU backend |
+| `dd7daa9311` | #49749 | [CI] [AMD] muse-spark: MI35x nightly MMMU gate | NO-OP — CI + AMD; "spark" here is the MI350 codename, not GB10 |
+| `acf9d94231` | #51133 | [CI] cpu: register `test_quant_ops` to renamed suite | NO-OP — CI |
+| `255a0844b1` | #51114 | [Fix] encoder: scalar hashes, empty feature list, media payloads | NO-OP — `disaggregation/encoder/**` (multimodal encode server), unused |
+| `8f2e5fe54e` | #51123 | [Fix] encoder: timeout-tick result, IPv6-safe gRPC URL | NO-OP — same encoder path |
+| `bff44f5fd7` | #41329 | [Feat] [CPU] FP8/INT8 quant ops, compressed-tensors | NO-OP — CPU backend |
+| `8c6ee5d5e6` | #50023 | [Feat] [NPU] hicache: modelslim MLA fp8 / GQA mxfp8 KV | NO-OP — NPU HiCache; host tier off here |
+| `add961dab2` | #51116 | [Refactor] muse-spark: delete unreachable kernels/dispatch | NO-OP — `rocm_muse_spark/**` + `kernels/ops/*/muse_*` (ROCm only) |
+| `457cfa33e8` | #44769 | [Feat] [Intel] lora: intel_xpu backend | NO-OP — Intel XPU |
+| `78b8523f77` | #51118 | [Doc] sgl-router: PyPI and container installs | NO-OP — docs |
+| `6f35d412f2` | #51111 | [Fix] disaggregation: count prefill rank once at bootstrap | NO-OP — PD bootstrap server; no `--disaggregation-mode` here |
+| `cd3045fa6e` | #51077 | [Fix] mooncake: snapshot room transfer infos, blacklist on write failure | NO-OP — mooncake transfer engine, PD only |
+| `7fed639806` | #50076 | [CI] sgl-router: release from `router-v*` tags | NO-OP — router CI |
+| `0fcd253a87` | #51101 | [Test] rust-server: decouple request-log fixture | NO-OP — Rust frontend, opt-in |
+| `445bb97129` | #49930 | [CI] [AMD] diffusion: layerwise-offload tests on ROCm | NO-OP — CI |
+| `0f1509829b` | #50008 | [Fix] moe: pad NVFP4 trtllm hidden size to a multiple of 256 | NO-OP — `moe_runner/flashinfer_trtllm.py` + `modelopt_quant.py`; we pass no `--moe-runner-backend` and our MoE is `b12x_next`/DeepGEMM, not TRT-LLM NVFP4 |
+
+### Cross-checks
+
+- Arithmetic: **749 + 20 = 769 ✓** against the independent 8-page count; prev head `1aa45c6617` at
+  index 28 with the prior run's 8 shas filling 20–27 — slice and delta agree two ways.
+- Class totals: **1 material + 19 individually-read NO-OPs = 20** ✓ (every sha assigned once).
+- Keywords: counter **3 of 20** (`dspark` in #50783, `spark` in both muse-spark rows) — it missed
+  #51074, the only material row, for the fourth consecutive run. The alert's `82` is a cumulative
+  trigger count, not a census.
+- Coverage: **none of the 20 touch** `engram.py`, `mem_cache/` runtime files, `deepseek_v4.py`,
+  `deepseek_v4_backend.py`, or `speculative/dspark_verify*` — the perf axes (indexer, engram, cache,
+  verify) were quiet; the only exposure is argument-surface.
+- Fetch integrity: 2 issue legs + 1 PR leg + 1 search + 8 census pages + 6 commit details + 1 PR
+  (#49306) + 3 raw reads (`environ.py`, `choices.py`, `server_args.py` @ `7946e589c5`).
+  `--engram-config` is **not** in `server_args.py` at that commit — the field moved into
+  `arg_groups/fields/`, so the flag's registration is an unconfirmed anchor: the replacement text
+  above comes from `REMOVED_ENVS`, and the flag name should be re-checked at apply time.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + raw reads
+   + this checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **NEW — next-pin boot blocker (#51074)**: any image built at `7946e589c5` or later **refuses to
+   start** with today's `start.sh`. Before the next migration, (a) delete
+   `-e "SGLANG_ENABLE_DSV41_ENGRAM_HOST_TABLE=0"` at `start.sh:374` and `:526`, (b) remove the
+   `SGLANG_DSPARK_FOLDED_SAMPLING` forwarding at `:387-388` and `:531-532`, (c) prove or disprove
+   the FORCE=2 → default equivalence against `SGLANG_DSPARK_FOLDED_PROPOSAL=True` /
+   `SGLANG_DSPARK_USE_GREEDY_DRAFT=False` in-window, with the sampled-decode gate. **Do not edit
+   `start.sh` now**: the live pin `8817f63c` still reads both variables.
+3. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged; this window adds nothing to the
+   `>=10` dense-gate family and nothing that walks it back.
+4. **Standing — decode gate**: unchanged. #50783 is the only dspark commit in the window and it is
+   NPU/DP/PP/CP-gated; the ~44 ms/step `cudaEventSynchronize` attribution on the static verify
+   still has no upstream fix.
+5. **Standing pre-flights (unchanged, re-anchored)**: #49896 admin-key gate breaks unauthenticated
+   `/start_profile` in `scripts/profile/profile_decode.sh` +
+   `scripts/verify/decode_profile_bounded.sh`; sglang-kernel 0.4.11 aarch64 `cp311-abi3` wheel;
+   sgl-deep-gemm 0.2.8 / sgl-flash-mla 1.0.5, arch-12 fp32-weights assert.
+6. **Operator**: (a) `gh` re-auth (**19th run**; REST-only throughout), (b) no log gap this slot —
+   `04:17Z` follows `00:17Z` on schedule, (c) the polling path fetched clean on every leg this run,
+   so the TLS fragility of 11-17 did not recur.
