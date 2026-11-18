@@ -2110,3 +2110,80 @@ new env key exists at the pin (`environ.py` has `SGLANG_OPT_DSV41_BF16_INDEX_LOG
    budget, and confirm #51034's clobbered `barrier.cuh` is present once `sglang/kernels/jit` lands.
 6. **Operator**: (a) `gh` re-auth (**21st run**; REST-only throughout), (b) no log gap this slot,
    (c) polling path clean.
+
+## 2026-11-18T16:18Z (2026-11-19 00:18 +08) — watch run #22
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0 after 13.7 s, silent stdout; log lines
+`16:17:41Z` (issue legs) → `16:17:53Z` (`fetch_rc=0`, ALERT raised). Every leg numeric on the first
+attempt, no TLS retry. The alert holds only the three standing triggers (#49173 closed, its 2
+comments, **91** cumulative keyword hits) and was consumed. `gh auth status` → **token for
+`aotsukiqx` invalid** (**22nd consecutive run**); all payloads below are unauthenticated REST.
+Core budget **23/60** at close.
+
+No log gap: `12:18Z` → `16:18Z` on schedule.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at` identical to that second:
+  byte-identical to runs #1–#21. Both comments are the original Kylinny thread (11-08 intent,
+  "fix is up in #49182"); **no new maintainer comment to read**.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **twenty-first consecutive
+  silent run**. Referencing PR **#49306** (`closes #49174`) still `open`, `merged=False`, head
+  `4e1544039e`, `updated_at 2026-11-09T12:56:58Z` — untouched for 9 days.
+- **#49182** — `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge **`5e6995dd09`**,
+  head `a49ff4d7d3` — unchanged. Next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 2 new commits: 2 NO-OP (0 bp-class, 0 pin-migration)
+
+Census **812** (`since=2026-11-08T14:00:00Z`, 9 pages = 8×100 + 12, **0 duplicate shas**); prior
+total **810 + 2 = 812 ✓**, and an independent recount of the 9 pages reproduces 812 / 812 unique /
+91 keyword hits. Prior head `4693deba5a` sits at index 2 of the newest-first slice, so `[0:2]` is
+exactly the delta. New head **`37f3b2730b`** (`2026-11-18T16:12:59Z`).
+
+| Commit | PR | Subject | Class — evidence |
+|---|---|---|---|
+| `37f3b2730b` | #50842 | [Feat] kimi-k3: DWDP for KDA and shared-expert weights on PD prefill | **NO-OP at bp5** — opt-in `--kda-dwdp-size=None`, hard-gated on `is_kimi_k3` |
+| `d89bc5b574` | #51219 | [CI] [NPU] chore: Bump SGLang kernel NPU tag to 2026.11.0.post8 | **NO-OP** — NPU workflows / `npu.Dockerfile` only |
+
+**#50842 in detail** (13 files, +860/−7): adds a new post-pin package
+`layers/communication/kda_dwdp/` (`layout.py` 120, `manager.py` 233, `prefetch.py` 70, `store.py`
+260 LOC), an `Optional[int] kda_dwdp_size = None` field in `arg_groups/fields/parallel.py`, and a
+`handle_kda_dwdp` resolution hook that returns immediately unless the flag is set — and then
+refuses anything that is not `--disaggregation-mode prefill` + attention DP plus a Kimi-K3 config
+(`is_kimi_k3`). The only non-gated edits are a refactor inside `models/kimi_k3.py`
+(`_shared_experts_tp_size()` / `_replicates_shared_experts()` extracted from the `KimiK3MoE`
+constructor) and `kda_dwdp=None` plumbing through `KimiK3MoE` and its `load_weights`. DSV4.1 never
+sets the flag; `models/deepseek_v4.py` is untouched; `layers/communication/` gains only the new
+subpackage (it exists at the pin with 6 entries, `kda_dwdp/` 404s at `8817f63c`). Nothing to
+backport — but add one import check at the next pin, since `kimi_k3.py` imports `KdaDwdp`
+unconditionally at module load. Not worth copying: the instance-connector check raises the
+"requires a Kimi-K3 model configuration" error even though the real gate is the `is_kimi_k3` call
+after it — harmless with the flag off.
+
+**#51219 in detail** (4 files, +4/−4): one-line tag bumps in
+`.github/workflows/release-docker-npu{,-nightly}.yml`, `docker/npu.Dockerfile` and
+`scripts/ci/npu/npu_ci_install_dependency.sh`. No image we build, no runtime path.
+
+### Cross-checks
+
+- Arithmetic: **810 + 2 = 812 ✓**; 9-page recount 812 total / 812 unique / 91 keyword hits —
+  identical to the script's counter.
+- Keywords: **0 of 2** new commits keyword-visible, consistent with the unchanged 91; the counter's
+  blind spot is unchanged (it would still miss a fix that names no axis).
+- Coverage: neither file list touches `engram.py`, `mem_cache/`, `deepseek_v4.py`,
+  `deepseek_v4_backend.py`, or a CUDA attention backend. Every touched path exists at `8817f63c`
+  except the new `kda_dwdp/` package (expected).
+- Fetch integrity: 2 issue legs + PR #49182 + PR #49306 + 9 census pages + 2 commit details +
+  contents probes, all re-parsed; no truncation, no retry (13.7 s total).
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged.
+3. **Standing — decode gate**: unchanged; nothing in this window touches the verify host-sync or the
+   DeepGEMM arch-12 fp32-weights assert.
+4. **Next pin**: one import check for `layers/communication/kda_dwdp` (module-level import in
+   `models/kimi_k3.py`); no other re-anchor from this window.
+5. **Operator**: (a) `gh` re-auth (**22nd run**; REST-only throughout), (b) no log gap this slot,
+   (c) polling path clean.
