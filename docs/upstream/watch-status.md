@@ -2564,3 +2564,139 @@ recipe verified on the **1017** checkpoint, and states:
    (c) polling path clean, (d) repo-side decision pending, deliberately not patched in this
    docs-only run: add `mem_cache` (and `req_to_token`) to the census keyword list and either wire
    `AXES` up or delete it.
+
+## 2026-11-19T08:18Z (2026-11-19 16:18 +08) — watch run #26
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 14.4 s (log `08:17:42Z`–`08:17:56Z`),
+`fetch_rc=0`; every leg numeric on the first attempt, no TLS retry, no `TOOL FAILURE` line. Alert
+body is the standing trigger set only (#49173 closed, its 2 comments, **100** cumulative keyword
+hits of **886**). Core budget: 11 calls by the script + 29 by hand (2 commit-list pages, 1
+`pulls/49182`, 26 commit details) — **no 403**, all 28 cached payloads `jq`-clean. `gh auth status`
+→ **token for `aotsukiqx` invalid** (**26th consecutive run**); every payload below is
+unauthenticated GitHub REST. No log gap: `04:18Z` → `08:18Z` on schedule.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed, `comments=2`, `updated_at 2026-11-09T07:26:52Z` — **twenty-fifth
+  consecutive run** identical to the close second. Both comments are the original Kylinny thread,
+  already absorbed into `docs/PROJECT_STATE.md`. No new maintainer comment; step 2 of the runbook
+  has nothing to fetch.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **twenty-fifth silent
+  run**. Referencing PR **#49306** remains `open`/`merged=false`, head `4e1544039e`.
+- **#49182** — re-verified from the API this run: `closed`, `merged=true`,
+  `merged_at 2026-11-09T07:26:50Z`, merge **`5e6995dd09`**, head `a49ff4d7d3`, 3 files
+  (+204/−5), base `4003bf10`. Unchanged; next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 26 new commits: 25 NO-OP, **1 pin-migration-class, inert on this line** (#51298)
+
+Census **886** (`since=2026-11-08T14:00:00Z`, 9 pages = 8×100 + 86). Prior **860 + 26 = 886** ✓.
+Prior head `5b478f175b` sits at **index 26** of the newest-first delta slice (31 commits since
+`03:30Z` minus the 5 already in run #25), so `[0:26]` is exactly the delta. New head
+**`a735253e84`** (`07:55:15Z`). Keyword counter **95 + 5 = 100** ✓; the 5 hits are `21be2189de`
+(dspark), `5aee953e1a` (sm120), `81844a31d7` (dsv4), `e4353c9780` (indexer), `f49d6c493e`
+(dsv4).
+
+| sha | PR | Subject | Class |
+|---|---|---|---|
+| `8625aed698` | #50972 | [Test][NPU] graph: drop tp1 compile_graph, run tp2 in base-b CI | NO-OP — NPU CI |
+| `81844a31d7` | #51417 | [Test][NPU] multi-node: PD warmup race, DSV4-Flash 128K prefill memory fraction | NO-OP — NPU multi-node test; no CUDA code path |
+| `5aee953e1a` | #50752 | [Fix][NVIDIA] DSA: BF16 TileLang shared-memory overflow on SM120 | NO-OP **for this line** — real SM12x fix (`head_tile=16` when `d_v==512, tail_dim==64`, `tilelang_kernel.py`), but the DSA TileLang backend is not on our path (dsv4 backend + `fp4_indexer`). Arch-adjacent: **take it if the dsa backend is ever enabled on GB10** |
+| `8983bd6a66` | #45274 | [Perf][NVIDIA] DSA: any divisor of the tile count for TileLang sparse decode split | NO-OP — same non-path; tuning constants measured on 132-SM H100, GB10 has 48 SMs |
+| `fb60c29772` | #46401 | [Feat][NVIDIA] beam: SM103 single-token BF16 MoE kernel | NO-OP — SM103 + beam |
+| `27997a872f` | #50228 | [Perf][NVIDIA] gemma4: fused all-reduce inside decode CUDA graphs | NO-OP — gemma4 |
+| `91c88c6697` | #51297 | [Feat] attention: per-layer FA overrides and block-anchored windows | NO-OP — defaults are `None`/`False`; the shared-touch hunks (`graph_utils.allocate_attention_outputs`, `radix_attention.__init__`) add `getattr(layer,"out_dtype",None)` and keyword args, i.e. behaviour-identical without an opt-out layer |
+| `2e80690d10` | #50775 | [Fix] attention: KDA prefill overflow past 2**31 token offsets | NO-OP — KDA (Kimi) kernel |
+| `a735253e84` | #51360 | [Test] diffusion: action HTTP/WebSocket client contracts | NO-OP — diffusion test |
+| `33a03ba42e` | #41334 | [Fix] disaggregation: register NextN draft DSA index cache for hybrid pools | NO-OP (gated) — PD-disaggregation state registration (`static_kv_storage.py`); **0 disagg on this line**. Path-audit hit, subject-invisible |
+| `8eba7fb3d3` | #44217 | [Feat] dsa: raw FP8 KV cache with Q8 prefill on CUDA | NO-OP + **arch-excluded** — the new native path asserts `native_raw_nope and major != 9 → ValueError`; needs `kv_lora_rank 512` + mixed tilelang DSA backends. GLM-5.3 cookbook row |
+| `21be2189de` | #51298 | [Feat] dspark: draft folds its verify commit, cap step logits | **pin-migration-class, inert here** — see below |
+| `f49d6c493e` | #49069 | [Perf] dsv41-flash: fuse Hopper prefill candidate selection + writeback | NO-OP **on SM12x** — new radix-select/writeback kernels dispatch only under `envs.SGLANG_OPT_DSV41_TRITON_PREFILL_SELECTION and get_platform().is_sm90`; +368/−1, `kernels/ops/attention/dsv4/candidate_blocks.py` |
+| `e4353c9780` | #49068 | [Perf] dsv41-flash: reuse paged Indexer key tiles during verification | NO-OP **on SM12x** — grouped-CTA verify kernel gated `current_arch().is_sm(9)` (+ `rows_per_request` opt-in, new `SGLANG_OPT_DSV41_VERIFY_INDEXER_BF16_K_REUSE`, `EnvBool(False)`). Closest upstream touch to our decode gap; Hopper-only, so **no upstream answer to the ~44 ms verify host-sync** |
+| `d814a39f47` | #51302 | [Feat] inkling2: SM90 Marlin, expert and MTP kernel ops | NO-OP — inkling2/SM90 |
+| `c97d47b872` | #51301 | [Feat] inkling2: render/parse through the inkling2 renderer spec | NO-OP — renderer |
+| `1ed3e1d04b` | #51231 | [Chore] inkling: bump tml-renderers to 0.4.2 | NO-OP |
+| `ecc5ab3a38` | #51300 | [Feat] linker: hybrid-SWA sidecar draft pools on the target pages | NO-OP — no SWA pool on this line (same ruling as #50059); re-check only if a hybrid-SWA draft ever runs |
+| `8761838757` | #51296 | [Feat] mem_cache: MXFP8 KV scales in unified-memory pages | NO-OP (gated) — `is_mxfp8 = kv_cache_dtype_str == "mxfp8"` (new dtype string), `MHAGeometry` only; this line is `fp8_e4m3` MLA. **Subject-invisible to the census** (no `mem_cache` keyword) |
+| `0b1064bdf9` | #51299 | [Refactor] model_loader: models name their safetensors index file | NO-OP — opt-in per model; no DSV4.1 model declares one |
+| `b08f70c1f9` | #51162 | [Fix] quantization: keep Marlin conversion for AWQ/GPTQ on SM100 | NO-OP — we load native blockwise DeepSeek FP8/FP4, `quantization: None` |
+| `f29cc397a2` | #48249 | [Perf] qwen4: pin the offloaded PLE table at its exact size | NO-OP — Qwen4 PLE (touches `mem_cache/pool_host/common.py`, subject-invisible) |
+| `b05e9c68ce` | #50721 | [Chore] sglang-processor: dynamo-renderer 10.4.3, dynamo-tokenizers 4.3.1 | NO-OP |
+| `981becd7af` | #51386 | [Fix] spec/dflash: DFLASH draft KV ring off by default | NO-OP — DFLASH, not dspark; flips `spec.py`/`environ.py` defaults only for the DFLASH ring |
+| `5eeeb116e1` | #50620 | [Perf] spec: fused draft softmax + sample for EAGLE rejection sampling | NO-OP — EAGLE path (`spec_utils.use_fused_draft_sample` needs `SGLANG_OPT_USE_FUSED_DRAFT_SAMPLE` + `..._GUMBEL_SAMPLE` + vocab gate). Also a **JIT include refactor** touching us: `csrc/speculative/dspark_markov_walk.cuh` −50 lines, numeric helpers moved to new `include/sgl_kernel/ptx/utils.cuh` + `sampling.cuh`, `sampling/softmax.cuh` ±45 — must be taken **as a unit** at a pin (shared-header graph, not a standalone patch) |
+| `eae4bcb70b` | #50518 | [Fix] tokenizer_manager: stop schedulers only after every tokenizer worker drains | NO-OP — shutdown ordering; single tokenizer manager here |
+
+### #51298 in detail — a new opt-in draft-folding hook, and why it is inert on this line
+
+Merge **`21be2189de`**, 10 files, **+308/−37**, of which 4 are tests. Shape:
+
+- `dspark_verify.draft_folds_static_commit()` — the draft may fold the verify commit only if it
+  sets `folds_static_verify_commit`, its FULL id space equals the target's and
+  `target.write is None`; then `run_static` calls `draft_model.store_verify_commit(...)`.
+- `static_epilogue_supported` is restructured from `target_is_dsv41 and _draft_is_moe` to
+  `(target_is_dsv41 and _draft_is_moe) or draft_folds_static_commit(...)` — **the first disjunct
+  already holds on this line** (`target_model_type() == "deepseek_v41"`, `_draft_is_moe` true), so
+  no behaviour change from the gate itself.
+- `folds_static_commit = folds_commit or _draft_folds_static_commit`; `_forward_decode` selects it
+  when `run_compact` is false. Without a producer for the opt-in attribute this is `folds_commit`,
+  i.e. the pin's value.
+- `fused_commit_track_indices(accept_index=None)` gains `HAS_ACCEPT_INDEX`, and
+  `_commit_target_mamba_states_after_verify` now always routes through it. On our line
+  `mamba_track_indices is None` (MLA/DSA, no mamba state): the pin's two eager ops
+  (`commit_lens.to(int64)`, `- 1`) collapse into **one** fused launch — micro, launch-scale.
+- `markov_sample` gains `softcap`/`vocab_limit`; `models/dspark.py` declares
+  `step_softcap`/`step_vocab_limit` = `None`, and `_draft_step`'s fused greedy path is skipped only
+  when either is set. With the `None` defaults the fused path is unchanged.
+
+**Producer absent at `8817f63c`** (raw files fetched at the pin): `folds_static_verify_commit` and
+`store_verify_commit` grep to **0** in `srt/speculative/dspark_components/dspark_verify.py`,
+`.../dspark_worker_v2.py`, `models/dspark.py` and `models/deepseek_v4.py`; `_build_verify_executor`
+and `_on_prefill_target_hidden` are likewise absent, and `run_compact` already exists (so the
+`_forward_decode` hunk's context is satisfiable). The opt-in attribute is defined elsewhere in the
+same series (sibling commits, not this one), so a cherry-pick of #51298 alone changes **nothing**
+operationally for DSV4.1 — it only reroutes the mamba commit math and adds opt-in plumbing — while
+the hunks span `dspark_worker_v2` structure the pin predates. **Verdict: do not bp-patch; take it
+wholesale at the next pin.** No `cudaEvent`/synchronize/`.cpu()`/`.item()` additions in the patch
+⇒ **not a decode-gap lever**, consistent with the standing attribution.
+
+### Cross-checks
+
+- Arithmetic: **860 + 26 = 886 ✓** against the log's `window-commits=886`; keyword **95 + 5 = 100
+  ✓** against `dsv41-relevant-since-watch=100`.
+- Coverage: all 26 shas assigned exactly once (26 table rows). Path audit over all 26 diffs: axes
+  paths are touched only by `21be2189de` (dspark/*), `e4353c9780` + `f49d6c493e` (dsv4 indexer),
+  `8761838757` (mem_cache kv), `33a03ba42e` (`mem_cache/static_kv_storage.py`), `ecc5ab3a38`
+  (`mem_cache/hybrid_cache/`), `f29cc397a2` (`mem_cache/pool_host/`), `5eeeb116e1`
+  (`srt/speculative/` + dspark JIT include). **No commit touches `models/deepseek_v4.py`,
+  `deepseek_v4_backend.py`, `engram.py` or `dsv4/v41_indexer/*` outside #49068/#49069.**
+- **Census blind spots, third consecutive window**: 3 of the 7 axes-path commits
+  (`8761838757`, `33a03ba42e`, `f29cc397a2`) carry no keyword and are invisible to the counter;
+  `5eeeb116e1` is visible only via the shared JIT path. The `mem_cache` gap first flagged in run
+  #25 is now chronic — repo-side fix still pending.
+- Block-level: 4 hunks read against pin sources (dspark verify/worker pairs, `models/dspark.py`,
+  `models/deepseek_v4.py`); the rest classified from diff + inline gates (`is_sm(9)`,
+  `is_sm90`, `is_sm(12)`, env defaults, dtype/config strings), which is sufficient for NO-OP
+  rulings because the gate is in the patch itself.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + 5 raw
+   pin files + this checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **No new candidate of either class worth a window.** #51298 is pin-migration-class but inert and
+   offer-only; #49068/#49069 are Hopper-gated; #50752 is a real SM12x fix on a backend we do not
+   run.
+3. **Standing — #45261 `6eaca42f57`**: unchanged. Paged-path blocker (`block_size == 8` vs our
+   zeroed `candidate_block_size`) still stands; #51410 continues to document it as mandatory on
+   SM120.
+4. **Standing — #51295 `5b478f175b`**: unchanged (3 refit hunks + inert swa hunk); free-rider only.
+5. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged.
+6. **Standing — decode gap**: no upstream movement. The two dsv41-flash perf commits that shave
+   verify-side work are SM90-only; the ~44 ms/step `cudaEventSynchronize` verify host-sync has no
+   upstream fix in this window.
+7. **Next pin** picks up, in dependency order: #51298's folding series (needs the producer
+   commit), #50620 as a unit with its new JIT headers, #51296/#51297 opt-ins (defaults off),
+   #50752 if the dsa backend is ever enabled, #49068/#49069 as dead weight on SM12x.
+8. **Operator**: (a) `gh` re-auth (**26th run**, REST-only throughout; `gh issue view` /
+   `gh pr view` still unusable, so step 2 of the runbook keeps running on REST equivalents),
+   (b) no log gap, (c) polling path clean, (d) **repo-side decision still pending**: add
+   `mem_cache` (and `req_to_token`, `static_kv_storage`, `pool_host`) to the census keyword list,
+   or replace subject matching with the path-based audit this run had to do by hand.
