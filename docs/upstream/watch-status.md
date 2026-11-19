@@ -2930,3 +2930,138 @@ carries no keyword.
    (d) **repo-side decision still pending**: add `mem_cache`/`req_to_token`/`static_kv_storage`/
    `pool_host` to the census keyword list or make the census path-based — fifth consecutive
    subject-invisible axes-path commit.
+
+## 2026-11-19T20:18Z (2026-11-20 04:18 +08) — watch run #29
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 14.6 s — the `04:17 +08` slot ran this
+session, log `20:17:44Z`–`20:17:58Z`, `fetch_rc=0`, both issue legs and the census leg numeric on
+the first attempt, no TLS retry, no `TOOL FAILURE`. Continuity holds (previous run `16:18Z`); the
+slot holds exactly one run. Alert body is the standing trigger set only (#49173 closed + its 2
+comments, **103** keyword hits of **906**). Budget: core **47/60** at the first hand call,
+**28/60** at the end (19 counted core calls: 10 census pages, 2 issues, 2 PRs, 4 commit details,
+1 pin tree; raw.githubusercontent fetches are free), search **10/10** (1 used) — no 403, all
+payloads unauthenticated REST. `gh auth status` → **token for `aotsukiqx` invalid** (**29th
+consecutive run**); step 2 ran on the REST equivalents.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed (`completed`), `comments=2`, `closed_at = updated_at = 2026-11-09T07:26:52Z` —
+  **twenty-eighth run** identical to the close second. Both comments are the original Kylinny
+  thread (fix offered in #49182), already absorbed into `docs/PROJECT_STATE.md`. No new maintainer
+  comment; nothing to fetch for step 2.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **twenty-eighth silent
+  run**. PR search for the issue number returns exactly **1** item: **#49306** (`open`,
+  `merged=false`, head `4e1544039e`, updated `2026-11-09T12:56:58Z`) — unchanged.
+- **#49182** — re-verified: `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge
+  **`5e6995dd09`**, head `a49ff4d7d3`. Unchanged; next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 4 new commits: 1 low-value bp-class, 3 NO-OP
+
+Census **906** (9×100 + 6 pages, `since=2026-11-08T14:00:00Z`). Prior **902 + 4 = 906** ✓.
+Prior head `6515ac29d3` (`15:35:20Z`) → new head **`17a9168f1f`** (`18:59:04Z`); the delta is
+exactly the four shas newer than the prior head (index 4 of page 1). Keyword counter **101 + 2 =
+103** ✓ — **2 of 4** subjects hit, and both are the material ones this time: the first window in
+five where the census caught every axes-adjacent commit.
+
+| sha | PR | Subject | Class |
+|---|---|---|---|
+| `17a9168f1f` | #51515 | [Perf] [NVIDIA] dsa: Fuse the FP4 indexer key store and head gate | **bp-class (perf-only, refit required)** — FP4 indexer K store + head gate; numerics bit-identical; activation at pin unconfirmed |
+| `f4bfe143dd` | #51289 | [Fix] dsa: Attend the sharded indexer's local slots in trtllm / prims_ts DCP decode | NO-OP **at pin** — the sharded-indexer (DCP) feature is post-pin; Kimi-K3.1 default flip excludes SM121 |
+| `2bf882aefc` | #51387 | [Perf] diffusion/flux3: Run the native SwiGLU through the shared SiluAndMul layer | NO-OP — `multimodal_gen/` diffusion; we serve text-only chat completions |
+| `54d68123dc` | #51518 | [Chore] [AMD] mono-kernel: Pin sgl-amd-mono at 32a1220 for the Qwen3.5 FP8 state_layer_cache fix | NO-OP — AMD pin in `pyproject_other.toml`; our image is CUDA aarch64 |
+
+### #51515 in detail — perf fusion on the FP4-indexer path, refit needed at pin
+
+- **Store half** (`kernels/ops/kvcache/dsv4_fp4_index_k_cache.py`, file **exists at pin**, 127
+  lines): upstream adds `_quantize_store_fp4_index_k_cache_kernel`, one CTA per token, quantizing
+  in the store kernel for `n_tokens < _FUSED_STORE_MAX_TOKENS = 4096` and keeping the batched
+  `quantize_fp4_indexer_tensor` + `_store_fp4_index_k_cache_kernel` above it. It calls
+  `quantize_fp4_indexer_row(values, v0, v1, BLOCK_N=2*BLOCK, GROUP_N=32, RNE=RNE)`, which **exists
+  verbatim at the pin** (`kernels/ops/quantization/fp4_indexer_quant.py:69`, same signature) —
+  so the math layer of the backport is free.
+- **Refit is real, not mechanical**: the pin's `store_fp4_index_k_cache(input, cache, loc, *,
+  page_size, rne=False)` has **no `dcp_size` / `dcp_rank`**, no `int64` `cache_loc` widening, no
+  `cache.stride(1) == 1` assert, and an `int32` `tl.load(loc + token_id)`; upstream's pre-image is
+  the post-pin DCP-aware variant (`owned = (cache_loc >= 0) & (cache_loc % dcp_size == dcp_rank)`,
+  `cache_loc // dcp_size`). At our `dcp=1` the fused kernel reduces to `owned = cache_loc >= 0` and
+  `cache_loc // 1`; a backport is ~2 hunks of kernel surgery plus wiring, and the split point
+  (`< 4096`) is already the shape of our 1024/4096 prefill chunks.
+- **Head-gate half has no pin anchor**: it adds `indexer_head_gate` to
+  `kernels/ops/attention/dsa/head_gate.py` (module **absent** from the pin tree) and calls it from
+  `srt/layers/attention/dsa/dsa_fp4_indexer.py` (**404 at `8817f63c`**). The pin's equivalent
+  scalar math lives in `srt/layers/attention/dsa/dsa_indexer.py:582-607`
+  (`weights * n_heads**-0.5` → `.unsqueeze(-1) * q_scale * softmax_scale`), so that half would be
+  hand-placed, not applied.
+- **Numerics**: upstream adds equality tests for both halves — the fused store vs the batched
+  path (`torch.testing.assert_close(fused, batched)`) and the head gate vs
+  `(gate * heads**-0.5).float().unsqueeze(-1) * scale` with `rtol=0, atol=0`. This is a launch/
+  allocation reduction, not a value change.
+- **Activation unconfirmed**: no runtime importer of `store_fp4_index_k_cache` was found among the
+  pin call sites checked — `dsa/dsa_indexer.py` imports `fused_store_index_k_cache` (FP8 index K),
+  `srt/mem_cache/index_key_cache.py` uses `dsa_index_k_cache`, `dsv4/indexer.py` reads the
+  `get_index_k_fp4_*` buffers. So the FP4 store is test-covered at pin but its live caller was not
+  located here; **check at apply time** whether the FP4-indexer path reaches it.
+- **Not a decode-gap lever**: no `.item()`, `.cpu()`, `torch.equal` or `cudaEventSynchronize`
+  anywhere in the four commits (the single `.tolist()` in `f4bfe143dd` is test-only), and the ~44
+  ms/step `cudaEventSynchronize` verify site is untouched. Value is a few microseconds of indexer
+  launch overhead on decode/prefill; free-rider only, never a window trigger.
+
+### #51289 in detail — post-pin feature, zero pin surface
+
+- The fix splits the `_forward_trtllm` DCP branch into `dcp_partial` (sharded indexer returns
+  compacted local slots + `metadata.dcp_topk_length`) and `replicated_dcp` (the old
+  `localize_dcp_page_table` path). At the pin, `dsa_backend.py` has **0 hits** for `dcp_partial`,
+  `replicated_dcp` and `dsa_shards_index_k`; its equivalent guard is the older
+  `if self.dcp_size > 1:` with `self.dcp_rank` (pin lines ~4073-4083). The feature the fix repairs
+  does not exist at `8817f63c` ⇒ nothing to backport, nothing to regress.
+- The bundled default flip (`_kimi_k31_default_dsa_backend`) fires only for
+  `not enable_hisparse ∧ platform.is_sm100 ∧ device_sm in (100, 103, 107)` — **SM121 is excluded
+  by both terms** — and is routed through `_kimi_k31_dsa_backends`, i.e. Kimi-K3.1 only. Our
+  DSV4.1-Flash config does not pass through it.
+
+### Cross-checks
+
+- Arithmetic: **902 + 4 = 906 ✓** against the script's `window-commits=906`; keyword
+  **101 + 2 = 103 ✓**.
+- Coverage: all 4 shas assigned exactly once (4 table rows), sliced from page 1 at the previous
+  head, not from author dates.
+- Path audit over all 4 diffs: **no commit touches `engram.py`, `srt/speculative/`,
+  `srt/mem_cache/`, `deepseek_v4_backend.py`, or `models/deepseek_v4.py`**. #51515 reaches
+  `srt/layers/attention/dsa/dsa_fp4_indexer.py` (404 at pin) and the `kernels/ops` DSA/FP4 index
+  modules; the other three are diffusion, AMD packaging, and DCP/Kimi plumbing.
+- Apply risk **zero**: no live `runtime/*.py` / `runtime/*.patch` touches
+  `dsv4_fp4_index_k_cache.py`, `fp4_indexer_quant.py`, `dsa_indexer.py`, `dsa_backend.py`,
+  `dsa_dcp.py`, or `arg_groups/overrides.py` (bp4/bp5 patches are dsv4 kernels/models;
+  `sglang-rocenante.patch` touches pynccl / parallel_state / batch_result_processor).
+- Block-level: pin signatures read directly from raw `8817f63c` for
+  `dsv4_fp4_index_k_cache.py` (127 lines), `fp4_indexer_quant.py` (233), `dsa_backend.py` (4533),
+  `dsa_indexer.py:1833-1885`, and `index_key_cache.py`; existence probed via raw HTTP for five
+  paths (`dsa_fp4_indexer.py` = 404 at pin is the decisive one).
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + 6 raw
+   pin files + this checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **New candidate — #51515 `17a9168f1f`**: optional bp-class perf patch (FP4 index K store
+   fusion; numerics-identical). Refit = drop the DCP params from the fused kernel + one pre-image
+   difference in the store function; head-gate half has no pin anchor. **Not worth a standalone
+   window** — fold into the next authorised window only if the FP4-indexer store is confirmed live
+   on our path.
+3. **Standing — #45261 `6eaca42f57`**: unchanged. Paged-path blocker (`block_size == 8` vs our
+   zeroed `candidate_block_size`) still stands.
+4. **Standing — #51295 `5b478f175b`**: unchanged (3 refit hunks + inert swa hunk); free-rider only.
+5. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged.
+6. **Standing — decode gap**: no upstream movement; the ~44 ms/step verify host-sync still has no
+   upstream fix, and #51515's launch fusion does not touch it.
+7. **Next pin** picks up, in dependency order: #51298's folding series (needs its producer
+   commit), #50620 as a unit with its new JIT headers, #51296/#51297 opt-ins (defaults off),
+   #45261, #51295, #51515 (free perf), #51450 (DCP, inert), #51458 (5-line DP fix), #51289
+   (post-pin DCP fix, Kimi-only default), #50752 if the dsa backend is ever enabled, and **#50186
+   wholesale** (Inkling2; carries the `token_id_vocab_size` contract — any local patch validating
+   token ids must move off `vocab_size` at that pin — re-verify the dspark static-epilogue refactor
+   against the r3 V1 revert when that approach resumes).
+8. **Operator**: (a) `gh` re-auth (**29th run**, REST-only throughout), (b) continuity clean
+   (`16:18Z` → this run `20:17:44Z`, `04:17 +08` slot), (c) polling path clean at both legs,
+   (d) **repo-side decision still pending**: add `mem_cache`/`req_to_token`/`static_kv_storage`/
+   `pool_host` to the census keyword list or make the census path-based — sixth window without a
+   fix, though this run's two material commits both happened to hit the keywords.
