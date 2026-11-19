@@ -2416,3 +2416,151 @@ untouched by this commit; any win is bounded by the low-ratio indexer's share of
    `layers/communication/kda_dwdp` import check from run #22 still stands.
 6. **Operator**: (a) `gh` re-auth (**24th run**; REST-only throughout), (b) no log gap this slot,
    (c) polling path clean.
+
+---
+
+## 2026-11-19T04:18Z (2026-11-19 12:18 +08) — watch run #25
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 19.5 s (log `04:17:48Z`–`04:18:04Z`),
+`fetch_rc=0`; every leg numeric on the first attempt, no TLS retry. The alert body is the standing
+trigger set only (#49173 closed, its 2 comments, **95** cumulative keyword hits) with no
+`TOOL FAILURE` line ⇒ the census leg is real, not a 403/urllib blackout. Budget **45/60** core
+immediately after the script (15 used), **26/60** after triage; reset `05:04:49Z`. `gh auth status`
+→ **token for `aotsukiqx` invalid** (**25th consecutive run**); every payload below is
+unauthenticated GitHub REST.
+
+No log gap: `00:18Z` → `04:18Z` on schedule.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed, `comments=2`, `updated_at 2026-11-09T07:26:52Z` (the close second itself):
+  identical to runs #1–#24. Both comments are the original Kylinny thread, already absorbed into
+  `docs/PROJECT_STATE.md`. **No new maintainer comment to read**, so step 2 of the runbook has
+  nothing to fetch.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **twenty-fourth
+  consecutive silent run**. The referencing PR **#49306** (`closes #49174`) is still `open`,
+  `merged=false`, head `4e1544039e`, `updated_at 2026-11-09T12:56:58Z` — untouched.
+- **#49182** — `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge **`5e6995dd09`**,
+  head `a49ff4d7d3` — unchanged. Next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 17 new commits: 16 NO-OP, **1 bp-class candidate** (#51295)
+
+Census **860** (`since=2026-11-08T14:00:00Z`, 9 pages = 8×100 + 60). Prior total **843 + 17 = 860
+✓**, and prior head `6b374a5502` sits at **index 17** of the newest-first slice, so `[0:17]` is
+exactly the delta. New head **`5b478f175b`** (`2026-11-19T04:16:12Z`). Bookkeeping: `6b374a5502` is
+also the sha in the upstream nightly tag `lmsysorg/sglang:nightly-dev-20261119-6b374a55` (row 6
+below) — our prior head was the first nightly carrying #45261.
+
+| sha | PR | Subject | Class |
+|---|---|---|---|
+| `5b478f175b` | #51295 | [Perf] mem_cache: allocate decode slots and write `req_to_token` in one launch | **bp-class** — anchors verified at pin; 3 hunks need refitting (below) |
+| `c86973c11c` | #51410 | [Doc] cookbook: RTX PRO 6000 recipe for DeepSeek-V4.1 | **bookkeeping** — corroborates #45261 necessity + our `flashinfer_cutlass` pin; no code |
+| `145647c55f` | #50767 | [Feat] disaggregation: unified-memory PD with NIXL | NO-OP (gated) — `--disaggregation-mode`/PD: **0 hits** in launchers and `.env.tp4.example`; changes `arg_groups/overrides.py`, `kv_cache_hook.py`, `disaggregation/nixl/conn.py`, `server_args.py` (+180/−46 incl. 4 test files) |
+| `a3eae55545` | #46953 | [Feat] weight_cache: `vmm_fd` transport | NO-OP (gated) — no weight-cache flag on this line (**0 hits**); `weight_cache/transport.py` +481/−67, new `vmm_layout.py`, `model_runner.py` +1 and `load_model_utils.py` +2 are flag plumbing |
+| `8073aea66a` | #46499 | [Feat] UnifiedL3: mooncake storage backend | NO-OP (gated) — HiCache host/L3 tier off (**0 hits** `hierarchical-cache`); `pool_host/{mha,mla}.py` +4, `hicache_key_scheme.py` +21/−1. Pin note: host-pool key scheme drifts — re-take at the next pin if the tier is ever enabled |
+| `44ffcdead5` | #49275 | [Perf][NVIDIA] channelwise FP8 GEMM tile configs for RTX PRO 5000 | NO-OP — configs key `device_name=NVIDIA_RTX_PRO_5000_72GB_Blackwell` + `dtype=fp8_w8a8_channelwise`; pin's 181 configs are `device_name`-keyed with `fp8_w8a8`/`int8_w8a8` + `block_shape` and contain **no GB10 entry**, and this line runs `quantization: None` (native blockwise fp8) |
+| `1f2d76c79d` | #36088 | [Fix][AMD] distributed: custom AR capture for DSA DP dual graphs | NO-OP — AMD-only and DP-only (`dp_size=1` here); `DSV41_DUAL_GRAPH` is our own adapter hook, untouched |
+| `5a0e808c59` | #47961 | [Feat][Intel] XPU in the EPD multimodal encoder path | NO-OP — Intel XPU/EPD |
+| `2886093fa9` | #49790 | [Fix][NPU] `qwen3_5_mtp`: `mtp.fc` as `ReplicatedLinear` | NO-OP — NPU + Qwen3.5 |
+| `72fae91008` | #51235 | [Doc] Deepseekv4: dsv4 NPU best practice | NO-OP — NPU docs |
+| `9304abb532` | #50220 | [Test][AMD] sana-video2 BF16 softmax skip | NO-OP — AMD test |
+| `cde63d2d9e` | #50490 | [CI][AMD] nightly InferenceX Kimi-K3.1-Pro MXFP4 on MI35x | NO-OP — AMD CI |
+| `091cdce699` | #51318 | [Perf] diffusion: pybase64 + orjson image responses | NO-OP — diffusion |
+| `7bb4884d73` | #50440 | [Fix] diffusion/qwen-image: stream the DiT when it does not fit | NO-OP — diffusion |
+| `5decba407a` | #51362 | [Fix] diffusion: exit nonzero on empty generate | NO-OP — diffusion |
+| `f7e7ccbd9f` | #51358 | [Doc] diffusion: clarify image edit inputs/URL responses | NO-OP — diffusion docs |
+| `e840dbeaab` | #51361 | [Doc] diffusion: Pi0.5 tokenizer access | NO-OP — diffusion docs |
+
+### #51295 in detail — decode slot alloc fused with the `req_to_token` write
+
+Merge **`5b478f175b`**, single parent `f7e7ccbd9f` (squash), **7 files, +136/−29**. Two of its own
+docstrings name our situation: `allocator/paged.py:140` at the pin is `TODO: fuse last_loc into the
+kernel.` — this commit is that TODO.
+
+**Anchors read at `8817f63c`** (raw sources fetched at the pin; the tree probe reports 13 301 blobs,
+`truncated=false`, and it contains every path the patch touches, so the layout reorg is not a
+blocker):
+
+| File | Pin state | Verdict |
+|---|---|---|
+| `python/sglang/kernels/ops/memory/allocator.py` | `alloc_decode_kernel` @210 with `@triton.jit(do_not_specialize=["free_page_ptr"])` and the `num_page_start_loc_self` branch — byte-identical pre-image | **applies** |
+| `python/sglang/srt/mem_cache/allocation.py` | `alloc_for_decode_default` @650 — advanced-index gather `req_to_token[req_pool_indices, seq_lens-1]`, `seq_lens_gpu.clone()`, separate `req_to_token_pool.write(...)` | **applies** (pre-image exact) |
+| `.../mem_cache/allocator/paged.py` | class @136 (`TODO: fuse last_loc` @140), `debug_mode` @154, `use_triton_kernels` @155, `alloc_decode` @~280 with the 3-arg signature | **applies** (pre-image exact) |
+| `.../mem_cache/allocator/swa.py` | `alloc_decode` @446, `_swa_req_ring` @48/139, `translate_loc_from_full_to_swa` @269 | hunk applies but is **inert here** — DSV4.1 on this line is MLA/DSA with no sliding-window pool (recorded 2026-11-14, #50059 row); Re-check only if a hybrid-SWA model ever runs |
+| `.../mem_cache/allocator/base.py` | no `pools_share_memory` (the patch's context line is post-pin); class attrs start at `hands_out_virtual_ids` @47 | **refit** — the insert is a 2-line class attribute |
+| `.../mem_cache/kv/storage.py` | `take_decode` @193, one-liner body, **no** `tree_cache`/`batch` kwargs (patch hunk @339) | **refit** — signature + optional kwarg pass-through |
+| `.../mem_cache/static_kv_storage.py` | `take_decode` @233 (patch hunk @375), **no** `tree_cache`/`batch` kwargs; the DSV4-NPU `c128_attn_allocator` branch is already present @248 | **refit** — same two edits |
+
+**Gates on this line — the fused path is live, not skipped.** `PagedTokenToKVPoolAllocator` is used
+because the dsv4 attention backend forces page_size 256 (`logs-tp4/dsv41.log:12`: "Use dsv4
+attention backend …, setting page_size to 256"), so `_alloc_page_size(batch) == 1` is false;
+`token_per_req == 1` at decode; TP4 on CUDA ⇒ `current_platform.capabilities.supports_triton` true
+⇒ `supports_fused_decode_write`; `SGLANG_DEBUG_MEMORY_POOL` is unset ⇒ `debug_mode` false;
+`type(allocator) is PagedTokenToKVPoolAllocator` holds (no unified/DSV4 subclass on CUDA at the
+pin). The `ReqToTokenPool.write` identity check passes as long as nothing overrides it — `grep -rn
+"ReqToTokenPool" adapter/` is **empty**; confirm at apply time anyway.
+
+**Value bound — launch overhead only, not the decode gap.** The win is folding three GPU ops and
+their dependencies into the alloc kernel's launch: the `req_to_token[rows, seq_lens-1]` gather,
+`seq_lens_gpu.clone()`, and the separate triton `req_to_token_pool.write` scatter. None of them
+introduces a host sync (no `.item()`, no D2H), so this cannot move the ~44 ms/step
+`cudaEventSynchronize` verify gap — at a 44 ms step the prize is launch-scale, sub-0.1%
+[INFERENCE from op count, not measured]. Worth taking only as a free rider in a window that is
+already happening; never a window trigger.
+
+### #51410 — upstream now documents the #45261 requirement, and the backend we already pin
+
+The cookbook row (docs only, `docs/cookbook/autoregressive/DeepSeek/DeepSeek-V4_1.mdx` +
+`src/snippets/configs/.../deepseek-v4_1.jsx`) adds an RTX PRO 6000 (SM120, 8×96 GB, TP8/EP8)
+recipe verified on the **1017** checkpoint, and states:
+
+- It **requires a build with #45261**, otherwise SM120 fails at startup with the DeepGEMM
+  `t.is_cuda()` assert — or, with `--enable-deepseek-v4-fp4-indexer` passed (our case), decode graph
+  capture runs out of memory at the default 1 M context. That second clause is independent
+  corroboration of run #24's hunk-2 memory argument (dense scoring, 21 B/element); our line survives
+  1 M because graph max bs is far below 128 (`MAX_RUNNING_REQUESTS=32`).
+- `--fp8-gemm-backend flashinfer_cutlass` measured **17–18 % output tokens/s and 31–44 %
+  single-request decode** better than the automatic choice on SM120. `.env.tp4.example:245` already
+  pins exactly that ⇒ no change, no experiment.
+- Other recipe env is PCIe/single-node specific (`NCCL_P2P_LEVEL=SYS`, `NCCL_MIN_NCHANNELS=16`) or
+  host-engram placement for non-UMA nodes — not transferable to the switchless RoCE TP4 line.
+
+### Cross-checks
+
+- Arithmetic: **843 + 17 = 860 ✓** against the log's `window-commits=860`; page 1 is full at 100 and
+  the prior head is at index 17, so no page-2 straddle.
+- Keywords: **2 of 17** new commits are keyword-visible (93 → 95 ✓) and **both are false
+  positives** (`DeepSeek-V4.1` in the cookbook doc, `Deepseekv4` in the NPU doc). The one material
+  commit, #51295, is invisible to the counter: the census key list has no `mem_cache` even though
+  `mem_cache/` is one of the script's `AXES` (that variable is unused by the census python). Second
+  consecutive window where the counter finds zero material rows.
+- Coverage: all 17 shas are assigned exactly once (17 table rows). Path audit: no commit touches
+  `models/deepseek_v4.py`, `srt/speculative/`, `deepseek_v4_backend.py`, `dsv4/v41_indexer/*`, or
+  `engram.py`; `mem_cache/` only via #51295.
+- Fetch integrity: 2 issue legs (script) + 9 census pages + 5 commit details + 1 pin tree + 7 raw pin
+  files + 1 `pulls/49306` + 1 `search/issues`; all JSON parsed (`json.tool` clean over 15 cache
+  files), one intentional 404 (`docs/_static/cookbook/...`, superseded by the commit diff).
+- Block-level: the four "applies" rows were read at the pin, not inferred from patch context; the
+  three refit rows were checked for the specific missing context.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + a local
+   pin tree/raw reads + this checkout only — no SSH, no docker, no build, no serve, no schedule
+   change.
+2. **New standing candidate — #51295 `5b478f175b`**: bp-class, low value (launch overhead only,
+   no host sync removed, not a decode-gap lever). Apply only inside an authorised window, with the
+   three refits (base/kv-storage/static-kv-storage) and the swa.py hunk dropped as inert.
+3. **Standing — #45261 `6eaca42f57`**: unchanged; #51410 now documents it as mandatory for SM120
+   and confirms the 1 M-context dense-scoring memory blow-up. Paged-path blocker (`block_size == 8`
+   vs our zeroed `candidate_block_size`) still stands.
+4. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged.
+5. **Standing — decode gate**: unchanged; nothing in this window touches the verify host-sync or the
+   DeepGEMM arch-12 fp32-weights assert.
+6. **Next pin**: #51295 rides in (its refit cost goes to zero once the pin has the post-pin
+   `take_decode(tree_cache=, batch=)` signature); #51410 is docs-only; the `kda_dwdp` import check
+   from run #22 still stands.
+7. **Operator**: (a) `gh` re-auth (**25th run**; REST-only throughout), (b) no log gap this slot,
+   (c) polling path clean, (d) repo-side decision pending, deliberately not patched in this
+   docs-only run: add `mem_cache` (and `req_to_token`) to the census keyword list and either wire
+   `AXES` up or delete it.
