@@ -2811,3 +2811,122 @@ is `01497afbd4` (`indexer`).
    invocations, (d) **repo-side decision still pending**: add `mem_cache` (and `req_to_token`,
    `static_kv_storage`, `pool_host`) to the census keyword list, or make the census path-based —
    this window produced a fourth consecutive subject-invisible axes-path commit.
+
+## 2026-11-19T16:18Z (2026-11-20 00:18 +08) — watch run #28
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 21.2 s — the `00:17 +08` cron slot ran this
+session, log `16:17:47Z`–`16:18:08Z`, `fetch_rc=0`, both issue legs and the census leg numeric on
+the first attempt, no TLS retry, no `TOOL FAILURE`. Continuity holds (previous run `12:20Z`); the
+slot holds exactly one run, so no double-log. Alert body is the standing trigger set only (#49173
+closed + its 2 comments, **101** keyword hits of **902**). Budget: core **57/60** at the first hand
+call, **45/60** after the sweep (12 counted core calls: 1 commit page, 2 issues, 2 PRs, 7 commit
+details; search **10/10**, 1 used) — no 403, all payloads unauthenticated REST. `gh auth status` →
+**token for `aotsukiqx` invalid** (**28th consecutive run**); step 2 ran on the REST equivalents.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed (`completed`), `comments=2`, `closed_at = updated_at = 2026-11-09T07:26:52Z` —
+  **twenty-seventh run** identical to the close second. Both comments are the original Kylinny
+  thread (fix offered in #49182), already absorbed into `docs/PROJECT_STATE.md`. No new maintainer
+  comment; nothing to fetch for step 2.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **twenty-seventh silent
+  run**. PR search for the issue number returns exactly **1** item: **#49306** (`open`,
+  `merged=false`, head `4e1544039e`, updated `2026-11-09T12:56:58Z`) — unchanged.
+- **#49182** — re-verified: `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge
+  **`5e6995dd09`**, head `a49ff4d7d3`. Unchanged; next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 7 new commits: all NO-OP on this line
+
+Census **902** (9×100 + 2 pages, `since=2026-11-08T14:00:00Z`). Prior **895 + 7 = 902** ✓.
+Prior head `b6d4389a77` (`11:49:17Z`) → new head **`6515ac29d3`** (`15:35:20Z`); the delta is
+exactly the seven shas newer than `11:49:17Z` in page 1 (prior head at index 7 of 100). Keyword
+counter **101 + 0 = 101** ✓ — **0 of 7** subjects hit; the single axes-path commit in the window
+carries no keyword.
+
+| sha | PR | Subject | Class |
+|---|---|---|---|
+| `6515ac29d3` | #50186 | [Feat] inkling2: Support Inkling-2-Small | NO-OP **for this line**, but **axes-path** (`srt/speculative/`) + new `ModelConfig` contract — see below |
+| `5e32149fd6` | #45792 | [Feat][NPU] multimodal: JPEG decoding in the shared image loader | NO-OP — NPU/DVPP decode (`hardware_backend/npu/`); DSV4.1-Flash is text-only, no image inputs |
+| `a679ebe434` | #51551 | [CI][NPU] ci: split extra-b-test-1/2 partitions | NO-OP — `.github/workflows/pr-test-npu.yml` only |
+| `9667988e9c` | #50028 | [Chore] rust: bump sglang-api-types 0.1.1 | NO-OP — Cargo manifests/lock; Rust server opt-in and unused |
+| `cefe8d3be5` | #40580 | [Feat][NPU] attention: MindIE-SD sparse backend | NO-OP — `multimodal_gen/` Ascend diffusion + docs |
+| `4ba697002f` | #44329 | [Fix][NPU] diffusion: clean up warnings | NO-OP — diffusion sites/quality-gate, NPU utils, and `responses_tools/beam.py` import fix; we serve chat completions, not responses tools |
+| `1d4ff95e9c` | #36426 | [Fix][NPU] modelslim: Qwen3.8-27B-W8A8 loading | NO-OP — NPU quantization/modelslim; drops an NPU-only `packed_modules_mapping` block in `model_loader/loader.py`, CUDA path untouched |
+
+### #50186 in detail — dsv41 static-epilogue gate preserved, vocab contract made explicit
+
+- `speculative/dspark_components/dspark_worker_v2.py` (+20/−8) hoists the gate into `static_mode` /
+  `dsv41_static` / `_static_epilogue_needs_draft_fold`. For `target_is_dsv41 ∧ draft_is_moe` the
+  resulting boolean is `mode=="static" ∧ ¬attn_dp ∧ pp_size==1` — **identical** to the pin's
+  expression at `8817f63c` (`dspark_worker_v2.py:410-416`: `target_is_dsv41 and
+  self._verify_planner.mode_value == "static" and self._draft_is_moe and not
+  get_parallel().attn_dp_enabled and get_parallel().pp_size == 1`) and to the commit's own
+  pre-image for that branch. `draft_folds_static_commit()` (a post-pin addition) is now probed
+  only for non-dsv41 draft-fold models and re-validated with a `ValueError` in
+  `alloc_memory_pool`; the added `_static_epilogue_needs_draft_fold` is False for us. **Identity.**
+- `speculative/dspark_components/dspark_config.py` (+13/−1): widens
+  `SUPPORTED_DSPARK_MARKOV_HEAD_TYPES` with `"rnn_hidden"` (pin line 22 has
+  `("vanilla", "gated", "rnn")` — additive) and gates two Inkling2 branches on
+  `architectures == ["Inkling2ForConditionalGeneration"]`; DSV4 configs take the unchanged path.
+- `speculative/spec_info.py` (+8): `create_worker` imports `model_config_of` and returns
+  `Inkling2MTPWorker` only for that arch; DSV4 still returns `DSparkWorkerV2`. One host-side call
+  at worker construction.
+- Generic edits: `configs/model_config.py` sets `self.token_id_vocab_size = self.vocab_size` for
+  **every** model, then overrides `vocab_size` with `padded_vocab_size` **only** for Inkling2;
+  `managers/scheduler.py`, `managers/tokenizer_manager.py`, `managers/schedule_batch.py` and
+  `scheduler_components/logprob_result_processor.py` switch token-id validation/clamping to
+  `token_id_vocab_size` ⇒ **identity at our config**. The attribute does **not** exist at
+  `8817f63c` (grep of the pin's `model_config.py`: 0 hits), so this is a clean contract *addition*,
+  not a behaviour change.
+- Inkling2's MegaMoE/EP/attn-gather overrides are arch-gated and additionally on
+  `device_sm in (100, 103, 107)` — **SM121 excluded**, so that path cannot activate here even if
+  the arch check changed.
+- No `.item()`/`.cpu()`/event/sync added anywhere in the seven ⇒ **not a decode-gap lever**.
+- 6,450 LOC / 61 files, 48 of them Inkling2 model/tests. Absorb wholesale at the next pin; never
+  bp (its context is the post-pin draft-fold support our tree does not have).
+
+### Cross-checks
+
+- Arithmetic: **895 + 7 = 902 ✓** against the script's `window-commits=902`; keyword
+  **101 + 0 = 101 ✓**.
+- Coverage: all 7 shas assigned exactly once (7 table rows), recomputed from page 1 sliced at the
+  prior head — not from author dates.
+- Path audit over all 7 diffs: the only axes-path hit is `6515ac29d3` (`srt/speculative/`:
+  `dspark_config.py`, `dspark_worker_v2.py`, `spec_info.py`, new `inkling2_mtp_worker.py`). **No
+  commit touches `models/deepseek_v4.py`, `deepseek_v4_backend.py`, `engram.py`,
+  `dsv4/v41_indexer/`, or `srt/mem_cache/`.**
+- Apply risk **zero**: no live `runtime/*.py` / `runtime/*.patch` touches `scheduler.py`,
+  `tokenizer_manager.py`, `schedule_batch.py`, `spec_info.py`, `dspark_*`, or `model_config.py`
+  (bp4 patches are dsv4 kernels/models; `sglang-rocenante.patch` touches pynccl /
+  parallel_state / batch_result_processor).
+- Block-level: 2 hunks read side-by-side against the **pin's own** `dspark_worker_v2.py` (raw fetch,
+  pin verified 200, 1555 lines) and `dspark_config.py`; the other 5 classified from diff paths and
+  inline gates.
+- **Census blind spot, fifth consecutive window**: `6515ac29d3` — 6.4 k LOC, the only commit here
+  reaching an axes path — carries no keyword; `inkling2` is not in the list and `dspark` appears
+  only inside the diff. The repo-side fix (`mem_cache` + `req_to_token` + `static_kv_storage` +
+  `pool_host` keywords, or a path-based census) stays pending.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + 3 raw
+   pin files + this checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **No new candidate worth a window**: zero bp-class, zero pin-migration-class, zero
+   decode-gap movement in this window.
+3. **Standing — #45261 `6eaca42f57`**: unchanged. Paged-path blocker (`block_size == 8` vs our
+   zeroed `candidate_block_size`) still stands.
+4. **Standing — #51295 `5b478f175b`**: unchanged (3 refit hunks + inert swa hunk); free-rider only.
+5. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged.
+6. **Standing — decode gap**: no upstream movement. None of the 7 adds a host sync, `.item()` or
+   CPU offload; the ~44 ms/step `cudaEventSynchronize` verify host-sync still has no upstream fix.
+7. **Next pin** picks up, in dependency order: #51298's folding series (needs its producer
+   commit), #50620 as a unit with its new JIT headers, #51296/#51297 opt-ins (defaults off),
+   #45261, #51295, #51450 (DCP, inert), #51458 (5-line DP fix), #50752 if the dsa backend is ever
+   enabled, and **#50186 wholesale** (Inkling2; carries the `token_id_vocab_size` contract — any
+   local patch validating token ids must move off `vocab_size` at that pin — re-verify the dspark
+   static-epilogue refactor against the r3 V1 revert when that approach resumes).
+8. **Operator**: (a) `gh` re-auth (**28th run**, REST-only throughout), (b) continuity clean
+   (`12:20Z` → this run `16:17:47Z`, `00:17 +08` slot), (c) polling path clean at both legs,
+   (d) **repo-side decision still pending**: add `mem_cache`/`req_to_token`/`static_kv_storage`/
+   `pool_host` to the census keyword list or make the census path-based — fifth consecutive
+   subject-invisible axes-path commit.
