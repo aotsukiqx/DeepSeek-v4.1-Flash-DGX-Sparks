@@ -2700,3 +2700,114 @@ wholesale at the next pin.** No `cudaEvent`/synchronize/`.cpu()`/`.item()` addit
    (b) no log gap, (c) polling path clean, (d) **repo-side decision still pending**: add
    `mem_cache` (and `req_to_token`, `static_kv_storage`, `pool_host`) to the census keyword list,
    or replace subject matching with the path-based audit this run had to do by hand.
+
+## 2026-11-19T12:20Z (2026-11-19 20:20 +08) — watch run #27
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 13.8 s (log `12:20:01Z`–`12:20:14Z`),
+`fetch_rc=0`, all legs numeric on the first attempt, no TLS retry, no `TOOL FAILURE`. The scheduled
+`12:17Z` poll ran immediately before this session and reported the same state. Alert body is the
+standing trigger set only (#49173 closed + its 2 comments, **101** keyword hits of **895**). Budget:
+11 calls by the script + ~32 by hand (9 commit-list pages, 9 commit details, `pulls/49182`,
+`pulls/49306`, 2 issue reads + comments, `commits/8817f63c`, 3 raw pin files, 3 existence probes,
+2 contents listings) — **no 403**, all payloads unauthenticated REST. `gh auth status` → **token
+for `aotsukiqx` invalid** (**27th consecutive run**); `gh issue view` / `gh pr view` remain
+unusable, so step 2 of the runbook runs on REST equivalents.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed (`completed`), `comments=2`, `updated_at 2026-11-09T07:26:52Z` —
+  **twenty-sixth consecutive run** identical to the close second. Both comments are the original
+  Kylinny thread (fix offered in #49182), already absorbed into `docs/PROJECT_STATE.md`. No new
+  maintainer comment; nothing to fetch for step 2.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **twenty-sixth silent
+  run**. Referencing PR **#49306** still `open`/`merged=false`, head `4e1544039e`, updated
+  `2026-11-09T12:56:58Z`.
+- **#49182** — re-verified this run: `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`,
+  merge **`5e6995dd09`**, head `a49ff4d7d3`, title "Restore SM120/SM121 to the DeepGEMM indexer
+  gates". Unchanged; next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 9 new commits: 8 NO-OP, **1 pin-migration-class (DCP-only, identity at dcp=1)**
+
+Census **895** (`since=2026-11-08T14:00:00Z`, 9 pages = 8×100 + 95). Prior **886 + 9 = 895** ✓.
+Prior head `a735253e84` (`07:55:15Z`) → new head **`b6d4389a77`** (`11:49:17Z`); the delta is
+exactly the nine shas newer than `07:55:15Z`. Keyword counter **100 + 1 = 101** ✓; the single hit
+is `01497afbd4` (`indexer`).
+
+| sha | PR | Subject | Class |
+|---|---|---|---|
+| `b6d4389a77` | #51504 | [Doc] cookbook: refresh SemiAnalysis AgentX launches to InferenceX main | NO-OP — docs `.jsx` only (includes the `deepseek-v4_1` launch snippets) |
+| `cb970616d4` | #47977 | [Feat] mm: `--disable-multimodal` to serve a multimodal model text-only | NO-OP — flag defaults off; DSV4.1-Flash is text-only, `is_multimodal` already false |
+| `f9dacff701` | #51270 | [Fix] grpc: allow `--tokenizer-worker-num > 1` with `--grpc-port` (Rust server) | NO-OP — Rust/gRPC server not used |
+| `63038e7c99` | #49127 | [Feat] linker: expose external cache linker lookup/load/offload/wait metrics | NO-OP (gated) — **axes path (`mem_cache/unified_cache/`), subject-invisible**; adds `init_linker_metrics` + `blocked_seconds` and reads `enable_unified_cache_external_linker` in the Rust output streamer. We run neither the unified external linker nor the Rust server |
+| `9aa3b9e338` | #51172 | [Doc][AMD] cookbook: GLM-5.3-Flash MI300X/MI325X commands | NO-OP — docs |
+| `33315670ab` | #51517 | [Fix] cli: resync cookbook command registry with main | NO-OP — CLI JSON metadata; DSV4.1-Flash-1017 rows keep `b200`/`b300` (`tp4 ep4`), `mi355x` ROCm rows dropped from that file |
+| `01497afbd4` | #51450 | [Feat][NVIDIA] dsa: FP4 indexer for Kimi-K3.1 and under DCP | **pin-migration-class, identity at dcp=1** — see below |
+| `6c722acbcd` | #51458 | [Fix] dflash: preserve captured `custom_mask` on idle DP ranks | NO-OP for `dp_size=1`; pre-image matches pin exactly → trivial free-rider at the next pin |
+| `b1970bc473` | #50106 | [Feat] cli: export cookbook commands for every config-driven LLM/VLM page | NO-OP — CLI registry + docs export (139 files, 0 runtime) |
+
+### #51450 in detail — a DCP-aware FP4 index-K store, numerically identity on this line
+
+- The shared kernel **is** ours: `python/sglang/kernels/ops/kvcache/dsv4_fp4_index_k_cache.py`
+  exists at `8817f63c` (200). The patch threads `dcp_size`/`dcp_rank` constexprs (defaults `1`/`0`)
+  into `_store_fp4_index_k_cache_kernel`, masks stores to `cache_loc % dcp_size == dcp_rank`, and
+  stores at `cache_loc // dcp_size`.
+- At our configuration `dcp_size == 1`, `dcp_rank == 0`: the mask is all-true (`x % 1 == 0`) and
+  the division is identity ⇒ **byte-identical cache writes**. Extra per-token `%`/`//` in the
+  kernel; no `.cpu()`/`.item()`/event/sync added ⇒ **not a decode-gap lever**.
+- The caller side does **not** exist at the pin: `dsa/dsa_fp4_indexer.py` is absent from the pin's
+  `dsa/` listing (17 files) and raw-fetches 404; `_index_k_dcp` greps to **0** in the pin's
+  `dsa_indexer.py` (only `_index_k_write_targets` at line 249). This line's indexer is
+  `dsv4/v41_indexer/`, not the `dsa` wrapper the patch extends.
+- Verdict: **do not bp-patch** (would need to invent the producer and the `_fused_q_quant` hook);
+  take wholesale at the next pin. Kimi-K3.1/DCP feature, no DSV4.1 benefit.
+
+### #51458 anchors — exact at the pin, unreachable at `dp_size=1`
+
+- Pre-image matches `decode_cuda_graph_runner.py` at `8817f63c` verbatim: `_slot(name)` block ends
+  with `self.capture_hidden_mode, spec_info,`; `load_batch`'s
+  `not is_ragged and forward_mode.is_idle() and spec_info is not None` branch assigns
+  `spec_info.custom_mask = buffers.custom_mask` (pin lines 1671–1677).
+- The branch needs `ForwardMode.IDLE`, produced only by DP-attention idle ranks. This line is pure
+  TP4 (`dp_size=1`, PROJECT_STATE §46), so the branch never executes. If DP is ever enabled, the
+  capture-vs-replay mask mode must match or the captured graph indexes a stale mask.
+- 5 lines (+3/−1), zero runtime cost ⇒ absorb at the next pin; no window of its own.
+
+### Cross-checks
+
+- Arithmetic: **886 + 9 = 895 ✓** against `window-commits=895`; keyword **100 + 1 = 101 ✓**
+  against `dsv41-relevant-since-watch=101`.
+- Coverage: all 9 shas assigned exactly once (9 table rows).
+- Path audit over all 9 diffs: the only axes-path commit is `63038e7c99`
+  (`mem_cache/unified_cache/unified_cache_linker.py`, `observability/`, `output_streamer.py`).
+  **No commit touches `models/deepseek_v4.py`, `deepseek_v4_backend.py`, `engram.py`,
+  `srt/speculative/`, or `dsv4/v41_indexer/`** in this window.
+- **Census blind spot, fourth consecutive window**: `63038e7c99` is on an axes path with no
+  keyword in its subject; `01497afbd4` is visible only via `indexer`. The `mem_cache` gap flagged
+  from run #25 onward is chronic — repo-side fix still pending.
+- Block-level: 2 hunks read against pin sources (FP4 index-K kernel, decode graph runner);
+  existence of the `dsa` wrapper and `_index_k_dcp` checked against the pin tree via the contents
+  API. The remaining 7 classified from diff paths + inline gates (docs, CLI JSON, arg defaults),
+  which is sufficient for NO-OP rulings.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + 4 raw
+   pin files + 2 pin-tree listings + this checkout only — no SSH, no docker, no build, no serve,
+   no schedule change.
+2. **No new candidate worth a window.** `01497afbd4` is DCP-only and identity at `dcp_size=1`;
+   `6c722acbcd` is unreachable at `dp_size=1`; `63038e7c99` is metrics on an unused subsystem.
+3. **Standing — #45261 `6eaca42f57`**: unchanged. Paged-path blocker (`block_size == 8` vs our
+   zeroed `candidate_block_size`) still stands.
+4. **Standing — #51295 `5b478f175b`**: unchanged (3 refit hunks + inert swa hunk); free-rider only.
+5. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged.
+6. **Standing — decode gap**: no upstream movement. None of the 9 adds a host sync, `.item()` or
+   CPU offload; the ~44 ms/step `cudaEventSynchronize` verify host-sync still has no upstream fix.
+7. **Next pin** picks up, in dependency order: #51298's folding series (needs its producer
+   commit), #50620 as a unit with its new JIT headers, #51296/#51297 opt-ins (defaults off),
+   #45261, #51295, #51450 (DCP, inert), #51458 (5-line DP fix), #50752 if the dsa backend is ever
+   enabled.
+8. **Operator**: (a) `gh` re-auth (**27th run**, REST-only throughout), (b) no log gap
+   (`08:18Z` → `12:17Z` scheduled → `12:20Z` this run), (c) polling path clean at both
+   invocations, (d) **repo-side decision still pending**: add `mem_cache` (and `req_to_token`,
+   `static_kv_storage`, `pool_host`) to the census keyword list, or make the census path-based —
+   this window produced a fourth consecutive subject-invisible axes-path commit.
