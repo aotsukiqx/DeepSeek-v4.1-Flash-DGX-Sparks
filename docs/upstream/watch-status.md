@@ -2272,3 +2272,147 @@ unit test. **#50727** (1 file, +10/−4): `scripts/ci/slurm/launch_amd_ci_mi35x.
    adds no re-anchor (PDL is opt-in per kernel and DSV4 does not call those kernels).
 5. **Operator**: (a) `gh` re-auth (**23rd run**; REST-only throughout), (b) no log gap this slot,
    (c) polling path clean.
+
+## 2026-11-19T00:18Z (2026-11-19 08:18 +08) — watch run #24
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, silent stdout, 13.4 s. Log
+`00:17:41Z`–`00:17:56Z`, `fetch_rc=0`; every leg numeric on the first attempt, no TLS retry. The
+alert body is the standing trigger set only (#49173 closed, its 2 comments, **93** cumulative
+keyword hits) and was consumed. Budget **46/60** core at first check (post-script).
+`gh auth status` → **token for `aotsukiqx` invalid** (**24th consecutive run**); every payload
+below is unauthenticated GitHub REST (read-only, public API).
+
+No log gap: `20:18Z` → `00:18Z` on schedule.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed `2026-11-09T07:26:52Z`, `comments=2`, `updated_at` identical to the close
+  second: byte-identical to runs #1–#23. Both comments are the original Kylinny thread (11-08
+  intent; "the fix is up in #49182"), already absorbed into `docs/PROJECT_STATE.md`. **No new
+  maintainer comment to read.**
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` → **twenty-third
+  consecutive silent run**. A fresh `search/issues` for `"49174" type:pr` returns exactly one hit,
+  the known PR **#49306** (`closes #49174`): still `open`, `merged=false`, head `4e1544039e`,
+  `updated_at 2026-11-09T12:56:58Z` — untouched for 10 days.
+- **#49182** — `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge **`5e6995dd09`**,
+  head `a49ff4d7d3` — unchanged. Next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 27 new commits: 26 NO-OP, **1 bp-class candidate** (#45261)
+
+Census **843** (`since=2026-11-08T14:00:00Z`, page 1); prior total **816 + 27 = 843 ✓**, and prior
+head `9fbab1f6ed` sits at index 27 of the newest-first slice, so `[0:27]` is exactly the delta. New
+head **`6b374a5502`** (`2026-11-19T00:12:22Z`).
+
+| Commit | PR | Subject | Class — evidence |
+|---|---|---|---|
+| `6eaca42f57` | #45261 | [Fix] [NVIDIA] deepseek_v4: Start DeepSeek-V4.1 on SM12x with TP8/EP8 defaults | **bp-class candidate — 2 hunks, both anchors verbatim at `8817f63c`; see below. Not a drop-in under our adapter (`assert block_size == 8`)** |
+
+Table B — residual individually-read NO-OPs:
+
+| Commit | PR | Subject | Class — evidence |
+|---|---|---|---|
+| `173cbe4558` | #51038 | [Fix] scheduler: Publish load on every idle batch result under DP attention | **NO-OP** — the anchor exists at pin (`scheduler.py:895 publish_load_snapshot`), but idle batches are created only by `scheduler_components/dp_attn.py:820` (plus EAGLE `eagle_worker_v2.py:1705`, not DSPARK). Our line is pure TP `dp_size=1` → no idle batch → branch never taken. `--sleep-on-idle` is scheduler sleep, not `ForwardMode.IDLE` |
+| `b51c7814b9` | #50853 | [Feat] disaggregation: Report a full decode host pool and landed host-staged transfers in `/v1/loads` | **NO-OP** — `disaggregation/decode.py`, `managers/load_snapshot.py`, `managers/scheduler_components/load_inquirer.py`, rust `loads.rs`. No PD disaggregation on our line; the "host-staged transfers" are the HiCache host tier, which is off |
+| `6c2db99660` | #51311 | [Fix] kimi-k3: Read load_format through the model namespace accessor | **NO-OP** — `models/kimi_k3.py` only (+2/−2) |
+| `541606a075` | #49745 | [Feat] api: The OpenAI completions and chat completions schema and gRPC surface | **NO-OP** — proto + generated `python/sglang/api/v1/api_types.py` (+6091/−3288, generated) + rust gRPC types; the `srt/entrypoints/openai` serving handlers we run are untouched |
+| `6b374a5502` | #51368 | [CI] release: Run weekly, Arm64, MUSA and PPU suites on release branch cut | **NO-OP** — `.github/workflows/*.yml` only (9 files) |
+| `d75d74142b` | #51120 | [CI] sgl-router: Build a dispatched release from the router-v<version> tag | **NO-OP** — one workflow file (+40/−5) |
+| `aa83b0376b` | #51357 | [Doc] ci: Add OSS CI Hub usage notice | **NO-OP** — docs only |
+
+Grouped NO-OPs — **19** commits, all rust frontend / api-codegen (`SGLANG_RUST_SERVER` is opt-in;
+not our launch path, no `srt/` serving file touched). 18 are `rust-server:` rows: the #49735–#49748
+series (13: `0b42e6344a be9cc54f70 b0909b3f04 483f28b7ee d59b1542d0 682657a365 ac584ef1a0
+b0ce7369f9 07e72a91dd 9e7f4072a8 2e2c622f27 120c91cf32 f01462f3b3`) plus #50851 `de53a1ae2b`,
+#50831 `3ab330cd3c`, #50854 `6c5a0eedca`, #50832 `6963e3e0a1`, #50952 `42109d4c9a`. The
+nineteenth is api-codegen #49734 (`15c760cc31`: proto + `rust/sglang-api-codegen` + generated
+types + one parity unit test).
+
+### #45261 in detail — the SM12x decode-scoring path
+
+Merge **`6eaca42f57`**, `merged_at 2026-11-18T23:43:02Z`, head `04f5947d3f`, single parent
+`d75d74142b` (squash). **2 files**:
+
+| File | Δ | Change |
+|---|---|---|
+| `srt/layers/attention/deepseek_v4_backend.py` | +4/−1 | `force_deep_gemm_metadata = (enable_deepseek_v4_fp4_indexer **or compress_ratio in (1, 2)**) and get_platform().is_sm120` |
+| `srt/layers/attention/dsv4/v41_indexer/scoring.py` | +1/−1 | `paged = get_platform().is_sm90` → `... or get_platform().is_sm120` |
+
+**Anchors at `8817f63c`** (pin tarball, exact): `deepseek_v4_backend.py:1540` has
+`self.enable_deepseek_v4_fp4_indexer and get_platform().is_sm120` with the same
+"split_kv=128 vs 256" comment; `v41_indexer/scoring.py:487` has `paged = get_platform().is_sm90`.
+
+**Arch predicate resolved — this is live for us, not for SM120 only.** `get_platform().is_sm120`
+is `_PLATFORM_PROBES["is_sm120"] = "is_sm120_supported"` (`srt/runtime_context.py` probe map) →
+`_check_cuda_device_version(device_capability_majors=[12], cuda_version=(12,8))`
+(`srt/utils/common.py:304`), i.e. **major 12 ⇒ True on SM121/GB10**. The module-level
+`utils.common.is_sm120()` (`:342`) is `== (12, 0)` and excludes GB10 — the two names must not be
+confused. So both hunks address our hardware.
+
+**Hunk 1 is inert at our profile, and its failure mode is not ours.** The PR's startup failure is
+`deep_gemm.fp8_fp4_paged_mqa_logits` asserting `t.is_cuda()` because
+`PagedIndexerMetadata.__post_init__` leaves `deep_gemm_metadata = None` whenever
+`SGLANG_FP8_PAGED_MQA_LOGITS_TORCH` is set (the SM12x model hook sets it) and
+`force_deep_gemm_metadata` is false — which needs the c4 fp4 indexer flag **off**. Production
+passes `--enable-deepseek-v4-fp4-indexer` (`.env.tp4.example:245`, `EXTRA_SGLANG_ARGS`), so
+`force_deep_gemm_metadata` is already `True` on our SM12x and the schedule is built. Effect: we
+already avoid the crash; the hunk only makes the flag-off/default config safe.
+
+**Hunk 2 targets our live decode candidate path.** `DSV41_SM120_NO_CANDIDATES=1` (default;
+`adapter/sm120_candidates.py`) zeroes `candidate_topk_blocks`, so `make_candidate_indexer` returns
+`dense_blocks` for both sides (`v41_indexer/__init__.py:112`) → decode runs
+`DenseBlocksBackend.publish_decode` → `decode_scores` with `paged=False` on SM121 → the dense-slot
+branch: int64 `[bs, lmax]` slot map from `req_to_token` plus fp32 scores, **21.0 B/element** against
+**4.0** on the paged branch (PR body probe at 1 M ctx, ratio 1: 5.48/5.65/11.29 GB dense vs
+1.04/1.07/2.15 GB paged at bs 248/256/512). Capture-time `lmax = min(max_compressed_seq_len,
+req_to_token.shape[1] // ratio)`; with `CONTEXT_LENGTH=1048576` and `MAX_RUNNING_REQUESTS=32`, the
+top graph tier allocates ≈0.7 GB dense vs ≈0.13 GB paged `[INFERENCE — linear extrapolation of the
+PR's bytes/element, not measured here]`.
+
+**Apply blocker (why this is not a drop-in bp).** On the paged branch `DenseBlocksBackend.publish_decode`
+asserts `self.block_size == 8` (`v41_indexer/dense_blocks.py:100`) and feeds `amax_topk_blocks` with
+`(lens + 7) // 8` blocks; our adapter zeroes `candidate_block_size` → `block_size = 0`, so a
+one-line `paged = is_sm90 or is_sm120` patch would assert at CUDA-graph capture. Reaching the paged
+path needs block_size-8 semantics (candidate block scheme restored, or the assert/consumer
+generalized) — and that is the scheme whose DeepGEMM kernels our adapter documents as
+`block_kv == 64`-incompatible on SM121 (`adapter/sm120_candidates.py`, `attention.hpp:438`), which
+#45261 does **not** change.
+
+**Bound on the prize**: this is indexer scoring memory traffic, not the verify host-sync. The
+standing decode gap (~44 ms/step `cudaEventSynchronize`, dspark verify rework #48831–33) is
+untouched by this commit; any win is bounded by the low-ratio indexer's share of the step.
+
+### Cross-checks
+
+- Arithmetic: **816 + 27 = 843 ✓** against the log's `window-commits=843`; prior head found at
+  index 27 of page 1 (page 1 is full at 100), so the delta is complete and no page-2 straddle is
+  possible.
+- Keywords: **2 of 27** new commits keyword-visible (91 → 93 ✓): `6eaca42f57` (via `deepseek-v4`
+  in "DeepSeek-V4.1") and `3ab330cd3c` (false positive — `verify` in
+  `spec_verify_calls_total`). **0 material misses.** The counter still misses `SM12x`; #45261 was
+  caught only by the model name.
+- Coverage: all 27 shas are assigned exactly once (1 Table A + 7 Table B + 19 grouped = 27). Path
+  audit: no commit touches `models/deepseek_v4.py`, `deepseek_v4_backend.py` (#45261 excepted),
+  `dsv4/v41_indexer/*`, `mem_cache/`, or the dspark kernels except #45261's two files.
+- Fetch integrity: 2 issue legs + 2 PR legs + 1 search + 1 census page + 8 commit details + pin
+  tarball + 3 raw probes; all parsed, no truncation, no retry (13.4 s script, ~2 min triage).
+- Block-level: this run read the pin sources from the `8817f63c` tarball rather than asserting
+  anchor existence from the patch context, so the `1540`/`487`/`100`/`304`/`342` line claims are
+  read, not inferred.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + a local
+   pin tarball in `/tmp` + this checkout only — no SSH, no docker, no build, no serve, no schedule
+   change.
+2. **New standing candidate — #45261 merge `6eaca42f57`**: bp-class on our exact surface, applies
+   at the next pin with the SM12x branches active (is_sm120 ⇒ SM121 here). If anyone wants the
+   paged decode scoring *before* the next pin, the block: `block_size == 8` assert against the
+   zeroed `candidate_block_size`; measure it in an authorised window, do not assume.
+3. **Standing — bp6 collapse at candidate `5e6995dd`**: unchanged.
+4. **Standing — decode gate**: unchanged; nothing in this window touches the verify host-sync or
+   the DeepGEMM arch-12 fp32-weights assert.
+5. **Next pin**: #45261 rides in; re-check `adapter/sm120_candidates.py` necessity at the new pin
+   (the `block_kv == 64` incompatibility it documents is not addressed by #45261). The
+   `layers/communication/kda_dwdp` import check from run #22 still stands.
+6. **Operator**: (a) `gh` re-auth (**24th run**; REST-only throughout), (b) no log gap this slot,
+   (c) polling path clean.
