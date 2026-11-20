@@ -3065,3 +3065,109 @@ five where the census caught every axes-adjacent commit.
    (d) **repo-side decision still pending**: add `mem_cache`/`req_to_token`/`static_kv_storage`/
    `pool_host` to the census keyword list or make the census path-based — sixth window without a
    fix, though this run's two material commits both happened to hit the keywords.
+
+## 2026-11-20T00:18Z (2026-11-20 08:18 +08) — watch run #30
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 43.5 s — log `00:17:51Z`–`00:18:33Z`,
+`fetch_rc=0`, both issue legs and the census leg numeric on the first attempt, no TLS retry, no
+`TOOL FAILURE`. Continuity holds (previous run `20:17:58Z`); one run in the slot. Alert body is
+the standing trigger set only (#49173 closed + its 2 comments, **103** keyword hits of **924**).
+`gh auth status` → **token for `aotsukiqx` invalid** (**30th consecutive run**); step 2 ran on the
+REST equivalents.
+
+**Budget**: core hit **0/60** at `00:20:26Z` (reset `00:32:42Z`) after nine per-commit `files`
+fetches, so the remaining nine commits were audited on the **non-API `.diff`** endpoint; three of
+those returned an HTML `503 Unicorn` page and were retried to a 200. Search **10/10** (2 used).
+
+### Issues / PR — zero delta
+
+- **#49173** — closed (`completed`), `comments=2`, `closed_at = updated_at = 2026-11-09T07:26:52Z`
+  — **twenty-ninth run** identical to the close second. Both comments are the original Kylinny
+  thread already absorbed into `docs/PROJECT_STATE.md`; nothing to fetch for step 2.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **twenty-ninth silent
+  run**. PR search for the issue number still returns exactly **#49306** (`open`, `merged=false`,
+  head `4e1544039e`, updated `2026-11-09T12:56:58Z`).
+  Caveat for future runs: `GET /issues/<n>/comments` under rate-limit returns an error **object**,
+  whose `jq length` is **2** — that is two keys, not two comments. Check `comments` on the issue
+  object instead.
+- **#49182** — re-verified: `closed`, `merged=true`, `merged_at 2026-11-09T07:26:50Z`, merge
+  **`5e6995dd09`**, head `a49ff4d7d3`. Unchanged; next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 18 new commits: 17 NO-OP, 1 next-pin-class, **none on the axes**
+
+Census **924** (9×100 + 24, `since=2026-11-08T14:00:00Z`). Prior **906 + 18 = 924** ✓. Prior head
+`17a9168f1f` (`18:59:04Z`) → new head **`03fde9cc39`** (`23:54:17Z`). Keyword counter **103 + 0 =
+103** — **zero of 18** subjects matched, so the census contributed nothing and the whole delta was
+audited **path-based** on commit `.diff`: **none of the 18 touches `layers/engram.py`,
+`srt/speculative/`, `srt/mem_cache/`, `deepseek_v4_backend.py`, or `models/deepseek_v4.py`.**
+
+| sha | PR | Subject | Class |
+|---|---|---|---|
+| `5730875f20` | #51607 | [Fix] spec: Clear `moe_dense_tp_size` for a draft narrowed to plain TP | **next-pin-class, NO-OP at pin** — one kwarg in `parallel_state.py:patch_tensor_parallel_group`; pin's `DpFlags(...)` has no `moe_dense_tp_size` field (`:3137`), so the pre-image is post-pin. Our rocenante hunks sit at `:465`/`:684`/`:2118` — no overlap |
+| `03fde9cc39` | #51455 | [Perf] disagg: Pack a DCP-collapsed draft with target rows in DCP-1→N | NO-OP — `disaggregation/mooncake/conn.py`; we run no PD disagg, DCP=1 |
+| `99e4233f63` | #35637 | [Feat] scheduler: UniBoost tail-aware schedule policy (rank-invariant TP/PP) | NO-OP — new opt-in policy (`schedule_policy.py`, `uniboost_gamma_ada.py`, arg fields) |
+| `c80444d551` | #51521 | [Fix] scheduler: `Engine.collective_rpc` via the control request path | NO-OP — engine/scheduler control plumbing |
+| `e627fed679` | #42314 | [Feat] sgl-router: OpenAI Responses API on `/v1/responses` | NO-OP — router |
+| `be322a8338` | #51415 | [Feat] sgl-router: `--decode-dp-rank-policy` | NO-OP — router; `dp_size=1` |
+| `a3fd615a97` | #49246 | [Feat] sampling: per-request `sampling_seed` without deterministic inference | NO-OP — sampler / tokenizer / rust api_server |
+| `0ab0e9d5d0` | #51382 | [Perf] MiniMax-M3: shared expert under CUDA graph | NO-OP — other model |
+| 10× | — | flux3 ×4, cosmos3 ×2, diffusion BLAKE3 hashing, diffusion Ulysses transport, Wan doc, CI handle rename (`51ccc1f699 fccaf681a2 fb97472771 5cee3ad808 ab2ebbf421 3b0e693f46 7c08c3040c 78cb42ebbc d4824c7cb8 da8325b10e`) | NO-OP — `multimodal_gen/`, CI, docs |
+
+### Open axis PRs not previously recorded
+
+Search `repo:sgl-project/sglang is:pr is:open (dsv4 OR dspark OR engram) updated:>=2026-11-18`.
+
+- **#47677** `[Perf] [NVIDIA] dspark: Stage draft DP-MoE token counts through persistent buffers` —
+  open, updated **2026-11-19T21:45:39Z**, ~89/31 over `dspark_components/dspark_draft.py` + 2
+  tests. **bp-class candidate; anchors present at pin**: it deletes `_make_num_token_non_padded`
+  (pin `:48`), stops calling it per draft step in `_run_forward` (pin `:584`) in favour of
+  `self._num_token_non_padded`, and replaces the per-step `torch.tensor(..., pin_memory=)` +
+  H2D staging in `_fill_dp_moe_sync_metadata` (pin `:702`) with double-buffered persistent slots
+  guarded by per-slot events. **Adjacent to, not the same as, our decode-gap attribution**: this
+  is the *draft* path, and it still calls `copied.synchronize()` on the previous slot every step —
+  it removes per-step allocation churn, not the host wait. At `dp_size=1` the DP-metadata half is
+  near-inert; only the draft-forward half could move a delta.
+- **#51589** `[Refactor] dsv4/pool_configurator: Keep the DSpark draft ring layer count on the
+  configurator` — open, 7/5 lines, **applies to the pin verbatim** (`draft_ring_layers` at pin
+  `:1211`, `paged_draft_layers` at `:1212`), pure attribute hoist with identical arithmetic →
+  **NO-OP**, free-rider at the next pin.
+- **#51499** `[Feat] weight-cache: Use IPC only for the speculative target` — open, 11 files incl.
+  `speculative/dflash_worker_v2.py` and the weight-cache loader → **NO-OP at our config** (no
+  `--weight-cache` in the launchers; the dspark path is untouched).
+- **#44028** `[Feat] [NVIDIA] DeepSeek-V4.1: Engram precompute on GPU (10/N)` — open, updated
+  `2026-11-18T05:27:42Z`, **touches `layers/engram.py` and `models/deepseek_v4.py`** (two axes)
+  plus `moe/mega_moe.py`. No file-level collision with our patches (`deepseek_v4_boundary.py`,
+  `deepseek_v4_mhc.py`, `kernels/.../dsv4/*`), but it is the only open PR on the engram axis.
+- **#51006** `[Perf] [NVIDIA] attention: Shard DSV4.1 DSpark verify indexer on Hopper` —
+  Hopper-gated → **NO-OP for SM121**.
+- **#47460** `[Feat][DSV4.1][engram]: Sharing Engram via RDMA to reduce PD DRAM redundancy` — PD
+  disaggregation → **NO-OP** (no disagg, no PD DRAM tier).
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST +
+   `.diff`/raw endpoints + this checkout only — no SSH, no docker, no build, no serve, no schedule
+   change.
+2. **New bp-class candidate — #47677** (open, unmerged): draft-side persistent metadata buffers.
+   Fold into the next authorised window only if the draft-forward allocation churn shows in the
+   decode profile; it does **not** address the verify host-sync.
+3. **New next-pin candidate — #51607** (`5730875f20`): `DpFlags.moe_dense_tp_size=None` for a
+   plain-TP draft. Unapplyable at `8817f63c` (field absent), zero patch overlap.
+4. **#51589** applies at the pin verbatim (NO-OP) — take it free at the next pin.
+5. **#44028** (engram precompute on GPU) is the live engram-axis PR — re-audit at the next pin; no
+   collision today.
+6. **Standing — #45261 `6eaca42f57`**: paged path still blocked (`block_size == 8` vs our zeroed
+   `candidate_block_size`).
+7. **Standing — #51295 `5b478f175b`**: 3 refit hunks + inert swa hunk; free-rider only.
+8. **Standing — bp6 collapse at `5e6995dd`**: unchanged.
+9. **Standing — decode gap**: no upstream movement; the ~44 ms/step verify host-sync still has no
+   fix.
+10. **Next pin** picks up, in dependency order: #51298's folding series, #50620 with its JIT
+    headers, #51296/#51297 opt-ins, #51607, #45261, #51295, #51515, #51450 (inert), #51458,
+    #51289, #50752, #50186 wholesale.
+11. **Operator**: (a) `gh` re-auth (**30th run**, REST-only throughout), (b) continuity clean
+    (`20:17:58Z` → `00:17:51Z`), (c) polling path clean at both legs, (d) **repo-side decision,
+    seventh window**: this delta contained no axis commit, so the keyword census's blind spot cost
+    nothing today — but the audit that proved it (delta-scoped path check over the non-API `.diff`
+    endpoint) used **zero** rate budget and is the cheap way to close the hole; widening the
+    keyword list would not have caught this window's `parallel_state.py` change either.
