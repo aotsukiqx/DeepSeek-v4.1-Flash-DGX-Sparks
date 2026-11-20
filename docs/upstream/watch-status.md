@@ -3171,3 +3171,164 @@ Search `repo:sgl-project/sglang is:pr is:open (dsv4 OR dspark OR engram) updated
     nothing today — but the audit that proved it (delta-scoped path check over the non-API `.diff`
     endpoint) used **zero** rate budget and is the cheap way to close the hole; widening the
     keyword list would not have caught this window's `parallel_state.py` change either.
+
+## 2026-11-20T04:18Z (2026-11-20 12:18 +08) — watch run #31
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 22.8 s — log `04:17:55Z`–`04:18:16Z`,
+`fetch_rc=0`, both issue legs and the census leg numeric on the first attempt, no TLS retry, no
+`TOOL FAILURE`. Continuity holds (previous run `00:17:51Z`); one run in the slot. Alert body is
+the standing trigger set only (#49173 closed + its 2 comments, **104** keyword hits of **947**).
+`gh auth status` → **token for `aotsukiqx` invalid** (**31st consecutive run**); step 2 ran on the
+REST equivalents.
+
+**Budget**: core **49/60** at `04:19Z` → **19/60** at `04:28Z` (30 consumed, including the
+script's own unauthenticated calls). The non-API `.diff` endpoint returned HTML `503` for 11 of
+23 commits on the parallel batch and for 6 on a paced retry; those 6 were audited through the REST
+`files` endpoint instead. Search **10/10** (2 used: issue-reference sweep + open-axis sweep).
+
+### Issues / PR — zero delta
+
+- **#49173** — closed (`completed`), `comments=2`, `closed_at = updated_at = 2026-11-09T07:26:52Z`
+  — **thirtieth run** identical to the close second. No new maintainer comment; nothing to fetch
+  for step 2.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **thirtieth silent run**.
+  Issue-reference search returns exactly **#49306** (`open`, `merged=false`, unchanged
+  `2026-11-09T12:56:58Z`).
+- **#49182** — re-verified: merged `5e6995dd09` at `2026-11-09T07:26:50Z`, head `a49ff4d7d3`.
+  Unchanged; next-pin candidate stays **`5e6995dd`**.
+
+### New axis PRs — four never recorded, all open
+
+Search `repo:sgl-project/sglang is:pr is:open (dsv4 OR dspark OR engram) updated:>=2026-11-19`
+(127 results; filtered to the unrecorded axis rows).
+
+**#50049 — the material find on the decode axis.** `[Perf] dspark: Fold the static verify
+epilogue's commits into the accept tail and trim the verify-to-draft glue`, created 11-12,
+updated **2026-11-20T02:28:36Z**, head `18eb2f92ff`, 12 files +546/−31. It targets exactly the
+serial work between the static verify graph and the draft replay: the engram history commit, the
+two `index_put` FutureMap relay scatters, and the deferred draft KV staging after the fused accept
+tail, plus `overlap_utils._resolve_spec_extras` and the `decode_cuda_graph_runner`
+input-copy loop.
+
+**Pin anchors verified by raw fetch at `8817f63c`** (not inferred from the subject): `run_static`
+at `dspark_verify.py:749` calls `_commit_engram_history` (`:759`, def `:904`), then
+`_scatter_future_relay` when `_post_fold`, then `deferred_commit.stage(...)` (deferred draft KV) or
+`inject_target_hidden` — the same launch set the PR folds. `_serves_accept_tail` `:832` /
+`_static_accept_tail` `:836` and `kernels/ops/speculative/dspark/static_accept_tail.py` all exist
+at the pin. The PR's hunks sit at `:800/:851/:893/:922/:976` on main, i.e. **~60–90 lines below
+the pin's symbols → refit, not verbatim**. Classification: **pin-migration-class (decode axis)**,
+decomposable into a bp attempt only by extracting the relay-scatter + KV-stage fold from the
+kernel change. It removes up to four serial launches per verify step and, like every PR on this
+axis, **does not remove the `cudaEventSynchronize` host wait** (~44 ms/step) that owns the gap.
+
+**#51636 — mixed pin-migration-class.** `[Perf] dsv41-flash: overlap decode-path projections and
+cut CUDA-graph memory`, created 11-19, updated **2026-11-20T02:36:43Z**, head `0a7f817ab5`,
+11 files +485/−114. Reported +3.0–3.2% total tok/s/GPU on **4×B200 TP4/EP4** — not an SM121
+measurement. Four separable halves:
+
+- *engram host-load chunking* — `_load_rows` at pin `engram.py:1134` copies a whole checkpoint
+  shard; the PR copies 256 MiB chunks and `madvise(MADV_DONTNEED)`s the file-backed pages. Load-
+  time host-RAM only (GB10 UMA makes that the same budget as pool memory), needs the
+  `/proc/self/maps` mapping helper.
+- *engram decode sort skip* — `_MIN_SORTED_HOST_READS = 4096` behind a new `_sorts_host_reads()`;
+  the pin has `sort_ids=self._sort_host_reads` at `engram.py:1173` and `:1265`. The **only
+  decode-path hunk** here and extractable as a bp; effect is a CPU sort avoided on <4 K-id
+  lookups, so measure, do not assume.
+- *indexer / model overlap* — **not applicable at the pin**: `index_q_and_weights` (scoring) and
+  `low_ratio_decode_index_positions` (backend) do not exist at `8817f63c` (raw-fetched
+  `v41_indexer/scoring.py`, `models/deepseek_v4.py`, `deepseek_v4_backend.py`; the pin has
+  `_normalize_q_lora:1732`, `_forward_prepare_low_ratio_multi_stream:1951`,
+  `forward_low_ratio_sources:3409`, `_low_ratio_index_topk:3887`). The PR adds the backend helper,
+  so this half is a backport, not a patch.
+- *trtllm MoE row chunking* — `_ROUTED_MOE_MAX_ROWS = 4096` bounds the routed op workspace;
+  **NO-OP** at our config (b12x_next MoE, not the trtllm backend).
+
+**#41893 — NO-OP today.** `[Perf] dsv4: Verify-merged mixed step for DSPARK, deterministic C4
+top-k ties, and eager ragged indexer`, updated `2026-11-20T01:20:31Z`, 28 files +1935/−76. Gated
+on `--enable-mixed-chunk`, which this checkout sets nowhere (default off) → inert. Pin-migration-
+class only if mixed chunk is ever adopted; the C4 top-k tie determinism and ragged-indexer parts
+ride along.
+
+**#45729 — NO-OP.** decode DP with prefill CP on a colocate worker, 13 files; `dp_size=1`, no PD
+disagg, no CP on this line. (Also touches `prefill.py`/`model_hook.py` layer-split plumbing;
+nothing enabled.)
+
+Standing, unchanged: **#47677** updated `2026-11-20T02:05:50Z`, head `31fc3ad7f2`, now **+87/−30
+over 4 files** (was ~89/31 over 3): same substance, still `copied.synchronize()` per draft step;
+`#51589` (verbatim NO-OP free-rider), `#51499` (weight-cache, off), `#44028` (engram axis), `#51006`
+(Hopper), `#47460` (PD RDMA).
+
+### sglang main — 23 new commits: all NO-OP on this line
+
+Census **947** (`since=2026-11-08T14:00:00Z`; prior **924**; **924 + 23 = 947** ✓). Prior head
+`03fde9cc39` found at index 23 of page 1 (newest first) → new head **`b9e71d4c8bd2`**
+(`04:03:24Z`). Keyword counter **103 + 1 = 104** ✓; the single hit was `98b6b7c646fe` (a **test**
+commit). Every row was read by subject **and** path (23/23 accounted: 17 `.diff` + 6 REST `files`).
+
+| sha | PR | Subject | Class |
+|---|---|---|---|
+| `b9e71d4c8bd2` | #51363 | sampling: keep fast top-p/top-k renorm under attention DP | NO-OP — `renorm_deterministic()` still returns True at `tp_size=4`; the new fast path needs `attn_dp_enabled ∧ attn_tp_size==1 ∧ attn_cp_size==1` |
+| `98b6b7c646fe` | #51552 | test: inkling2 GB300 DSPARK e2e | NO-OP — test-only (the window's only keyword hit) |
+| `c09ff83ef4f2` | #50140 | profiler: forward step span as an NVTX range | NO-OP perf — `SGLANG_ENABLE_NVTX_FORWARD` default False; tooling note: `spec_stage_span` now maps draft spans to `forward_nvtx_range` and verify comes from `ModelRunner.forward`'s `step[VERIFY]` |
+| `2e7bdf77a2df` | #48227 | model-loader: cap multithreaded in-flight bytes | NO-OP — opt-in `max_inflight_bytes` in `--model-loader-extra-config`; default `None` = current behaviour. Boot-RAM knob only, not a perf lever |
+| `a242c277e58d` | #51671 | sgl-router: count a media tie-break once | NO-OP — router (unused) |
+| `a3b756844be5` | #51691 | cookbook: Hy4 | NO-OP — docs |
+| `41cd6318083b` | #51594 | CI diffusion: h100-computable-d denoise refs | NO-OP — CI baselines |
+| `401d0c792902` | #49995 | NPU operators: public entry points | NO-OP — 67 files of `sgl_kernel_npu.*`→`operators.*` import renames; CUDA branches untouched; `pool_host/mamba.py` rename is inside the NPU branch and the host tier is off |
+| `f9c83713e03b` | #51670 | linker: load-back from storage hits in e2e | NO-OP — tests only (incl. `kl_dsv4`/`kl_dsv41` linker tests) |
+| `23b2e671c599` | #50962 | hicache: fail attach when native hash cannot build | NO-OP — HiCache/host tier off |
+| `35321ed0714b` | #51305 | mem_cache: FP4 default in page-sharded DSA mock | NO-OP — test-only |
+| `f913bf9aa1b6` | #51424 | CI NPU: re-enable PR trigger | NO-OP — CI |
+| `307a6164b207` | #51662 | router e2e on 4-gpu-h100 | NO-OP — router tests |
+| `ae69db457eaa` | #51637 | router: Responses summary/coercion | NO-OP — router |
+| `08f10090c762` | #51338 | classify: multi-label probabilities | NO-OP — classify endpoint unused |
+| `6d35ff21d04b` | #48937 | router: route DeepSeek image chats by prefix cache | NO-OP — Rust router + processor (`render/models/deepseek_v4.rs`); no router, no `SGLANG_RUST_SERVER` on this line |
+| `cf9b03ab8265` | #48389 | Ascend GLM DSA cache layer-split | NO-OP — NPU-gated; GPU `maybe_prefetch_next_full_attention_kv` keeps its prefetch call; this checkout sets no `--enable-dsa-cache-layer-split`/`--enable-prefill-cp`/`--cp-strategy` |
+| `a3d4b91d35d6` | #51520 | kimi-k3 `--enable-layernorm-sp` | NO-OP — the new `SumGroup.ATTN_TP` branch needs `sp`; `AttnResidual`/`AttnBank` only gain defaulted kwargs. Collision note: touches `layer_boundary/{factories,residual/attn_bank}` and `attn_residual.py`, adjacent to our `deepseek_v4_boundary.py` patch — re-derive at the next pin, zero same-file overlap |
+| `9617d5fa6af3` | #51649 | diffusion: Ulysses transports | NO-OP — docs |
+| `3ee08035aebe` | #51652 | diffusion: FLUX.3 conditioning cache | NO-OP — docs |
+| `9cca7c9fd256` | #43279 | wan2.2-s2v speech-to-video | NO-OP — `multimodal_gen/` |
+| `c532212bbe6d` | #51536 | NPU kernel tag bump | NO-OP — NPU docker/CI |
+| `2510a8b7bc21` | #50823 | XPU enablements | NO-OP — `_is_xpu`-gated `mxfp4.py` bias promotion (gpt-oss-120b) and `bailing_moe_linear` rope gate |
+
+### Cross-checks
+
+- Census: `924 + 23 = 947` ✓; keyword counter `103 + 1 = 104` ✓; slice keyed on the prior head
+  `03fde9cc39`, not author dates.
+- Coverage: 23/23 `new` shas appear in exactly one table row/group (17 `.diff` + 6 REST `files`;
+  the failed `.diff` batch was retried, not skipped).
+- Continuity: `00:17:51Z` → `04:17:55Z`, one run per 4 h slot, no gap.
+- Counter miss rate: **22 of 23** (96%), again the normal case — the hit was a test commit.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST +
+   `.diff`/raw endpoints + this checkout only — no SSH, no docker, no build, no serve, no schedule
+   change.
+2. **New top decode-axis candidate — #50049** (open, unmerged): verify-epilogue fold. Take it at
+   the next pin; a bp attempt needs a refit (~60–90 line offset at `8817f63c`) and should start
+   from the relay-scatter + KV-stage fold, not the Triton tail kernel.
+3. **New pin-migration-class — #51636**: indexer overlap is a backport (needs two absent
+   helpers); the engram sort skip is the one extractable pin-applicable hunk; the loader chunking
+   is a boot-RAM lever; the trtllm MoE hunk is inert here.
+4. **#51636 and #50049 both edit `cuda_graph_buffer_registry.py`** — expect a conflict when the
+   next pin absorbs both.
+5. **#41893** stays inert until mixed chunk is enabled; **#45729** stays inert at `dp_size=1`.
+6. **Corrected anchor fact**: `model_executor/runner/row_bucket_graph_runner.py` and
+   `kernels/ops/speculative/dspark/static_accept_tail.py` **do exist at `8817f63c`** (raw-fetched,
+   HTTP 200) — only `full_cuda_graph_backend.py` is post-pin among the runner-split paths noted in
+   the runbook.
+7. **Standing — #47677** (`31fc3ad7f2`, +87/−30/4 files): re-read, unchanged in substance.
+8. **Standing — #45261 `6eaca42f57`**: paged path still blocked (`block_size == 8` vs our zeroed
+   `candidate_block_size`).
+9. **Standing — #51295 `5b478f175b`**: 3 refit hunks + inert swa hunk; free-rider only.
+10. **Standing — bp6 collapse at `5e6995dd`**: unchanged.
+11. **Standing — decode gap**: the ~44 ms/step verify host-sync has no upstream fix; #50049 trims
+    the surrounding serial launches, not the wait.
+12. **Next pin** picks up, in dependency order: #51298's folding series, #50620 with its JIT
+    headers, #51296/#51297 opt-ins, #51607, #45261, #51295, #51515, #51450 (inert), #51458,
+    #51289, #50752, #50186 wholesale; then #50049, #51636 (both refit), #51589 free.
+13. **Operator**: (a) `gh` re-auth (**31st run**, REST-only throughout), (b) continuity clean
+    (`00:17:51Z` → `04:17:55Z`), (c) polling path clean at both legs, (d) no repo-side action
+    required this window — the per-commit path audit was again what caught the material items
+    (the 23-commit window itself is all NO-OP; the value is in the four PRs).
