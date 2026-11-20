@@ -3709,3 +3709,95 @@ bucket separate (2 queries, both valid).
    token verified live for push), (b) continuity clean (`12:17:50Z` → `16:17:51Z`), (c) polling
    path clean at both legs, (d) **nothing needs a window today** — zero material commits, zero
    issue/PR delta.
+
+## 2026-11-20T20:18Z (2026-11-21 04:18 +08) — watch run #35
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 16.5 s — log `20:17:54Z`–`20:18:10Z`,
+`fetch_rc=0`, both issue legs first attempt. Continuity clean (`16:17:51Z` → `20:17:54Z`).
+Alert body is the standing trigger set only (#49173 closed + its 2 comments, **109** keyword hits
+of **1000** — the census cap now saturates, see cross-checks). `gh auth status` → **token for
+`aotsukiqx` invalid** (**35th consecutive run**); steps 2–3 ran on REST equivalents.
+
+**Budget**: core **18/60** remaining at end of triage (reset `20:23:16Z`); unauthenticated REST:
+11 manual census pages + 1 page-1 head re-check + 5 commit details + 10 PR reads + rate reads;
+script's own 12 requests earlier in the hour; search bucket separate (1 query, valid).
+
+### Issues / PR — zero delta
+
+- **#49173** — closed (`completed`), `comments=2`, `updated_at 2026-11-09T07:26:52Z` —
+  **thirty-fifth run** identical to the close second. No new maintainer comments ⇒ step 2 no-op.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **thirty-fifth silent
+  run**. Issue-reference search still returns exactly **#49306** (open, unmerged, unchanged
+  `2026-11-09T12:56:58Z`).
+- **#49182** — merged `5e6995dd09` (`2026-11-09T07:26:50Z`) — unchanged; next-pin candidate stays
+  **`5e6995dd`**.
+- Standing PR sweep (10 reads, already-merged #48208/#51479/#51607/#51515 skipped as terminal):
+  **no NEW merges**. Head-frozen activity only: #50032 `updated 17:07:23Z` (head `5c5d3748`
+  unchanged), #51636 `updated 16:54:25Z` (head `0a7f817a` unchanged), #47020 `14:27:22Z` (head
+  `bf9c4eb6` unchanged); #51692/#51681/#50049/#44028/#49306 unchanged since #34; #45261
+  (`6eaca42f57`, blocked) and #51295 (`5b478f175b18`, free-rider) still merged-as-recorded.
+
+### sglang main — 16 new commits; 3 material rows, 13 NO-OP
+
+#### Table A — material
+
+| sha | PR | subject | class / note |
+|---|---|---|---|
+| `9fc0e2a6ba19` | #50901 | [Perf] tokenizer_manager: Drop the prompt token list once a single request is dispatched | **bp-class (low)** — host RSS hygiene per in-flight request (+19/−3 `managers/tokenizer_manager.py`, +2 `entrypoints/http_server.py`, both exist at pin); not decode-axis, no sync removal. Absorbed at next pin |
+| `176197551316` | #50817 | [Fix] srt: Check IPv6 availability for default NCCL ports | **bp-class if symptom** — +22/−5 `srt/utils/network.py` (exists at pin); our boots set explicit topology/env and have never hit default-port selection failure ⇒ record-only |
+| `53b8e56e4a06` | #42254 | [Perf] Foundry: adapter to enable fast CUDA graph save/load | **watch / pin-evaluation** — opt-in CUDA-graph **persistence** (new server arg via `arg_groups/cuda_graph_hook.py` +55, optional dep in `pyproject.toml`, touches `two_batch_overlap.py`/`triton_symm_mem_ag.py`). A save/load path is a **boot-time lever** for our ≈25 min boots — evaluate at the next pin, default-off |
+
+#### Table B — residual individually-read NO-OPs
+
+| sha | PR | subject | why NO-OP |
+|---|---|---|---|
+| `e3e0f2a3f0fb` | #51927 | [Doc] cookbook: Add Inkling-2-Mini cookbook | docs, other model |
+| `20a378f7db1a` | #51464 | [Fix] diffusion/zimage: Run n > 1 outputs one by one | diffusion surface |
+| `7e9028a4d761` | #47889 | [Perf] diffusion/cosmos3: optimize Sim-Bimanual kv cache management | diffusion surface |
+| `398825821a9e` | #51913 | [CI] diffusion: Calibrate Hunyuan3D shape denoising on computable-e H100s | CI only |
+| `2c673ff255fa` | #50819 | [Test] rust-server: Verify disconnect aborts an admitted unary prefill | Rust frontend (opt-in); the window's **only** keyword hit is this false-positive `Verify` |
+| `001ea2afb6ca` | #50897 | [Refactor] rust-server: Keep only the test-support helpers that need crate internals | Rust frontend |
+| `27dce8023d8b` | #51258 | [Chore] ci: Grant AndyDai-nv CI permissions | CI only |
+| `41f01f8b524a` | #50931 | [Fix] [CI] diffusion: Repair cached subfolders and CI recovery | CI only |
+| `f9fc07cc74da` | #51562 | [Perf] diffusion/flux3: Replay the text encoder's forward as a CUDA graph | diffusion surface |
+| `2b248971db8c` | #46210 | [Feat] [NVIDIA] megakernels: DSA / MLA binding view, EAGLE draft capture checks, early draft embedding sharing | megakernel kernel-plugin backend (opt-in) + EAGLE-only spec paths (`eagle_worker_v2`, `eagle_draft_*_cuda_graph_runner`) — not our dspark line; the "early draft embedding sharing" idea lives in the plugin, not the dspark path |
+| `4f56795ec548` | #51707 | [Fix] distributed: attention-TP subgroup PyNCCL communicator under attention DP | DP-attention only, `dp_size=1` here; touches `layers/attention/dsa/dsa_indexer.py` (+1/−3, exists at pin) — trivial refit if ever needed |
+| `55d93f72bd03` | #50846 | [Perf] rust-server: multimodal identity from one BLAKE3 digest | Rust frontend |
+| `f9e1424f14d6` | #50864 | [Feat] bench: Spread a one-batch benchmark batch over per-DP-rank listeners | bench tooling + DP |
+
+### Cross-checks
+
+- **Census past the cap**: manual full pagination (11 pages, last = 56 < 100) ⇒ true window since
+  `BASE_CUTOFF 14:00Z` = **1015** (raw 1056 since `00:00Z`, filtered to the script's cutoff — the
+  extra early-11-08 commits sort oldest, so head-side pages are identical). The script's census
+  saturates at 1 000 ⇒ its `109/1000` is now a floor, permanently. Slice keyed on #34's head
+  `f7ff1e0a9435` at **index 16** (its 8 rows at 0–7, contiguous) ⇒ `new = 16`;
+  **999 + 16 = 1015** ✓. No sha dupes; page-1 head re-check stable `e3e0f2a3f0fb` — no mid-run
+  push.
+- Coverage: 16/16 new shas appear in exactly one row (3 Table A + 13 Table B).
+- Keyword counter: **1 of 16** — the false-positive `Verify` on the rust-server test row; the
+  108 → 109 move is re-capture noise under saturation. Manual slice stays ground truth.
+- Batch integrity: all 15 REST detail/PR fetches valid JSON, no 503 stubs.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **#42254 (new)** — CUDA-graph persistence is the one new item worth pin-list attention: an
+   opt-in save/load path for captured graphs is a direct boot-time lever (our boot ≈ 25 min,
+   graph capture a chunk of it). Evaluate at the next pin migration; not runtime-bp material
+   (arg-groups + optional dep surface).
+3. **#50901** — record-only bp (host RSS hygiene, not decode-axis). **#50817** — record-only
+   (no symptom on our topology). Neither changes window planning.
+4. **Standing — unchanged from #34**: #50032 best decode-axis bp (host work only, head
+   `5c5d3748` frozen, activity-only); #47020 penalty correctness (head `bf9c4eb6` frozen);
+   #51692/#51681 kernel-level accept fixes; #48678 image contract; #51719 watermark contract;
+   #48926/#45417 record-only; #45261 `6eaca42f57` blocked (`block_size == 8`); #51295
+   `5b478f175b18` free-rider; **bp6 collapse at `5e6995dd`**; decode gap has no upstream fix.
+5. **Next pin** list unchanged from #34 item 3; optionally append #42254 as an evaluation item.
+6. **Tooling**: the census cap has now saturated for good — from #35 on, the script's
+   `window-commits`/keyword counter are decorative; the manual slice + page-1 re-check are the
+   only census. Script fix (sha-snapshot census + non-zero rc + keep alert) still deferred.
+7. **Operator**: (a) `gh` re-auth (**35th run**, REST-only throughout), (b) continuity clean
+   (`16:17:51Z` → `20:17:54Z`), (c) polling path clean at both legs, (d) **nothing needs a
+   window today** — zero issue/PR delta, 3 low-value material commits.
