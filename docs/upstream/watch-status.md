@@ -3630,3 +3630,82 @@ rate-limit read.
 10. **Operator**: (a) `gh` re-auth (**33rd run**, REST-only throughout), (b) continuity clean
     (`08:17:49Z` → `12:17:50Z`), (c) polling path clean at both legs, (d) nothing needs a window
     today — the only new material items are a boot prefetch fix and an env switch for the next pin.
+
+## 2026-11-20T16:18Z (2026-11-21 00:18 +08) — watch run #34
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 21.4 s — log `16:17:51Z`–`16:18:11Z`,
+`fetch_rc=0`, both issue legs first attempt. Continuity clean (`12:17:50Z` → `16:17:51Z`). Alert
+body is the standing trigger set only (#49173 closed + its 2 comments, **108** keyword hits of
+**999**). `gh auth status` → **token for `aotsukiqx` invalid** (**34th consecutive run**); steps 2–3
+ran on REST equivalents.
+
+**Budget**: core **12/60** remaining at end of triage (reset `17:01:33Z`); unauthenticated REST:
+10 census pages + 3 commit details + 14 PR reads + 1 page-1 head re-check + rate reads; search
+bucket separate (2 queries, both valid).
+
+### Issues / PR — zero delta
+
+- **#49173** — closed (`completed`), `comments=2`, `closed_at = updated_at = 2026-11-09T07:26:52Z`
+  — **thirty-fourth run** identical to the close second. Nothing to fetch for step 2.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **thirty-fourth silent
+  run**. Issue-reference search still returns exactly **#49306** (open, unmerged, unchanged
+  `2026-11-09T12:56:58Z`).
+- **#49182** — merged `5e6995dd09` (`2026-11-09T07:26:50Z`), head `a49ff4d7d3` — unchanged;
+  next-pin candidate stays **`5e6995dd`**.
+- Standing PR sweep (14 reads): **no NEW merges** beyond those already recorded (#48208
+  `a0bd0c56` and #51479 `eb49b873` merged inside #33's window; #45261 `6eaca42f57`, #51295
+  `5b478f175b`, #51607 `5730875f20f8`, #51515 `17a9168f1f99` recorded earlier). **#47020 is the
+  only mover**: `updated 2026-11-20T14:27:22Z` (was `10:09:44Z`) with head UNCHANGED
+  `bf9c4eb6` ⇒ comment/review activity only, no content to re-triage. #50032 (`5c5d3748`,
+  `06:12:33Z`), #51692 (`f6976099`, `03:20:17Z`), #51681 (`f5b34e49`, `02:38:15Z`), #50049
+  (`18eb2f92`), #51636 (`0a7f817a`), #44028 (`a61b6fe9`), #49306 (`4e154403`) — all open,
+  unchanged since #33.
+
+### sglang main — 8 new commits, all NO-OP (no material row)
+
+#### Table B — residual individually-read NO-OPs
+
+| sha | PR | subject | why NO-OP |
+|---|---|---|---|
+| `f7ff1e0a9435` | #51257 | [Fix] scheduler: Admit a chunked ignore-eos streaming-session turn after its prefix | feature-gated: `ignore_eos` + streaming sessions, neither in our traffic; +5/−2 in `managers/schedule_policy.py` (module exists at pin — no refit), rest test |
+| `a4347f43c2ce` | #51849 | [Fix] simulator: Declare mock storage KV hints capability | simulator/mock only |
+| `459b85fb6884` | #51592 | [Fix] function_call: Use call order for Gemma4 streaming tool indices | other model (Gemma 4) |
+| `fa4e39b36b10` | #51616 | [Fix] function_call: Preserve text between and after Gemma 4 tool calls | other model (Gemma 4) |
+| `dc8f1c35bdb9` | #50635 | [Fix] linker: Wait for external linker loads before breakable replays that capture KDA state reads | linker spec algorithm (not dspark) + KDA (other model); +5/−1 in `runner_backend/utils.py` — site exists only post-runner-split, **absent at bp5 pin**; apply-check at next pin |
+| `1e93e43f3935` | #51366 | [Refactor] [AMD] kimi-k3: Keep Kimi-K3.1's gfx950 modules off the shared import paths | AMD import hygiene; shared files (`distributed/bootstrap.py`, `layers/attn_residual.py`) −9/+5 but no behavior change off AMD |
+| `ea442ff4ab19` | #51718 | [Fix] gemma4: Keep valid vision patches when pooling is skipped | other model, vision |
+| `8f060f8337fd` | #51615 | [Fix] gemma4: Exclude padding and preserve range during vision pooling | other model, vision |
+
+### Cross-checks
+
+- Census exact (not yet saturated): manual full pagination, page 10 = 99 < 100 ⇒ **total = 999**;
+  slice keyed on #33's head `0c6d6eb04e3b` at **index 8** ⇒ `new = 8`; **991 + 8 = 999** ✓.
+  Page-1 head re-check stable at `f7ff1e0a9435` — no mid-run push.
+- Coverage: 8/8 new shas appear in exactly one Table B row.
+- **Keyword counter non-monotone — pagination artifact, not new hits**: script logged 106 → 101 →
+  108 across 969 → 990 → 999. All 8 new subjects carry **0 of 12 keys** (verified by hand), so the
+  +7 is re-capture of keyword commits the 12:18Z census skipped via page-shift (the 106→101 drop
+  while the window grew already proved skipping). Cumulative counter deltas are noise at this
+  window size; the manual slice stays ground truth. Saturation at 1 000 lands **next run**
+  (`while page < 10`).
+- Batch integrity: 3 REST `commits/<sha>` detail fetches + 14 `pulls/N` reads all valid JSON, no
+  503 stubs this run.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **Standing — unchanged from #33**: #50032 best decode-axis bp (host work only, open, head
+   `5c5d3748`); #47020 penalty correctness (open, comment activity only, head `bf9c4eb6` frozen);
+   #51692/#51681 kernel-level accept fixes (open, unchanged); #48678 image contract; #51719
+   watermark contract; #48926/#45417 record-only; #45261 `6eaca42f57` blocked (`block_size == 8`);
+   #51295 `5b478f175b` free-rider; **bp6 collapse at `5e6995dd`**; decode gap has no upstream fix.
+3. **Next pin** list unchanged from #33 item 9: #51312 (boot) + #50116 on #32 item 13's
+   dependency-ordered list; #48208 (`a0bd0c56`) only if proxy traffic sets `top_logprobs`.
+4. **Tooling**: counter non-monotonicity joins the 1 000-cap saturation as census-leg defects —
+   script fix (snapshot the census by sha since the last recorded head; non-zero rc + keep alert)
+   still deferred; manual slice + page-1 re-check remain the guards.
+5. **Operator**: (a) `gh` re-auth (**34th run**, REST-only throughout; credential-store `gho_`
+   token verified live for push), (b) continuity clean (`12:17:50Z` → `16:17:51Z`), (c) polling
+   path clean at both legs, (d) **nothing needs a window today** — zero material commits, zero
+   issue/PR delta.
