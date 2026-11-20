@@ -3512,3 +3512,121 @@ OpenAI dynamic tools, **#48874** NPU mooncake, **#50985** Ascend docs, **#51523*
     (`04:17:55Z` → `08:17:49Z`), (c) polling path clean at both legs, (d) nothing needs a window
     today — all material items are next-pin or in-window refits, none is a fix for the live decode
     gap.
+
+## 2026-11-20T12:18Z (2026-11-20 20:18 +08) — watch run #33
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 29.8 s — log `12:17:50Z`–`12:18:19Z`,
+`fetch_rc=0`, both issue legs on the first attempt, no TLS retry, no `TOOL FAILURE`. Continuity
+holds (previous run `08:17:49Z`); one run in the slot. Alert body is the standing trigger set only
+(#49173 closed + its 2 comments, **108** keyword hits of **990**). `gh auth status` → **token for
+`aotsukiqx` invalid** (**33rd consecutive run**); steps 2–3 ran on the REST equivalents.
+
+**Budget**: core **41/60** remaining (`used=19`, reset `13:07:51Z`) at the end of the run, search
+**10/10** (`used=0`) — the counter billed well below the raw request count (13 `.diff` hits are off
+the API budget and likely conditional responses went unbilled). 22 `.diff` fetches (13 valid, 9 HTML
+`503` stubs) + 9 REST commit re-fetches + 10 census pages + 5 issue/PR reads + 1 head re-check + 1
+rate-limit read.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed (`completed`), `comments=2`, `closed_at = updated_at = 2026-11-09T07:26:52Z`
+  — **thirty-third run** identical to the close second. Nothing to fetch for step 2.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **thirty-third silent run**.
+  Issue-reference search returns exactly **#49306** (`[Fix] scheduler: Prevent pool accounting desync
+  on finished_len trim`, open, unmerged, unchanged `2026-11-09T12:56:58Z`).
+- **#49182** — re-verified over REST: merged `5e6995dd09` at `2026-11-09T07:26:50Z`, head
+  `a49ff4d7d3`. Unchanged; next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 22 new commits: no decode-gap change, one traffic-conditional bp, one boot pin-fix
+
+#### Table A — material / individually read
+
+| sha | PR | subject | class |
+|---|---|---|---|
+| `a0bd0c56ad2d` | #48208 | [Perf] speculative: batched top logprobs when every request asks the same k | **bp-class (traffic-conditional)** — `compute_spec_logprobs` takes `top_k = batch.top_logprobs_nums[0]`; when every row asks that same k it emits **one `[bs*max_accept, k]` tensor** (`gathered_logprobs.topk`) instead of per-row lists, and the host conversion (`_top_logprobs_to_lists`, `_async_d2h_top_logprobs`) runs once per step. `top_logprobs_nums` empty ⇒ `top_k = 0` and the branch is skipped, so **inert unless a request asks top_logprobs on the spec decode path**. 4 files; no local patch touches `logprob_processor`/`managers/utils`. Worth a bp only if proxy traffic actually sets `top_logprobs`; it cuts host work, not the verify sync. |
+| `4b6985c614a7` | #51312 | [Fix] model_loader: Split checkpoint prefetch among each node's own ranks | **pin-migration-class (boot)** — `_prefetch_all_checkpoints` sets `local_world_size = world_group.local_size or launch_world_size // nnodes` and `local_rank = rank % local_world_size`. On our 4-nodes × 1-rank TP4 this is `local_world_size = 1`, `local_rank = 0` ⇒ **every rank warms its node's page cache with all shards**, where the old world-wide split left each node with ~1/4 of the files. Weight load is the ~10 min boot segment; expect a boot-time gain, not a decode one. `nnodes` must exist on `get_parallel()` at the pin; our `adapter/fast_load.py` monkeypatches `weight_utils.safe_open` (different function, same module) — re-audit the hook at the pin. |
+| `0c6d6eb04e3b` | #50116 | [Fix] mem_cache: Fix explicit HND initialization | **NO-OP (config-gated)** — explicit `kv_cache_layout == "hnd"` now sets `use_hnd` instead of being clobbered to `False` by the label branch (env `SGLANG_USE_HND_KVCACHE` still the fallback). Zero hits for `kv_cache_layout`/`use_hnd`/`--kv-cache-layout` in this checkout ⇒ unreachable; `MHATokenToKVPool` shape path, not our MLA pool. |
+| `eb49b873a166` | #51479 | [Fix] dsv41: Build MegaGate row masks inside the decoder replay-tail graph capture | **NO-OP (MegaGate not wired)** — `_gate_row_masks` adds `isinstance(cache, dict) and torch.cuda.is_current_stream_capturing()` to the cache key (+3 lines, +1 test), so a graph captured inside a forward builds its own masks. Our line cannot reach it: `adapter/prefill_sp.py:978` raises `DSV41_PREFILL_SP: mega MoE path is not wired` when `should_use_mega_moe` is true, and `moe_b12x_next` guards `_mega_moe_weights_built`. **Mandatory prerequisite if MegaGate is ever enabled** (stale masks across replay-target capture = wrong routing), but no effect on bp5 and nothing on the verify-sync axis. |
+| `d8eb51846d74` | #51351 | [Perf] scheduler: Add SGLANG_DISABLE_THP | **NO-OP at pin / next-pin env-only option** — new `EnvBool(False)` + `disable_transparent_hugepages()` (`prctl(PR_SET_THP_DISABLE)`) applied in `configure_scheduler_process`; default off, code absent at our pin. Its own docs note the aarch64 case: **64K base pages ⇒ a huge page is 512 MB**, and first touch / khugepaged can stall a scheduler tens of ms. Evaluate as an env var at the next pin (no patch), on a measured window only. |
+| `36d82211fe73` | #51779 | [Fix] speculative: Read the current DP attention field in EAGLE draft | **NO-OP** — one line in `eagle_worker_v2.draft`: `get_parallel().enable_dp_attention` → `.attn_dp_enabled`. `dp_size=1` ⇒ both false, condition unchanged. **No local reference to `enable_dp_attention`** (grep: zero) ⇒ no refit from the rename. |
+
+#### Table B — residual individually-read NO-OPs
+
+| sha | PR | subject | why NO-OP |
+|---|---|---|---|
+| `7d82bda66c79` | #43095 | [Test] scheduler: admission re-match records `num_matched_prefix_tokens` | test only |
+| `f5149f367b8f` | #51790 | [Fix] rust-server: PD decode heartbeat on `/health` | Rust frontend (`SGLANG_RUST_SERVER`, opt-in) |
+| `ceb4ee85c37d` | #48247 | [Fix] http_server: skip launcher re-import in spawned uvicorn workers | startup only (3 files, `entrypoints/`) |
+| `db420ed761c5` | #51765 | [CI] npu: lower GPQA concurrency for pinned host OOM | NPU CI |
+| `448efb13186f` | #51088 | [Feat] hicache: forward request-scoped KV hints to storage backends | host tier off; `req.kv_hints is None` on every request. Adds `PrefetchOperation.storage_read_metadata` + `GenerateReqInput.kv_hints` (already present) — contract note only |
+| `ad96481482fe` | #51666 | [Fix] [AMD] kimi-k3: drop bundled TreeCore | AMD + other model |
+| `f5cc4856acd6` | #49774 | [CI] [AMD] run ROCm lanes on weekends | CI schedule |
+| `4b02753381c9` | #45894 | [Feat] sampling: per-request SynthID Text watermarking | watermark off; the sampler hunk is a **pure extraction** of `top_k_top_p_min_p_filter_sorted_probs_torch` — reference path byte-equivalent, 33 files mostly new `sampling/watermarking/synthid/` |
+| `054c0d556f30` | #51656 | [Perf] kimi-k3: multicast collectives for LayerNorm SP prefill | other model |
+| `242da74ebf6a` | #51343 | [Perf] disaggregation: aux data as one memcpy | PD only; 1 file, 4 lines |
+| `7894bdf172df` | #51661 | [Fix] weight-update: keep fused-pair halves across chunked updates | no `update_weights_from_tensor` in our serving. **Pin-conflict note**: rewrites `models/deepseek_common/deepseek_weight_loader.py` (+83/−52) |
+| `28e576357488` | #48420 | [Feat] [NPU] kimi-k3.1 model + DSA attention on Ascend | NPU + other model |
+| `3b34d97d9eca` | #49554 | [Perf] [AMD] batch-invariant small-M segmented bf16 matmul | AMD (`gfx950`) |
+| `561329a0e669` | #49216 | [Fix] muse-spark: honor decrypted config in arch probe | other model; the `spark` keyword hit is a model name, not DGX Spark |
+| `6ccb37eb58b1` | #41056 | [Feat] [NPU] disaggregation: PD KV checksum | NPU |
+| `f6726b4caa0e` | #51525 | [Fix] [AMD] nixl: bind AITER HIP runtime before UCX hooks | AMD |
+
+### Open axis PRs — standing candidates, none merged
+
+- **#50032** (top decode-axis bp candidate) — open, unchanged (`updated 06:12:33Z`, head
+  `5c5d3748`). Still scheduler/draft host work, **not** the verify `cudaEventSynchronize`.
+- **#47020** (DSPARK penalties) — open, **new head `bf9c4eb6`**, `updated 10:09:44Z` (was 08:16:20Z)
+  — the only axis PR to move this window. Still unmerged; re-read its hunks when taking it (the
+  pin's field set predates #51719).
+- **#51692** (blockwise rejection precision) — open, unchanged `03:20:17Z`, head `f6976099`.
+- **#51681** (Philox folding) — open, unchanged `02:38:15Z`, head `f5b34e49`.
+- No new PR references #49173 beyond the merged #49182, or #49174 beyond #49306.
+
+### Cross-checks
+
+- **Census, two sources disagree by one — resolved**: the script's counter is hard-capped at 10
+  pages (`while page < 10`), and logged **990**. The manual census returned **991 raw entries /
+  990 unique** because `0c6d6eb04e3b` (#50116) landed at **`12:19:04Z`** — after the poll and
+  mid-pagination — which shifted one page boundary and produced exactly one duplicate
+  (`4dfbb953eb55`). Re-reading page 1 then showed the new head `0c6d6eb04e3b`; deduped total 990
+  (the 21 pre-insertion commits) **+ 1** = **991**, and `969 + 22 = 991` ✓.
+- Slice keyed on run #32's own census head **`cc97c13817e4`** (index 21), which its 22 recorded rows
+  occupy contiguously (`21..42`, no interlopers). Reconfirming the earlier note: the previous head is
+  the **newest row of the previous table**, not the newest *material* row — `789abb9be9d9` sits at
+  index 32 and would have returned 32 rows.
+- Coverage: 22/22 `new` shas appear in exactly one row (6 Table A + 16 Table B).
+- Keyword counter: **2 of 22** (9%) — `dsv4` on #51479 (config-gated) and `spark` on #49216 (model
+  name). **10 of the 10 individually-read material rows carry no keyword**, including the
+  traffic-conditional bp (#48208), the boot pin-fix (#51312) and the aarch64 THP env (#51351).
+  Per-commit reading remains the only reliable mode.
+- Batch integrity: 22 `.diff` attempts → 9 HTML `503` stubs (including every material commit), all
+  re-audited through REST `commits/<sha>` with `files[].patch` present; 13 valid diffs.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + `.diff`
+   + this checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **#51312** — next-pin boot item for our exact topology (4 nodes × 1 rank ⇒ full-shard prefetch per
+   node). Confirm `get_parallel().nnodes` at the pin and re-audit `adapter/fast_load.py`'s
+   `install_weight_utils` hook against the changed module.
+3. **#51351** — next-pin **env-only** option (`SGLANG_DISABLE_THP=1`), no patch. Trial only in an
+   authorised window with the dual gates; the aarch64 512 MB-huge-page stall is plausible on GB10
+   but unmeasured here.
+4. **#48208** — bp-class only if proxy traffic sets `top_logprobs`; it removes per-row host
+   conversions on the spec path, not the verify sync. Check traffic first; measure second.
+5. **#51479** — do not enable MegaGate on any line without this fix; otherwise record-only.
+6. **#47020** head moved (`bf9c4eb6`): the only axis PR with new commits; still open, still a
+   correctness refit, still not the decode gap.
+7. **Tooling**: the census counter saturates at 1 000 commits (`while page < 10`) and a mid-run push
+   yields a boundary duplicate/miss — manual re-fetch of page 1 is the cheap guard. Script fix
+   (non-zero rc + keep alert) still deferred.
+8. **Standing — unchanged from #32**: #50032 the best decode-axis bp (host work only); #47020
+   penalty correctness; #51692/#51681 kernel-level accept fixes; #48678 image contract (EFA fetch,
+   NCCL 2.31.2, `sgl-deep-ep` 0.1.3, mooncake 0.3.14); #51719 watermark contract; #48926/#45417
+   record-only; #45261 `6eaca42f57` blocked (`block_size == 8`); #51295 `5b478f175b` free-rider;
+   **bp6 collapse at `5e6995dd`**; decode gap has no upstream fix.
+9. **Next pin** adds #51312 (boot) and #50116 to the dependency-ordered list in #32 item 13;
+   #48208 only conditionally.
+10. **Operator**: (a) `gh` re-auth (**33rd run**, REST-only throughout), (b) continuity clean
+    (`08:17:49Z` → `12:17:50Z`), (c) polling path clean at both legs, (d) nothing needs a window
+    today — the only new material items are a boot prefetch fix and an env switch for the next pin.
