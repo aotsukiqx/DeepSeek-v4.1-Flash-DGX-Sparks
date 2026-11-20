@@ -3332,3 +3332,183 @@ commit). Every row was read by subject **and** path (23/23 accounted: 17 `.diff`
     (`00:17:51Z` → `04:17:55Z`), (c) polling path clean at both legs, (d) no repo-side action
     required this window — the per-commit path audit was again what caught the material items
     (the 23-commit window itself is all NO-OP; the value is in the four PRs).
+
+## 2026-11-20T08:18Z (2026-11-20 16:18 +08) — watch run #32
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 15.2 s — log `08:17:49Z`–`08:18:03Z`,
+`fetch_rc=0`, both issue legs and the census numeric on the first attempt, no TLS retry, no
+`TOOL FAILURE`. Continuity holds (previous run `04:17:55Z`); one run in the slot. Alert body is
+the standing trigger set only (#49173 closed + its 2 comments, **106** keyword hits of **969**).
+`gh auth status` → **token for `aotsukiqx` invalid** (**32nd consecutive run**); step 2 ran on the
+REST equivalents.
+
+**Budget**: core **46/60** at `08:19Z` (prior window) → **42/60** at `08:23Z` with `used=18`,
+reset `09:19:39Z` — the window rolled at `08:19:39Z` mid-poll, so the second figure is operative.
+Search **10/10** (2 used: #49174 reference sweep + open-axis sweep). The `.diff` endpoint returned
+the HTML `503` stub for **7 of 22** commits; those 7 were audited through REST `files` (7 requests),
+one paced retry per commit.
+
+### Issues / PR — zero delta
+
+- **#49173** — closed (`completed`), `comments=2`, `closed_at = updated_at = 2026-11-09T07:26:52Z`
+  — **thirty-second run** identical to the close second. No new maintainer comment; nothing to
+  fetch for step 2.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **thirty-second silent
+  run**. Issue-reference search returns exactly **#49306** (`[Fix] scheduler: Prevent pool
+  accounting desync on finished_len trim`, open, `merged=false`, unchanged `2026-11-09T12:56:58Z`).
+- **#49182** — re-verified over REST: merged `5e6995dd09` at `2026-11-09T07:26:50Z`, head
+  `a49ff4d7d3`. Unchanged; next-pin candidate stays **`5e6995dd`**.
+
+### sglang main — 22 new commits: one landed pin candidate, two contract shifts, 19 NO-OP
+
+#### Table A — material / individually read
+
+| sha | PR | subject | class |
+|---|---|---|---|
+| `789abb9be9d9` | #47677 | dspark: stage draft DP-MoE token counts through persistent buffers | **pin-migration-class (landed)** — merged `07:08:31Z`, head `31fc3ad7f2` **unchanged** (approved revision, squash). 4 files +87/−30: deletes `_make_num_token_non_padded`, precomputes `_num_token_non_padded`, and replaces the two per-step `torch.tensor(..., pin_memory).to()` DP-meta stages in `_fill_dp_moe_sync_metadata` with double-buffered pinned/device slots guarded by per-slot events. **Still `copied.synchronize()` per draft step** — allocation churn only. At `dp_size=1` the DP-metadata half is inert; only the draft-forward allocation churn goes. Supersedes the recorded bp-class candidate: do not patch it locally. |
+| `9399f5f4645e` | #48678 | docker: install AWS EFA in the main image; drop the EFA variant | **pin-migration-class (dependency/image contract)** — `sgl-deep-ep` 0.1.2.post1→**0.1.3** (pyproject + Dockerfile), `SGL_NCCL_VERSION` 2.30.7→**2.31.2**, `MOONCAKE_VERSION` 0.3.13.post1→**0.3.14**. New `scripts/install_efa.sh` runs in the base image (EFA installer **1.51.0**, sha256-pinned): `apt-get update`, libfabric/aws-ofi-nccl under `/opt/amazon/efa`, then asserts `fi_info` providers and NIXL plugin `ldd` paths. Base deps drop `libopenmpi-dev`/`libfabric-dev`/`libboost-all-dev`; the DeepEP builder drops `libfabric(-devel)`. Next image build gains an external fetch (`efa-installer.amazonaws.com`) and NCCL 2.31.2. |
+| `9866f0a0c798` | #51719 | sampling: algorithm-neutral watermark interface; Gumbel behind it | **pin-migration-class (contract refactor)** — `WatermarkState`→`WatermarkEngine`; `SamplingBatchInfo`'s five watermark fields collapse to `watermark: Optional[WatermarkRows]`; `ForwardBatch.watermark_seed` replaces the two host-tail fields; `dspark_worker_v2._force_watermark` now returns `(logits, sampling_info, watermark)`; `eagle_sample(watermark=)`; `eagle_post_verify_graphs._sample` takes `watermark=`. 54 files. **Runtime identical with watermark off** (`make_watermark_engine`/`build_watermark_rows` return None on `not enable_watermark`). Also drops the `SGLANG_ENABLE_NV_MEGA_RUNTIME_OPTIMIZATION` guard around `watermark_full_mask`. |
+| `0fff686ba40a` | #41269 | speculative: draft deadlock under DP attention without a DSA seed | NO-OP — one condition in `eagle_worker_v2.draft` adds `and not get_parallel().enable_dp_attention`; at `dp_size=1` DP attention is off, so the eager-fallback decision is unchanged. |
+| `2a0869ebcccc` | #51725 | logprob: `token_ids_logprob_rows` | NO-OP — opt-in API; `token_ids_logprob_rows is None` on every existing request and the scheduler branches only when set. No default hot-path change. |
+
+#### Table B — residual individually-read NO-OPs
+
+| sha | PR | subject | why NO-OP |
+|---|---|---|---|
+| `cc97c13817e4` | #51611 | diffusion: FA4 for Blackwell sub-tile attention | `multimodal_gen/` + diffusion docs/tests |
+| `0d81dbf36035` | #51598 | diffusion: stop worker profiler if HTTP profiler fails | `multimodal_gen/` |
+| `28260f05fedb` | #51079 | [AMD] unquant: keep CPU inputs off AITER GEMM | AMD path, 4 lines |
+| `f69412389348` | #51463 | [AMD] fp8-moe: mark AITER-shuffled weights `is_shuffled` | AMD path |
+| `d215bb3b8c20` | #47824 | [Intel] gemma4 GPTQ INT4 on CPU | CPU kernels + `gemma4_causal` |
+| `518dd30af21b` | #51700 | cookbook: Hy4 installation | docs |
+| `68c262b30617` | #48314 | [Perf][NVIDIA] fused_moe H20-3e configs | device-name-keyed JSON (`NVIDIA_H20-3e`); GB10 match impossible |
+| `6e7325808610` | #50886 | [CI][AMD] QSA MQA prefill fits gfx942 LDS | `is_gfx942_supported()` gate; `num_stages` only on AMD |
+| `e183c415bdfc` | #51624 | [CI] kernels: widen Marlin MoE GEMV-vs-GEMM bound | test tolerance only |
+| `596c69706787` | #50043 | docs: indentation/spelling/formatting | docs |
+| `843d27c9e297` | #47660 | [Feat][NPU] DSV4.1 on Ascend A5 | NPU backend; `engram.py` hit is in the Ascend branch (`hardware_backend/npu/`) |
+| `741d14cec1f8` | #49535 | [Fix][NVIDIA] qwen3.5 text-only Qwen3 MoE overrides | other model |
+| `b44ab8128533` | #51715 | [CI] sgl-router: restore prebuilt Rust extensions | CI/router only |
+| `99159c90503f` | #51711 | [Test] sgl-router: DeepSeek image chats parity | Rust test only |
+| `d675c98bc76d` | #51595 | [Perf] inkling2: MegaMoE input for this rank's tokens | MegaMoE bypassed (`b12x_next`, `SGLANG_OPT_DEEPGEMM_MEGA_GATE` False) and other model |
+| `923a8b5d1b37` | #48353 | [Fix][XPU] compressed-tensors W8A8 int8 | XPU |
+| `d96ae9588b76` | #51459 | [Feat][CPU] per-token FP8 AVX10.2 dispatch | CPU |
+
+### Open axis PRs — 26 never recorded in today's window (52 total updated since 00:00Z)
+
+Material, with the diff read:
+
+- **#50032 — the new top decode-axis candidate** (`[Perf] scheduler: Cut per-step host work in the
+  batch-1 speculative decode loop`, open, updated `2026-11-20T06:12:33Z`, 12 files +205/−65).
+  Substance: `SamplingBatchInfo.copy_for_forward` takes the `object.__new__` fast path
+  **unconditionally** (the PR deletes `_fast_copy_enabled`, which required EAGLE + topk==1 +
+  `moe_ep_size==1` — so at the pin DSPARK never took it); `freeze_env_reads()` memoizes every
+  `EnvField.get` after the scheduler event loop starts (new `SGLANG_OPT_FREEZE_ENV_READS`);
+  `schedule_batch_field_values` snapshots the batch with one `operator.itemgetter` call and
+  `_forward_isolation` restores via `__dict__.update`; `cuda_graph_buffer_registry` caches its last
+  head view; `dflash_info_v2` skips the two KV-len copies when no tokens are allocated;
+  `draft_worker_common` caches the zero-width relay tensors; `dspark_draft` skips a redundant
+  `_num_token_non_padded.fill_`. This is scheduler/draft host work, **not the verify host-sync** —
+  it cannot close the ~44 ms gap, but it is the only per-step host-work cut offered since #50049.
+  Class: **bp-class** (7 `srt/` files, mechanical refit).
+- **#47020 — DSPARK penalty correctness** (`[Fix] dflash: Apply request penalties under DFLASH and
+  DSPARK`, open, updated `08:16:20Z`, 6 files +231/−28, 203 of them a new test). `dspark_verify.py`
+  changes `verify_logits_adjustments_are_noop` from `acc_linear_penalties is not None` (the pin's
+  field) to `acc_additive_penalties`/`acc_scaling_penalties`, and `spec_prepare_for_decode`
+  cumulates penalty output tokens for the dflash family when the orchestrator is required —
+  i.e. **presence/frequency penalties were being skipped in spec decode**. Class: **bp-class
+  (correctness)**, re-derive: the field names are post-pin.
+- **#51692 — blockwise rejection precision** (`[Fix] dspark: Stabilize blockwise rejection sampling
+  under logit shifts`, 2 files +121/−36). `_global_lse` splits into `(global_max, log_sum)` so a
+  small `log Σexp` is no longer rounded into a large max before subtraction; the bonus row now
+  computes the target row max instead of returning before any stats; `_rejection_kernel`
+  accumulates `t_max/d_max/t_log_sum/d_log_sum` per block. Our line's accept kernel. Class:
+  **bp-class (correctness), kernel-level — in-image pre-verify required**.
+- **#51681 — Philox folding** (`[Fix] dspark: Prevent Philox rounding from selecting a masked
+  token`, 3 files +56/−9). `u = (bits+0.5)·2⁻³²` could round to 1.0 in fp32 (`log1p(−1) = −inf`)
+  and a zero word gave zero noise; folds `min(bits, ~bits)` with a sign branch. Also updates
+  `sharded_accept_hip`. Class: **bp-class (correctness), kernel-level**.
+- **#48926 — FP8 MegaAttention prefill workspace** (`[Feat] dsv41: FP8 MegaAttention prefill
+  workspace`, 6 files +143/−17). `SGLANG_DSV41_FP8_PREFILL_WORKSPACE` (default `False`), **64 query
+  heads only**, and explicitly requires an `sgl-flash-mla` with
+  [FlashMLA#29](https://github.com/sgl-project/FlashMLA/pull/29) — **the pinned 1.0.5 does not
+  include it**. Class: **pin-migration-class (wheel-gated prefill lever)**.
+- **#45417 — SM120 NVFP4 KV cache** (`[Feat] [SM120] deepseek-v4: Support NVFP4 KV cache for target
+  and DSpark`, 9 files +807/−18). Adds 137 lines to upstream
+  `kernels/ops/attention/flash_mla_sm120.py` — **direct collision with our local
+  `runtime/flash_mla_sm120.py` shim** — plus memory-pool/backend/model changes behind an env gate.
+  Class: **pin-migration-class** (take wholesale at the pin only).
+- **#51669 — fused low-ratio compressor live rows** (`[Fix] dsv41: Slice the fused low-ratio
+  compressor's out-loc metadata to the live rows`, 2 files +39/−6). Slices `raw_out_loc`/`c1_out_loc`
+  /`c2_out_loc` to `pos.shape[0]` when a **prefill CUDA-graph break** hands over live rows. Class:
+  **bp-class, latent** — reachable only if the pin's prefill graph path is used; confirm at the pin.
+
+Watch, classified from the diff shape:
+
+- **#50610** FlashInfer RDMA all-to-all for SM120 (33 files +2923/−30) — EP dispatcher + args; our
+  line is pure TP with no `--ep-size` ⇒ NO-OP today, first SM120 EP path to revisit if EP is tried.
+- **#48850** capture decoder-tail graphs at startup, never on a DP-skipped step (7 files +356/−34) —
+  `dp_size=1` has no skipped DP ranks ⇒ NO-OP; rewrites `deepseek_v4_replay_tail.py` capture timing
+  and `row_bucket_graph_runner`, adjacent to our replay-tail patch — re-check at the pin.
+- **#51695** reject explicit multi-step `speculative_num_steps` for DFLASH/DSpark (3 files
+  +133/−34) — this checkout passes no `--speculative-num-steps` anywhere (grep: zero) ⇒ NO-OP; only
+  fires if a launcher ever sets it.
+- **#51752** DSpark simulated acceptance draws the stop-row bonus from the rejection residual
+  (5 files +489/−1) — the new kernel is on the simulated-acceptance path (`SIMULATE_ACC_LEN` off)
+  ⇒ NO-OP.
+
+Grouped NO-OPs (subject + file shape only; none touch our serving surface): **#50205** NPU A3 W8A8
+DSpark, **#51749** PD-prefill CP, **#46248** HiCache Engram store (host tier off), **#51689** NPU
+Kimi K3.1, **#51236** ERNIE-5.5-Flash, **#48866**/#48865 AMD identity-prefill, **#51646** Hy4
+kernels, **#51668** Hunyuan-4-Flash, **#51004** CI NPU, **#45265** encoder-only prefill, **#49625**
+OpenAI dynamic tools, **#48874** NPU mooncake, **#50985** Ascend docs, **#51523** AMD CI.
+
+### Cross-checks
+
+- Census: `947 + 22 = 969` ✓; keyword counter `104 + 2 = 106` ✓ (hits `789abb9be9d9` #47677,
+  `843d27c9e297` #47660).
+- Slice keyed on the 04:18 entry's **own census head `a242c277e58d`** (03:22:47Z, #51671), not on
+  the `03fde9cc39` that entry names as its *slice* key — keying on the latter returned 45 rows.
+  Note for the runbook: entries record the key of their own slice, so the next head must be read
+  from the top table row.
+- Coverage: 22/22 `new` shas appear in exactly one row (5 Table A + 17 Table B).
+- Counter miss rate: **20 of 22** (91%) — both hits happened to be material-or-NPU; the two
+  contract shifts (#48678, #51719) carry no keyword.
+- Batch integrity: 22 `.diff` attempts → 7 HTML `503` stubs (56,635 B each); all 7 re-audited via
+  REST `files` (HTTP 200, patches present); 8 PR file-list payloads JSON-valid.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + `.diff`
+   + this checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **#47677 landed** (`789abb9be9d9`): drop it from the bp-candidate list; the next pin carries it.
+   Do not apply the old patch on top of the merged code.
+3. **#50032** is the best remaining decode-axis bp candidate — but it cuts scheduler/draft host
+   work, **not** the ~44 ms verify `cudaEventSynchronize`. Refit at the pin: `_fast_copy_enabled`
+   still exists there; `SamplingBatchInfo`'s field set differs (five watermark fields pre-#51719,
+   one row object post-). Measure; do not assume a delta.
+4. **#47020**: confirm whether proxy traffic sends presence/frequency/repetition penalties. If it
+   does, bp5 is decoding with them skipped under DSPARK — a correctness question, not a perf one.
+   Re-derive the hunks (the pin's field is `acc_linear_penalties`).
+5. **#51692/#51681**: kernel-level correctness on the accept path; bp-class only with in-image
+   pre-verify in an authorised window.
+6. **#48678 image contract**: the next build needs the EFA installer fetch and must confirm
+   `/opt/amazon/efa/lib` does not shadow the libfabric that the DeepEP build links; also lands
+   NCCL 2.31.2, `sgl-deep-ep` 0.1.3, mooncake 0.3.14 in the pin matrix.
+7. **#51719**: expect conflicts in any dspark bp chain touching `SamplingBatchInfo`,
+   `ForwardBatch`, `dspark_worker_v2`, or `eagle_utils`.
+8. **#48926 / #45417**: record-only. #48926 needs a flash-mla newer than 1.0.5 (FlashMLA#29) and 64
+   heads; #45417 rewrites the same upstream SM120 module we patch locally.
+9. **Standing — #45261 `6eaca42f57`**: paged path still blocked (`block_size == 8` vs our zeroed
+   `candidate_block_size`).
+10. **Standing — #51295 `5b478f175b`**: 3 refit hunks + inert swa hunk; free-rider only.
+11. **Standing — bp6 collapse at `5e6995dd`**: unchanged.
+12. **Standing — decode gap**: no upstream fix for the verify host-sync; #50032 is adjacent host
+    work only.
+13. **Next pin** picks up, in dependency order: #51298's folding series, #50620 with its JIT
+    headers, #51296/#51297 opt-ins, #51607, #45261, #51295, #51515, #51450 (inert), #51458,
+    #51289, #50752, #50186 wholesale; then #50049, #51636 (refits), #51589, #47677 (landed),
+    #48678 (deps/image), #51719 (contract); #51692/#51681/#47020/#51669 as correctness refits.
+14. **Operator**: (a) `gh` re-auth (**32nd run**, REST-only throughout), (b) continuity clean
+    (`04:17:55Z` → `08:17:49Z`), (c) polling path clean at both legs, (d) nothing needs a window
+    today — all material items are next-pin or in-window refits, none is a fix for the live decode
+    gap.
