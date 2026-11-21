@@ -3922,3 +3922,100 @@ search bucket separate (1 query, 1 result — valid).
 5. **Operator**: (a) `gh` re-auth (**36th run**, REST-only throughout), (b) continuity clean
    (`20:17:54Z` → `00:17:55Z`), (c) **nothing needs a window today** — the only delta (#47020)
    is a next-pin absorb, no deploy implication.
+
+## 2026-11-21T04:18Z (2026-11-21 12:18 +08) — watch run #37
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 20.3 s — log `04:17:59Z`–`04:18:18Z`,
+`fetch_rc=0`, both issue legs first attempt. Continuity clean (`00:17:55Z` → `04:17:59Z`; the
+04:17 block is this run, not a gap). Alert body is the standing trigger set only (#49173 closed +
+its 2 comments, **104** keyword hits of **1000** — counter saturated/decorative since #35).
+`gh auth status` → **token for `aotsukiqx` invalid** (**37th consecutive run**); steps 2–3 ran on
+REST equivalents.
+
+**Budget**: core **45/60** at manual-census start (script's own requests already in the hour),
+**20/60** at end — 28 core requests: 11 census pages + 1 page-1 head re-check + 7 open-PR reads +
+4 commit details + 1 PR-#50032 commit list + 2 contents listings; search bucket separate (2
+queries, valid); raw.githubusercontent file fetches free.
+
+### Issues / PR — zero issue delta; #50032 head refresh only
+
+- **#49173** — closed (`completed`), `comments=2`, `updated_at 2026-11-09T07:26:52Z` —
+  **thirty-seventh run** identical to the close second. No new maintainer comments ⇒ step 2 no-op.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **thirty-seventh silent
+  run**. Issue-reference search still returns exactly **#49306** (open, unmerged, unchanged since
+  `2026-11-09T12:56:58Z`).
+- **#49182** — merged `5e6995dd09` — unchanged; next-pin candidate stays **`5e6995dd`**.
+- **#50032 (best decode-axis bp)** — head moved `5c5d3748` → `2b1b4af642` (`updated 02:26:57Z`).
+  Commit list shows the new head is `Merge branch 'main' into spec-batch1-host-loop`
+  (`01:50:10Z`) — **no new PR-side commits** since `b14f24aed2d7` (11-17); the movement is a
+  main-merge refresh only. Content and standing assessment unchanged (host-work decode bp).
+- Remaining open standing PRs unchanged: #51636 `updated 00:12:18Z` (head `0a7f817a` frozen);
+  #51692/#51681/#50049 (≤ `03:20:17Z`); #44028 (`11-18`); #49306 (`11-09`). Terminal merges
+  #48208/#51479/#51607/#51515/#45261/#51295 not re-read (recorded).
+
+### sglang main — 16 new commits; 4 material rows, 12 NO-OP
+
+#### Table A — material
+
+| sha | PR | subject | class / note |
+|---|---|---|---|
+| `c95fb12bb8c2` | #51788 | [Fix] speculative: Feed every accepted token to the penalizers | **pin-migration-class** — follow-up to #47020 on the spec-penalty interface: `managers/schedule_batch.py` (+22/−17) + all 6 `penaltylib/*` files (+40/−23) + removes penalty feeding from `eagle_utils.py`/`spec_utils.py`. Inert on our line unless proxy traffic sends presence/frequency/repetition penalties (standing #33 question). Absorb at next pin together with `ed939d6ac280` |
+| `1222adc21004` | #52002 | [Refactor] sampling: Merge penaltylib into one penalties module | **bookkeeping** — behavior-neutral move: deletes the 6 `penaltylib/*` files (−620) into one `sampling/penalties.py` (+603); `sampling_batch_info.py` survives (+10/−9 here). Consequence: the #47020/#51788 anchor files no longer exist upstream — absorb-at-pin is unaffected (cumulative), but any *runtime bp* of them onto a pin ≥ this commit must retarget `sampling/penalties.py` |
+| `5b03592a5e3e` | #51961 | [Perf] reject_sampling: Vocabulary-tiled block-verification accept | **watch / pin-evaluation (decode-axis)** — `kernels/ops/speculative/reject_sampling.py` +491/−2: tiles the block-verification residual scan and final-token pass over a (requests × vocab) grid, auto-selected when the per-request grid underfills the device (`_should_split_final_sampling`) — a small-batch shape, i.e. ours. **On the dspark path, evidenced**: `dspark_components/dspark_verify.py` cites its in-kernel NaN-q guard and threads `block_verification=`; `dspark_worker_v2.py` gates via `get_spec().speculative_use_block_verification` (check our spec config at pin). NOT a decode-gap fix (gap is host-sync-bound); not runtime-bp (491-line kernel rewrite). Measure accept-kernel time at next pin |
+| `ceb1d752d961` | #50859 | [Fix] tokenizer: Return sampling masks on requests aborted from the waiting queue | **bp-class if symptom (record-only)** — `managers/tokenizer_manager.py` +22/−9 (exists at pin) + tests; no abort-queue symptom observed on our line |
+
+#### Table B — residual individually-read NO-OPs
+
+| sha | PR | subject | why NO-OP |
+|---|---|---|---|
+| `8396d60a14ef` | #51900 | [Perf] kimi-k3: Order shared-expert side-stream frees on the current stream | other model |
+| `8171e9a4f541` | #51987 | [Doc] diffusion/storage: Prefer workload credentials for S3 uploads | docs |
+| `3214ab01723a` | #51254 | [Fix] hicache: Clear storage existence beliefs when a new backend is attached | HiCache/L3 tier disabled here |
+| `afe1225125fd` | #51252 | [Refactor] hisparse: Route every allocator free through one path | HiSparse allocator, not our backend |
+| `229747b96ff3` | #49537 | [Feat] kv-cache: Metrics for write latency distribution from L2 to L3 | L2→L3 metrics; host tier off |
+| `40327da18501` | #51641 | [Fix] scheduler: Fix control requests under PP and local control broadcast | PP-only; TP4/pp=1 line |
+| `fadfdc42b68f` | #47840 | [Fix] disaggregation: fix HiSparse spec PD transfer on PP>1 prefill | PD disagg + HiSparse + PP |
+| `40afa8e6c6f1` | #51983 | [Fix] kernel_plugins: Let the K3.1 verify megakernel serve its own request buckets | megakernel kernel-plugin backend (opt-in); the slice's **only** keyword hit is this false-positive `verify` |
+| `83df28fc0b5c` | #51978 | [Test] ci: Fix two base-a-test-cpu stubs broken by #51668 and #51788 | CI only |
+| `d16983012668` | #51939 | [Perf] diffusion: Fetch a MiniMax-H3 request's remote condition inputs concurrently | diffusion surface |
+| `46a931ccf99f` | #51973 | [Fix] sgl-router: defer discovery restore while an API worker owns the URL | sgl-router (Rust router) |
+| `6f3f73aef5ea` | #51937 | [Feat] models: Hunyuan-4-Flash vision-language support | other model |
+
+### Cross-checks
+
+- **Census (manual, the only census since saturation)**: 11 pages, last = 66 < 100 ⇒ true window
+  since `BASE_CUTOFF 14:00Z` = **1066**; 1066 unique shas, no dupes. Slice keyed on #36's head
+  `a8ac86595c72` at **index 16** ⇒ `new = 16`; **1050 + 16 = 1066** ✓. Page-1 head re-check
+  stable `8396d60a14ef` (`04:13:39Z`, pre-run) — no mid-run push.
+- Coverage: 16/16 new shas appear in exactly one row (4 Table A + 12 Table B).
+- Keyword counter over the slice: **1 of 16** — only the false-positive `verify` on #51983. All 4
+  material rows were **missed** (`block-verification` does not contain the literal `verify`;
+  `penalizer`/`penalt` are not keywords) — one more datum for "subject reading is the only reliable
+  mode". The script's saturated `104/1000` is decorative.
+- Caller evidence for #51961 fetched from raw files at the head sha: `dspark_verify.py` (1466 ln)
+  + `dspark_sampling_accept_graph.py` + `dspark_worker_v2.py` all thread `block_verification`;
+  `dspark_verify.py` explicitly cites "in-kernel NaN-q guard in reject_sampling.py".
+- Batch integrity: all 28 core REST responses valid JSON, no 503 stubs.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **#51961 (new)** — first upstream kernel change on the dspark verify accept path since the gap
+   attribution; a next-pin **measurement item** (accept-kernel time in the decode profile) and a
+   spec-config check (`speculative_use_block_verification`). Not a window trigger, not a bp, not a
+   decode-gap fix.
+3. **#51788** — append to the next-pin absorb list next to `ed939d6ac280` (same spec-penalty
+   axis; both inert unless penalties are sent). **#52002** — bookkeeping: penaltylib layout gone;
+   runtime-bp retarget note recorded above. **#50859** — record-only.
+4. **Standing — otherwise unchanged from #36**: #50032 best decode-axis bp (head refreshed by
+   main-merge only, no new commits); #51692/#51681 kernel-level accept fixes; #48678 image
+   contract; #51719 watermark contract; #48926/#45417/#50901/#50817 record-only; #42254
+   CUDA-graph persistence pin-eval; #45261 `6eaca42f57` blocked; #51295 `5b478f175b18`
+   free-rider; **bp6 collapse at `5e6995dd`**; decode gap still has no upstream fix.
+5. **Tooling**: census cap saturated permanently — manual slice + page-1 re-check are the only
+   census (clean this run). Script fix (sha-snapshot census + non-zero rc + keep alert) still
+   deferred.
+6. **Operator**: (a) `gh` re-auth (**37th run**, REST-only throughout), (b) continuity clean
+   (`00:17:55Z` → `04:17:59Z`), (c) **nothing needs a window today** — zero issue delta, the only
+   fleet-relevant item (#51961) is a pin-time measurement.
