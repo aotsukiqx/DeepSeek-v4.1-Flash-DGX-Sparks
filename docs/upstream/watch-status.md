@@ -3801,3 +3801,124 @@ script's own 12 requests earlier in the hour; search bucket separate (1 query, v
 7. **Operator**: (a) `gh` re-auth (**35th run**, REST-only throughout), (b) continuity clean
    (`16:17:51Z` → `20:17:54Z`), (c) polling path clean at both legs, (d) **nothing needs a
    window today** — zero issue/PR delta, 3 low-value material commits.
+
+## 2026-11-21T00:18Z (2026-11-21 08:18 +08) — watch run #36
+
+**Tooling**: `scripts/verify/upstream_watch.sh` rc=0, 16.4 s — log `00:17:55Z`–`00:18:10Z`,
+`fetch_rc=0`, both issue legs first attempt. Continuity clean (`20:17:54Z` → `00:17:55Z`; the
+00:17 block is this run, not a gap). Alert body is the standing trigger set only (#49173 closed +
+its 2 comments, **104** keyword hits of **1000** — counter saturated/decorative since #35).
+`gh auth status` → **token for `aotsukiqx` invalid** (**36th consecutive run**); steps 2–3 ran
+on REST equivalents.
+
+**Budget**: core **39/60** at start of manual triage, **14/60** at end; unauthenticated REST:
+11 census pages + 1 page-1 head re-check + 8 PR reads + PR #47020 commits+files detail;
+search bucket separate (1 query, 1 result — valid).
+
+### Issues / PR — #47020 MERGED (the delta)
+
+- **#49173** — closed (`completed`), `comments=2`, `updated_at 2026-11-09T07:26:52Z` —
+  **thirty-sixth run** identical to the close second. No new maintainer comments ⇒ step 2 no-op.
+- **#49174** — open, **0 comments**, `updated_at 2026-11-08T14:34:50Z` — **thirty-sixth silent
+  run**. Issue-reference search still returns exactly **#49306** (open, unmerged, unchanged since
+  `2026-11-09T12:56:58Z`).
+- **#49182** — merged `5e6995dd09` — unchanged; next-pin candidate stays **`5e6995dd`**.
+- **#47020 (DSPARK penalty correctness) — MERGED `2026-11-20T23:48:46Z` as `ed939d6ac280`**
+  (single-parent squash of 7 PR commits, parent `bb8699efe127`; main subject unchanged). Head
+  moved after #35's frozen `bf9c4eb6` → `700cb3e6b169` at `22:59:51Z` — ONE commit,
+  reviewer-driven restructure ("share the accumulated-penalty check and application across
+  sampling and spec verify; drop the unused orchestra[trator]"), same fix scope. Final shape
+  11 files +63/−94: `sampling/penaltylib/orchestrator.py` (+4/−32, mostly dropped),
+  `sampling/sampling_batch_info.py` (+24/−7), `speculative/dflash_utils.py` (+11/−26),
+  `dflash_worker_v2.py`, **`dspark_components/dspark_verify.py` (+2/−1)**, `eagle_*`,
+  `sharded_verify.py`, `spec_utils.py`, `uno_worker_v2.py` + unit test. Class:
+  **pin-migration-class** — absorbed at next pin; NOT runtime-bp material (multi-file spec
+  surface, several anchors post-pin — `dspark_components/`, `uno_worker_v2.py` — need audit).
+  Standing open question (from #33): does proxy traffic send presence/frequency/repetition
+  penalties at all? If not, inert on our line and record-only.
+- Sweep of remaining open standing PRs: **no other deltas**. #51636 `updated 00:12:18Z`
+  (head `0a7f817a` frozen, activity-only); #50032 head `5c5d3748` frozen (`17:07:23Z` unchanged);
+  #51692/#51681/#50049 (updated ≤ `03:20:17Z`, unchanged since #35); #44028 (`11-18`),
+  #49306 (`11-09`) unchanged. Terminal merges #48208/#51479/#51607/#51515/#45261/#51295 not
+  re-read (recorded).
+
+### sglang main — 35 new commits; 1 material row, 34 NO-OP
+
+#### Table A — material
+
+| sha | PR | subject | class / note |
+|---|---|---|---|
+| `ed939d6ac280` | #47020 | [Fix] dflash: Apply request penalties under DFLASH and DSPARK | **pin-migration-class** — penalty correctness on the dspark verify path; absorb sha `ed939d6ac280` (details above); bp6 chain unaffected |
+
+#### Table B — residual individually-read NO-OPs
+
+| sha | PR | subject | why NO-OP |
+|---|---|---|---|
+| `a8ac86595c72` | #51688 | [Perf] beam: tiny FP32 router GEMM for NVFP4 | beam search + NVFP4 checkpoints; neither on our line |
+| `aaa144135699` | #50242 | [Feat] sgl-router: runtime worker management API | sgl-router (Rust router), not our serving path |
+| `d2d70c6dd675` | #51969 | [Fix] hunyuan_v4_flash: get_parallel() TP/rank | other model |
+| `94a698a791ef` | #51759 | [Doc] agents: kernel-organization requirement | docs |
+| `44a391941aab` | #51935 | [Fix] diffusion: Pika-H3-Flex keyframe fitting | diffusion surface |
+| `eec0eecfc7cf` | #51933 | [Perf] [AMD] diffusion: MiniMax-H3 aiter kernels | AMD + diffusion |
+| `bb8699efe127` | #51880 | [Feat] cp: zigzag CP short-request batch | CP-only, pure-TP `dp_size=1` line |
+| `bb06e81637f4` | #51909 | [Feat] logprob: selector weights in prompt logprobs | API feature, opt-in |
+| `0f3159a683fe` | #50684 | [Feat] [NVIDIA] cuda-graph: prefill CUDA graphs for CuTe DSL MoE and MegaMoE | backend-gated (our MoE `b12x_next`; MegaMoE off); upstream prefill-graph axis exists only on those backends |
+| `4919cc880058` | #51897 | [Feat] rust-server: multimodal feature transport | Rust frontend |
+| `b5554189a8b1` | #51165 | [Feat] scheduler: ignore_eos first-stop-token report | observability feature |
+| `4e0535f26957` | #51889 | [Feat] cuda-graph: model-declared prefill input_embeds dtype | prefill-graph infra; model must declare — our model untouched |
+| `e87de3d0bb34` | #51945 | [Perf] rust-server: byte-level BPE chunk decode | Rust frontend |
+| `215cf36020d3` | #51892 | [Fix] disaggregation: storage prefetch yield | PD disagg, not deployed |
+| `7490430dc10e` | #51882 | [Fix] disaggregation: parked prefill KV yield | PD disagg, not deployed |
+| `6a6f4e5da89b` | #51932 | [Refactor] rust-server: drop attention-DP relay | Rust frontend |
+| `237cbfd961e0` | #51899 | [Feat] logprob: in-place candidate selection | API feature, opt-in |
+| `c8d7acf234b4` | #51904 | [Perf] rust-server: log/crash-dump copy cuts | Rust frontend |
+| `02e26ce94781` | #51895 | [Fix] rust-server: return flags on /generate, /v1/completions | Rust frontend |
+| `2ab47f3c4f70` | #51891 | [Fix] http_server: write /generate finish event + [DONE] together | streaming ordering; no symptom on our line (`http_server.py` at pin ⇒ bp-if-symptom only) |
+| `aa69ea883476` | #51881 | [Feat] rust-server: queue-depth/refusal metrics | Rust frontend |
+| `a45922399af0` | #51953 | [Doc] cookbook: rtx6000 hardware id | docs |
+| `9caefef24368` | #50841 | [Fix] hicache: device-only Mamba checkpoints in write-back eviction | HiCache host tier disabled + Mamba-only |
+| `44207b4204ca` | #51914 | [CI] diffusion: latency baselines | CI only |
+| `e7c382c12978` | #50195 | [Fix] [NVIDIA] moe: autotune key for deferred-finalize FP4 TRT-LLM MoE | MoE backend not ours |
+| `2195fbd3c7c9` | #51668 | [Feat] models: Hunyuan-4-Flash text model | other model |
+| `192b19bf51a0` | #51908 | [Perf] diffusion: Qwen3 text-encoder graph under TP | diffusion surface |
+| `e7caed84e0bc` | #51686 | [Test] sgl-router: PD dp-aware spread cache flush | sgl-router test tooling |
+| `2ff46c5979d1` | #50354 | [Feat] [AMD] tlx: vendored gfx950 GEMM/Muse MoE | AMD |
+| `84c9e7677a94` | #50806 | [Refactor] diffusion: multimodal_gen 4/4 | diffusion surface |
+| `6c7e1e924cf9` | #51648 | [CI] diffusion: H3 TP real-checkpoint check | CI only |
+| `a034bb57912e` | #51676 | [Refactor] spec/dflash: megakernel out of DFLASH worker | DFLASH line, not dspark |
+| `f389121c03ce` | #51646 | [Feat] kernels: Hy4-Flash IndexPool/Engram/iHC | other model; the slice's one keyword false-positive (`engram`) |
+| `2eb62cf50ca7` | #51930 | [Doc] cookbook: Inkling-2-Mini install PR pointer | docs |
+
+### Cross-checks
+
+- **Census (manual, the only census since saturation)**: 11 pages, last = 50 < 100 ⇒ true window
+  since `BASE_CUTOFF 14:00Z` = **1050**; 1050 unique shas, no dupes. Slice keyed on #35's head
+  `e3e0f2a3f0fb` at **index 35** ⇒ `new = 35`; **1015 + 35 = 1050** ✓. Page-1 head re-check
+  stable `a8ac86595c72` (`00:03:54Z`, pre-run) — no mid-run push.
+- Coverage: 35/35 new shas appear in exactly one row (1 Table A + 34 Table B).
+- Keyword counter over the slice: **2 of 35** — the true `dspark` hit on #47020 plus the
+  false-positive `Engram` on #51646; the script's saturated `104/1000` (was 109) is decorative;
+  the 33 misses were all individually read above.
+- Batch integrity: all 22 REST fetches this run valid JSON (census 11, PR reads 8, #47020
+  commits+files 2, head re-check 1), no 503 stubs.
+
+### Action items
+
+1. **No maintenance window triggered; nothing executed against the fleet.** GitHub REST + this
+   checkout only — no SSH, no docker, no build, no serve, no schedule change.
+2. **#47020 merged** — record `ed939d6ac280` on the next-pin absorb list (replaces the open-PR
+   standing item). NOT a window trigger and NOT runtime-bp material; the #33 open question
+   stands: confirm whether proxy traffic sends presence/frequency/repetition penalties — if
+   not, the fix is inert on our line.
+3. **Standing — otherwise unchanged from #35**: #50032 best decode-axis bp (head `5c5d3748`
+   frozen); #51692/#51681 kernel-level accept fixes; #48678 image contract; #51719 watermark
+   contract; #48926/#45417/#50901/#50817 record-only; #45261 `6eaca42f57` blocked; #51295
+   `5b478f175b18` free-rider; #42254 CUDA-graph persistence pin-eval item; **bp6 collapse at
+   `5e6995dd`**; decode gap still has no upstream fix (nothing in this window touches the
+   verify host-sync).
+4. **Tooling**: census cap saturated permanently — manual slice + page-1 re-check are the only
+   census (clean this run). Script fix (sha-snapshot census + non-zero rc + keep alert) still
+   deferred.
+5. **Operator**: (a) `gh` re-auth (**36th run**, REST-only throughout), (b) continuity clean
+   (`20:17:54Z` → `00:17:55Z`), (c) **nothing needs a window today** — the only delta (#47020)
+   is a next-pin absorb, no deploy implication.
